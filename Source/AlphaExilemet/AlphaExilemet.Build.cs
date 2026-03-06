@@ -2,9 +2,9 @@
 
 using UnrealBuildTool;
 
-public class PlanetEscape : ModuleRules
+public class AlphaExilemet : ModuleRules
 {
-	public PlanetEscape(ReadOnlyTargetRules Target) : base(Target)
+	public AlphaExilemet(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	

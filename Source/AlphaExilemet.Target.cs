@@ -3,13 +3,13 @@
 using UnrealBuildTool;
 using System.Collections.Generic;
 
-public class PlanetEscapeTarget : TargetRules
+public class AlphaExilemetTarget : TargetRules
 {
-	public PlanetEscapeTarget(TargetInfo Target) : base(Target)
+	public AlphaExilemetTarget(TargetInfo Target) : base(Target)
 	{
 		Type = TargetType.Game;
 		DefaultBuildSettings = BuildSettingsVersion.V6;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_7;
-		ExtraModuleNames.Add("PlanetEscape");
+		ExtraModuleNames.Add("AlphaExilemet");
 	}
 }

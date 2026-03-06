@@ -5,7 +5,7 @@
 	"Description": "",
 	"Modules": [
 		{
-			"Name": "PlanetEscape",
+			"Name": "AlphaExilemet",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		}
