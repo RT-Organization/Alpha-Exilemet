@@ -1,12 +1,19 @@
 #include "AlphaExilemetCharacter.h"
-// Make sure to include your tool's header file here eventually!
-// #include "ToolBase.h" 
+#include "ToolBase.h"
+#include "Camera/CameraComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Interactable.h"
 
 // Sets default values
 AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 {
-	// Set this character to call Tick() every frame.
 	PrimaryActorTick.bCanEverTick = true;
+
+	// Create a CameraComponent	
+	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
+	FirstPersonCameraComponent->SetupAttachment(CastChecked<USceneComponent, UCapsuleComponent>(GetCapsuleComponent()));
+	FirstPersonCameraComponent->SetRelativeLocation(FVector(0, 0, 0)); // Position the camera
+	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 
 	// Initialize Base Stat Levels
 	OxygenLevel = 0;
@@ -22,38 +29,33 @@ AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 	Oxygen = MaxOxygen;
 
 	Currency = 0.0f;
-
-	// Initialize Equipment
-	//CurrentTool = nullptr;
+	
+	CurrentTool = nullptr;
+	
+	// Initialize Extra Variables
+	InteractionDistance = 300.0f;
 }
 
-// Called when the game starts or when spawned
 void AAlphaExilemetCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	// Here you can add logic to scale MaxHealth and MaxOxygen 
-	// based on the HealthLevel and OxygenLevel at the start of the game!
 }
 
-// Called every frame
 void AAlphaExilemetCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
-	// Oxygen drain logic can potentially go here, or in a Timer for better performance.
 }
 
-// Called to bind functionality to input
 void AAlphaExilemetCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 }
 
-/* EQUIP METHODS
+// -------------------------------------------------------------------------
+// EQUIP
+// -------------------------------------------------------------------------
 void AAlphaExilemetCharacter::Equip(AToolBase* NewTool)
 {
-	// If we already have a tool, unequip it first
 	if (CurrentTool)
 	{
 		Unequip();
@@ -62,8 +64,6 @@ void AAlphaExilemetCharacter::Equip(AToolBase* NewTool)
 	if (NewTool)
 	{
 		CurrentTool = NewTool;
-		// Add attachment logic here (e.g., attach tool mesh to character hand socket)
-		// CurrentTool->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("RightHandSocket"));
 	}
 }
 
@@ -71,9 +71,33 @@ void AAlphaExilemetCharacter::Unequip()
 {
 	if (CurrentTool)
 	{
-		// Add unequip logic here (e.g., detach, hide, or destroy the tool)
-        
 		CurrentTool = nullptr;
 	}
 }
-*/
+
+// -------------------------------------------------------------------------
+// INTERACT
+// -------------------------------------------------------------------------
+void AAlphaExilemetCharacter::TryInteract()
+{
+	FVector StartLoc = FirstPersonCameraComponent->GetComponentLocation();
+	FVector ForwardVector = FirstPersonCameraComponent->GetForwardVector();
+	FVector EndLoc = StartLoc + (ForwardVector * InteractionDistance);
+
+	FHitResult HitResult;
+	FCollisionQueryParams CollisionParams;
+	CollisionParams.AddIgnoredActor(this); // Don't hit the player
+
+	// Shoot the Raycast
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, CollisionParams);
+
+	if (bHit && HitResult.GetActor())
+	{
+		AActor* HitActor = HitResult.GetActor();
+		
+		if (HitActor->Implements<UInteractable>())
+		{
+			IInteractable::Execute_Interact(HitActor, this);
+		}
+	}
+}
