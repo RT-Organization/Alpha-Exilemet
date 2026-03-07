@@ -19,14 +19,26 @@ protected:
 	virtual void BeginPlay() override;
 	
 public:
-	// Volume that acts as the physical bounds for the Raycast to hit
+	// -------------------------------------------------------------------------
+	// VARIABLES
+	// -------------------------------------------------------------------------
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Terminal")
 	UBoxComponent* InteractionBox;
 	
-	// This replaces your old Interact function. It is the Interface requirement!
+	// If true, we use the Mesh for interaction. If false, we use the InteractionBox.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Terminal")
+	bool bUseMeshForInteraction;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Terminal")
+	UStaticMeshComponent* TerminalMesh;
+	
+	// -------------------------------------------------------------------------
+	// INTERACTION METHODS
+	// -------------------------------------------------------------------------
 	virtual void Interact_Implementation(class AAlphaExilemetCharacter* Interactor) override;
 	
-	// Event for Blueprint implementation (opens UI panel)
-	UFUNCTION(BlueprintImplementableEvent, Category="Terminal")
-	void OnInteract(class AAlphaExilemetCharacter* Interactor);
+	// -------------------------------------------------------------------------
+	// CONTRUCTION METHODS
+	// -------------------------------------------------------------------------
+	virtual void OnConstruction(const FTransform& Transform) override;
 };

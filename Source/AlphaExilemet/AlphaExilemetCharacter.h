@@ -70,6 +70,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Equipment")
 	AToolBase* CurrentTool;
 	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Interaction")
+	bool bIsLookingAtInteractable;
+	
 	// -------------------------------------------------------------------------
 	// EXTRA VARIABLES
 	// -------------------------------------------------------------------------

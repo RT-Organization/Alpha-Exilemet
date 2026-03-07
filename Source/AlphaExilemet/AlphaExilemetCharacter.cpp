@@ -1,18 +1,26 @@
 #include "AlphaExilemetCharacter.h"
 #include "ToolBase.h"
 #include "Camera/CameraComponent.h"
-#include "Components/CapsuleComponent.h"
+#include "DrawDebugHelpers.h"
 #include "Interactable.h"
 
 // Sets default values
 AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = true; //
 
 	// Create a CameraComponent	
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
-	FirstPersonCameraComponent->SetupAttachment(CastChecked<USceneComponent, UCapsuleComponent>(GetCapsuleComponent()));
-	FirstPersonCameraComponent->SetRelativeLocation(FVector(0, 0, 0)); // Position the camera
+
+	// THE FIX:
+	// 1. We change CapsuleComponent to GetMesh()
+	// 2. We provide the exact FName of the socket in your mesh (e.g., "head")
+	FirstPersonCameraComponent->SetupAttachment(GetMesh(), FName("head"));
+
+	// Set relative location to 0 so it snaps to the socket location
+	FirstPersonCameraComponent->SetRelativeLocation(FVector(0.f, 0.f, 0.f));
+	FirstPersonCameraComponent->SetRelativeRotation(FRotator(0.f, 0.f, 0.f));
+
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 
 	// Initialize Base Stat Levels
@@ -44,6 +52,27 @@ void AAlphaExilemetCharacter::BeginPlay()
 void AAlphaExilemetCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// --- INTERACTION PROMPT LOGIC ---
+	bIsLookingAtInteractable = false; 
+
+	FVector StartLoc = FirstPersonCameraComponent->GetComponentLocation();
+	FVector ForwardVector = FirstPersonCameraComponent->GetForwardVector();
+	FVector EndLoc = StartLoc + (ForwardVector * InteractionDistance);
+
+	FHitResult HitResult;
+	FCollisionQueryParams CollisionParams;
+	CollisionParams.AddIgnoredActor(this); 
+	
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, CollisionParams);
+
+	if (bHit && HitResult.GetActor())
+	{
+		if (HitResult.GetActor()->Implements<UInteractable>())
+		{
+			bIsLookingAtInteractable = true;
+		}
+	}
 }
 
 void AAlphaExilemetCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -90,7 +119,8 @@ void AAlphaExilemetCharacter::TryInteract()
 
 	// Shoot the Raycast
 	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, CollisionParams);
-
+	DrawDebugLine(GetWorld(), StartLoc, EndLoc, FColor::Red, false, 2.0f);
+	
 	if (bHit && HitResult.GetActor())
 	{
 		AActor* HitActor = HitResult.GetActor();
