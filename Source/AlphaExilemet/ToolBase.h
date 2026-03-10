@@ -30,16 +30,17 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tool|UI")
 	FText DisplayName;
 	
-	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Tool")
+	UStaticMeshComponent* Mesh;
 	
 	/* ----------------------------- */
 	/*         TOOL EVENTS           */
 	/* ----------------------------- */
 
-	UFUNCTION(BlueprintImplementableEvent, Category="Tool")
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category="Tool")
 	void OnEquip();
 
-	UFUNCTION(BlueprintImplementableEvent, Category="Tool")
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category="Tool")
 	void OnUnequip();
 	
 	
