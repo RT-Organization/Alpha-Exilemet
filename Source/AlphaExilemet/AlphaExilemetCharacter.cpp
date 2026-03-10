@@ -83,23 +83,26 @@ void AAlphaExilemetCharacter::SetupPlayerInputComponent(UInputComponent* PlayerI
 // -------------------------------------------------------------------------
 // EQUIP
 // -------------------------------------------------------------------------
-void AAlphaExilemetCharacter::Equip(AToolBase* NewTool)
+void AAlphaExilemetCharacter::Equip_Implementation(AToolBase* NewTool)
 {
 	if (CurrentTool)
 	{
 		Unequip();
 	}
-
+	
 	if (NewTool)
 	{
 		CurrentTool = NewTool;
+		
+		NewTool->OnEquip();
 	}
 }
 
-void AAlphaExilemetCharacter::Unequip()
+void AAlphaExilemetCharacter::Unequip_Implementation()
 {
 	if (CurrentTool)
 	{
+		CurrentTool->OnUnequip();
 		CurrentTool = nullptr;
 	}
 }

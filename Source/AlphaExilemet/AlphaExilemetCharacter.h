@@ -83,12 +83,13 @@ public:
 	// METHODS
 	// -------------------------------------------------------------------------
 	// Equips a new tool, optionally handling the unequipping of the old one
-	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="AlphaExilemet|Equipment")
 	void Equip(AToolBase* NewTool);
+	virtual void Equip_Implementation(AToolBase* NewTool);
 
-	// Unequips the currently held tool
-	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="AlphaExilemet|Equipment")
 	void Unequip();
+	virtual void Unequip_Implementation();
 	
 	// Fires the raycast to interact with terminals/items
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Interaction")

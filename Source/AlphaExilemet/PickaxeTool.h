@@ -28,14 +28,14 @@ protected:
 	/*            STATS              */
 	/* ----------------------------- */
 	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Pickaxe|Stats")
-	int32 STR = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
+	int32 STR = 0;
 	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Pickaxe|Stats")
-	int32 CAP = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
+	int32 CAP = 0;
 	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Pickaxe|Stats")
-	int32 LU = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
+	int32 LU = 0;
 	
 	
 	
@@ -49,13 +49,17 @@ protected:
 	/* ----------------------------- */
 	/*           MINING              */
 	/* ----------------------------- */
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Pickaxe|Mining")
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Mining")
+	float BaseMiningDamage = 20.f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Mining")
+	float StrengthScaling = 8.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Mining")
 	float MiningRange = 500.f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Pickaxe|Mining")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Mining")
 	float MiningInterval = 0.2f;
-
+	
 	FTimerHandle MiningTimer;
 	
 	
@@ -63,9 +67,8 @@ protected:
 	/* ----------------------------- */
 	/*        INTERNAL LOGIC         */
 	/* ----------------------------- */
-
-	void StartMining();
 	
+	void StartMining();
 	void StopMining();
 	
 	void PerformMiningTrace();
