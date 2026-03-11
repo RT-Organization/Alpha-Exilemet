@@ -3,24 +3,18 @@
 #include "Camera/CameraComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Interactable.h"
+#include "TimerManager.h"
 
 // Sets default values
 AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 {
-	PrimaryActorTick.bCanEverTick = true; //
+	PrimaryActorTick.bCanEverTick = true;
 
 	// Create a CameraComponent	
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
-
-	// THE FIX:
-	// 1. We change CapsuleComponent to GetMesh()
-	// 2. We provide the exact FName of the socket in your mesh (e.g., "head")
 	FirstPersonCameraComponent->SetupAttachment(GetMesh(), FName("head"));
-
-	// Set relative location to 0 so it snaps to the socket location
 	FirstPersonCameraComponent->SetRelativeLocation(FVector(0.f, 0.f, 0.f));
 	FirstPersonCameraComponent->SetRelativeRotation(FRotator(0.f, 0.f, 0.f));
-
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 
 	// Initialize Base Stat Levels
@@ -42,11 +36,58 @@ AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 	
 	// Initialize Extra Variables
 	InteractionDistance = 300.0f;
+
+	// Initialize Survival Variables
+	bIsInSafeZone = false;
+	OxygenDrainRate = 2.0f;
+	OxygenRegenRate = 10.0f;
+	SuffocationDamageRate = 5.0f;
 }
 
 void AAlphaExilemetCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Start a repeating timer that ticks every 1.0 seconds to handle survival logic
+	GetWorld()->GetTimerManager().SetTimer(SurvivalTimerHandle, this, &AAlphaExilemetCharacter::HandleSurvivalStats, 1.0f, true);
+
+	// Broadcast initial UI stats
+	OnHealthChanged.Broadcast(Health, MaxHealth);
+	OnOxygenChanged.Broadcast(Oxygen, MaxOxygen);
+}
+
+void AAlphaExilemetCharacter::HandleSurvivalStats()
+{
+	if (bIsInSafeZone)
+	{
+		// Regenerate Oxygen while in Base Camp
+		if (Oxygen < MaxOxygen)
+		{
+			Oxygen = FMath::Clamp(Oxygen + OxygenRegenRate, 0.0f, MaxOxygen);
+			OnOxygenChanged.Broadcast(Oxygen, MaxOxygen);
+		}
+	}
+	else
+	{
+		// Drain Oxygen while exploring
+		if (Oxygen > 0.0f)
+		{
+			Oxygen = FMath::Clamp(Oxygen - OxygenDrainRate, 0.0f, MaxOxygen);
+			OnOxygenChanged.Broadcast(Oxygen, MaxOxygen);
+		}
+		else
+		{
+			// Suffocate when Oxygen is empty
+			Health = FMath::Clamp(Health - SuffocationDamageRate, 0.0f, MaxHealth);
+			OnHealthChanged.Broadcast(Health, MaxHealth);
+
+			if (Health <= 0.0f)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Player Died of Suffocation!"));
+				// TODO: Implement Death/Respawn logic here
+			}
+		}
+	}
 }
 
 void AAlphaExilemetCharacter::Tick(float DeltaTime)
@@ -54,7 +95,7 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	// --- INTERACTION PROMPT LOGIC ---
-	bIsLookingAtInteractable = false; 
+	bIsLookingAtInteractable = false;
 
 	FVector StartLoc = FirstPersonCameraComponent->GetComponentLocation();
 	FVector ForwardVector = FirstPersonCameraComponent->GetForwardVector();
@@ -62,7 +103,7 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 
 	FHitResult HitResult;
 	FCollisionQueryParams CollisionParams;
-	CollisionParams.AddIgnoredActor(this); 
+	CollisionParams.AddIgnoredActor(this);
 	
 	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, CollisionParams);
 
@@ -95,6 +136,9 @@ void AAlphaExilemetCharacter::Equip_Implementation(AToolBase* NewTool)
 		CurrentTool = NewTool;
 		NewTool->SetOwner(this);
 		NewTool->OnEquip();
+
+		// Broadcast to UI that a new tool was equipped
+		OnToolEquipped.Broadcast(NewTool);
 	}
 }
 

@@ -16,20 +16,22 @@ public:
 	
 protected:
 	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaTime) override;
 	
 	// Sphere defining the oxygen regeneration area
 	UPROPERTY(EditAnywhere, Category="Base")
 	USphereComponent* OxygenSphere;
+
+	// Overlap function declarations
+	UFUNCTION()
+	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+	UFUNCTION()
+	void OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 	
 public:
 	// Radius in world units for oxygen regeneration
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Base")
 	float OxygenRegenRadius;
-	
-	// Amount of oxygen regained per second inside the base
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Base")
-	float OxygenRegenRate;
 	
 	// This runs whenever you change a variable in the editor
 	virtual void OnConstruction(const FTransform& Transform) override;

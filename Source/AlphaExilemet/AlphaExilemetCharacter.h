@@ -8,6 +8,12 @@
 class AToolBase;
 class UCameraComponent;
 
+// -------------------------------------------------------------------------
+// DELEGATES (Event Dispatchers for the UI)
+// -------------------------------------------------------------------------
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStatChangedSignature, float, CurrentValue, float, MaxValue);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToolEquippedSignature, AToolBase*, NewTool);
+
 UCLASS()
 class ALPHAEXILEMET_API AAlphaExilemetCharacter : public ACharacter
 {
@@ -21,12 +27,31 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+	// Timer for handling survival logic
+	FTimerHandle SurvivalTimerHandle;
+
+	// The function called every second to manage Oxygen and Health
+	UFUNCTION()
+	void HandleSurvivalStats();
+
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+
+	// -------------------------------------------------------------------------
+	// EVENT DISPATCHERS
+	// -------------------------------------------------------------------------
+	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Events")
+	FOnStatChangedSignature OnHealthChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Events")
+	FOnStatChangedSignature OnOxygenChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Events")
+	FOnToolEquippedSignature OnToolEquipped;
 
 	// -------------------------------------------------------------------------
 	// COMPONENTS
@@ -50,7 +75,7 @@ public:
 	int32 CapacityLevel;
 
 	// -------------------------------------------------------------------------
-	// RUNTIME VARIABLES
+	// RUNTIME SURVIVAL VARIABLES
 	// -------------------------------------------------------------------------
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
 	float Health;
@@ -63,6 +88,18 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
 	float MaxOxygen;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
+	bool bIsInSafeZone;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Stats")
+	float OxygenDrainRate;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Stats")
+	float OxygenRegenRate;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Stats")
+	float SuffocationDamageRate;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
 	float Currency;
