@@ -31,10 +31,7 @@ void AResourceBase::ApplyResourceDamage(float DamageAmount)
 	
 	if (Health <= 0.f)
 	{
-		bIsDepleted = true;
-		
-		SetActorHiddenInGame(true);
-		SetActorEnableCollision(false);
+		DepleteResource();
 		
 		GetWorldTimerManager().SetTimer(
 			RegenTimer,
@@ -56,6 +53,16 @@ void AResourceBase::RegenerateResource()
 	SetActorEnableCollision(true);
 	
 	SetActorScale3D(FVector(1.f));
+}
+
+void AResourceBase::DepleteResource()
+{
+	// Health = 0 // doesn't matter
+	
+	bIsDepleted = true;
+		
+	SetActorHiddenInGame(true);
+	SetActorEnableCollision(false);
 }
 
 void AResourceBase::UpdateScale()

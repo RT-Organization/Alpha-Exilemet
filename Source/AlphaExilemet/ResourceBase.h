@@ -66,6 +66,7 @@ protected:
 	/* ----------------------------- */
 	
 	void RegenerateResource();
+	void DepleteResource();
 	
 	void UpdateScale();
 public:	
