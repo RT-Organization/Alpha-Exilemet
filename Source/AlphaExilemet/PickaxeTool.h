@@ -68,11 +68,13 @@ protected:
 	/*        INTERNAL LOGIC         */
 	/* ----------------------------- */
 	
-	void StartMining();
-	void StopMining();
+	void StartMiningTimer();
+	void StopMiningTimer();
 	
+	UFUNCTION(BlueprintCallable, Category="Pickaxe|Mining")
 	void PerformMiningTrace();
-	
+
+	UFUNCTION(BlueprintCallable, Category="Pickaxe|Mining")
 	void ApplyMiningDamage(AActor* Target);
 };
 // TODO: Mineral Inventory, Add minerals to inventory on mine complete

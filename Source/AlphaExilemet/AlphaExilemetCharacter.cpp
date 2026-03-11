@@ -93,7 +93,7 @@ void AAlphaExilemetCharacter::Equip_Implementation(AToolBase* NewTool)
 	if (NewTool)
 	{
 		CurrentTool = NewTool;
-		
+		NewTool->SetOwner(this);
 		NewTool->OnEquip();
 	}
 }

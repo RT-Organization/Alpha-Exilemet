@@ -8,6 +8,9 @@
 #include "Camera/PlayerCameraManager.h"
 #include "TimerManager.h"
 
+#include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
+
 APickaxeTool::APickaxeTool()
 {
 }
@@ -25,11 +28,11 @@ void APickaxeTool::BeginPlay()
 
 void APickaxeTool::StartUsing_Implementation()
 {
-	StartMining();
+	StartMiningTimer();
 }
 void APickaxeTool::StopUsing_Implementation()
 {
-	StopMining();
+	StopMiningTimer();
 }
 
 
@@ -37,7 +40,7 @@ void APickaxeTool::StopUsing_Implementation()
 /*        MINING CONTROL         */
 /* ----------------------------- */
 
-void APickaxeTool::StartMining()
+void APickaxeTool::StartMiningTimer()
 {
 	GetWorldTimerManager().SetTimer(
 		MiningTimer,
@@ -47,11 +50,12 @@ void APickaxeTool::StartMining()
 		true
 	);
 }
-void APickaxeTool::StopMining()
+void APickaxeTool::StopMiningTimer()
 {
 	GetWorldTimerManager().ClearTimer(MiningTimer);
 }
-
+// TODO: Here or in Blueprints, change timer to play animation, PerformMiningTrace on Animation Event
+// (just override StartUsing/StopUsing)
 
 
 /* ----------------------------- */
@@ -64,11 +68,11 @@ void APickaxeTool::PerformMiningTrace()
 	if (!OwnerCharacter)
 		return;
 	
-	APlayerController* PC = Cast<APlayerController>(OwnerCharacter->GetController());
-	if (!PC)
+	APlayerController* PlrCtrl = Cast<APlayerController>(OwnerCharacter->GetController());
+	if (!PlrCtrl)
 		return;
 	
-	APlayerCameraManager* CameraManager = PC->PlayerCameraManager;
+	APlayerCameraManager* CameraManager = PlrCtrl->PlayerCameraManager;
 	if (!CameraManager)
 		return;
 	
@@ -77,6 +81,18 @@ void APickaxeTool::PerformMiningTrace()
 	FVector Start = CameraManager->GetCameraLocation();
 	FVector Forward = CameraManager->GetCameraRotation().Vector();
 	FVector End = Start + Forward * MiningRange;
+	
+	// TODO: DELETE Debug
+	DrawDebugLine(
+		GetWorld(),
+		Start,
+		End,
+		FColor::Green,
+		false,
+		1.0f,
+		0,
+		2.0f
+	);
 	
 	FHitResult Hit;
 	
@@ -92,15 +108,15 @@ void APickaxeTool::PerformMiningTrace()
 		Params
 	);
 	
-	if (bHit)
-	{
-		AActor* HitActor = Hit.GetActor();
-
-		if (HitActor)
-		{
-			ApplyMiningDamage(HitActor);
-		}
-	}
+	if (!bHit)
+		return;
+	
+	AActor* HitActor = Hit.GetActor();
+	
+	if (!HitActor)
+		return;
+	
+	ApplyMiningDamage(HitActor);
 }
 
 
@@ -114,7 +130,8 @@ void APickaxeTool::ApplyMiningDamage(AActor* Target)
 	if (!Target)
 		return;
 	
-	AResourceBase* Resource = Cast<AResourceBase>(Target); // Cast to ASolidResource when available
+	AResourceBase* Resource = Cast<AResourceBase>(Target);
+	
 	if (!Resource)
 		return;
 	
