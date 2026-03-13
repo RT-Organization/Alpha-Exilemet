@@ -30,6 +30,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tool|UI")
 	FText DisplayName;
 	
+	// Tool description for the Workbench UI
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tool|UI", meta=(MultiLine="true"))
+	FText Description;
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Tool")
 	UStaticMeshComponent* Mesh;
 	

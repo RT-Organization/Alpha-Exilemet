@@ -81,19 +81,15 @@ struct FToolUpgradeRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Upgrade")
 	EToolType ToolToUpgrade = EToolType::Pickaxe;
 
-	// Since tools have different stats (Strength vs Range), we use FName to identify the specific upgrade internally
+	// Identifies the specific stat internally (e.g., "Force", "Speed")
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Upgrade")
 	FName StatID; 
 
+	// The visual name for the stat (e.g., "Absorption Speed")
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Upgrade")
 	FText DisplayName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Upgrade", meta=(MultiLine="true"))
-	FText Description;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Upgrade")
-	UTexture2D* Icon = nullptr;
-
+	// Array of costs. Index 0 = Level 1, Index 4 = Level 5.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Upgrade")
 	TArray<FUpgradeCost> CostPerLevel;
 };
