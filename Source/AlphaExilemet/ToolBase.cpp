@@ -2,6 +2,7 @@
 
 
 #include "ToolBase.h"
+#include "AlphaExilemetCharacter.h"
 
 // Sets default values
 AToolBase::AToolBase()
@@ -20,6 +21,21 @@ void AToolBase::BeginPlay()
 	
 }
 
+void AToolBase::Interact_Implementation(AAlphaExilemetCharacter* Interactor)
+{
+	if (Interactor)
+	{
+		//Add tool to the player's inventory
+		Interactor->OwnedTools.AddUnique(this);
+
+		//Equip the tool
+		Interactor->Equip(this);
+
+		//Disable world collision so the player doesn't trip over it or interact with it again
+		SetActorEnableCollision(false);
+	}
+}
+
 void AToolBase::StartUsing_Implementation()
 {
 	// default empty
@@ -28,4 +44,26 @@ void AToolBase::StartUsing_Implementation()
 void AToolBase::StopUsing_Implementation()
 {
 	// default empty
+}
+
+int32 AToolBase::GetToolStatLevel(FName StatName)
+{
+	if (ToolUpgradeLevels.Contains(StatName))
+	{
+		return ToolUpgradeLevels[StatName];
+	}
+	return 0; // If not found, it is Level 0
+}
+
+void AToolBase::UpgradeStat(FName StatName)
+{
+	// Add 1 to the level if it exists, otherwise initialize it at Level 1
+	if (ToolUpgradeLevels.Contains(StatName))
+	{
+		ToolUpgradeLevels[StatName]++;
+	}
+	else
+	{
+		ToolUpgradeLevels.Add(StatName, 1);
+	}
 }

@@ -34,6 +34,8 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="GasRod|Stats")
 	int32 MAX = 0;
 
+	virtual void UpgradeStat(FName StatName) override;
+	
 	/* ----------------------------- */
 	/* SETTINGS            */
 	/* ----------------------------- */

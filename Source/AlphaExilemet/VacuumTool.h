@@ -34,6 +34,8 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Vacuum|Stats")
 	int32 CAP = 0;
 
+	virtual void UpgradeStat(FName StatName) override;
+	
 	/* ----------------------------- */
 	/* SETTINGS            */
 	/* ----------------------------- */

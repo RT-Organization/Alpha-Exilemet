@@ -4,10 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Interactable.h"
 #include "ToolBase.generated.h"
 
 UCLASS()
-class ALPHAEXILEMET_API AToolBase : public AActor
+class ALPHAEXILEMET_API AToolBase : public AActor, public IInteractable
 {
 	GENERATED_BODY()
 	
@@ -18,6 +19,11 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
+	/* ----------------------------- */
+	/* INTERACTION           */
+	/* ----------------------------- */
+	virtual void Interact_Implementation(class AAlphaExilemetCharacter* Interactor) override;
+	
 	/* ----------------------------- */
 	/*            TOOL INFO          */
 	/* ----------------------------- */
@@ -62,4 +68,30 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Tool")
 	void StopUsing();
 	virtual void StopUsing_Implementation();
+	
+	/* ----------------------------- */
+	/* TOOL PROGRESSION      */
+	/* ----------------------------- */
+	
+	// The names of the Data Table rows this specific tool uses (e.g., "Pickaxe_Force")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool|Progression")
+	TArray<FName> UpgradeStatNames;
+	
+	// Maps the specific Stat (e.g., "Pickaxe_Force")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Progression")
+	TMap<FName, int32> ToolUpgradeLevels;
+
+	// Helper function to get this tool's stat level
+	UFUNCTION(BlueprintPure, Category = "Tool|Progression")
+	int32 GetToolStatLevel(FName StatName);
+
+	// Called when the Terminal upgrades a stat
+	UFUNCTION(BlueprintCallable, Category = "Tool|Progression")
+	virtual void UpgradeStat(FName StatName);
+
+	/* ----------------------------- */
+	/* TOOL INVENTORY        */
+	/* ----------------------------- */
+
+	
 };

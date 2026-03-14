@@ -22,8 +22,6 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	
-	
-	
 	/* ----------------------------- */
 	/*            STATS              */
 	/* ----------------------------- */
@@ -37,6 +35,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
 	int32 LU = 0;
 	
+	virtual void UpgradeStat(FName StatName) override;
 	
 	
 	/* ----------------------------- */

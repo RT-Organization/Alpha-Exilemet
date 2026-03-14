@@ -145,6 +145,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Equipment")
 	AToolBase* CurrentTool;
 	
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
+	TArray<AToolBase*> OwnedTools;
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Interaction")
 	bool bIsLookingAtInteractable;
 	

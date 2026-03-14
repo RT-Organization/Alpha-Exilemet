@@ -139,3 +139,27 @@ void APickaxeTool::ApplyMiningDamage(AActor* Target)
 	
 	Resource->ApplyResourceDamage(Damage);
 }
+
+/* ----------------------------- */
+/*         STAT UPGRADES         */
+/* ----------------------------- */
+
+void APickaxeTool::UpgradeStat(FName StatName)
+{
+	// 1. Call the parent function so ToolBase saves the level internally
+	Super::UpgradeStat(StatName);
+
+	// 2. Add your buffs here!
+	if (StatName == "Pickaxe_Force")
+	{
+		STR += 1;
+	}
+	else if (StatName == "Pickaxe_Fortune")
+	{
+		LU += 1;
+	}
+	else if (StatName == "Pickaxe_Capacity")
+	{
+		CAP += 1;
+	}
+}
