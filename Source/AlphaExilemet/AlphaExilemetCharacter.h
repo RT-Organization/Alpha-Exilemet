@@ -86,16 +86,15 @@ public:
 	UCameraComponent* FirstPersonCameraComponent;
 
 	// -------------------------------------------------------------------------
-	// CURRENT UPGRADE LEVELS (0 - 5)
+	// CURRENT UPGRADE LEVELS
 	// -------------------------------------------------------------------------
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Levels", meta = (ClampMin = "0", ClampMax = "5"))
-	int32 OxygenLevel;
+	// Maps the Stat (e.g., Health, Oxygen) to its current level (0-5)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Levels")
+	TMap<EPlayerStat, int32> SystemUpgradeLevels;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Levels", meta = (ClampMin = "0", ClampMax = "5"))
-	int32 HealthLevel;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Levels", meta = (ClampMin = "0", ClampMax = "5"))
-	int32 AgilityLevel;
+	// Helper function to get a stat level safely
+	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Progression")
+	int32 GetSystemStatLevel(EPlayerStat StatName);
 
 	// -------------------------------------------------------------------------
 	// STRUCT PROGRESSION CONFIGURATION
@@ -108,6 +107,12 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
 	FStatProgression AgilityProgression;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
+	FStatProgression JumpProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
+	FStatProgression SprintMultiplierProgression;
 
 	// -------------------------------------------------------------------------
 	// RUNTIME SURVIVAL VARIABLES
@@ -135,6 +140,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Stats")
 	float SuffocationDamageRate;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Runtime")
+	float CurrentSprintMultiplier;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
 	float Currency;
