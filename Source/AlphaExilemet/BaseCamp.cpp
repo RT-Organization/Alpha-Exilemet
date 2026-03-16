@@ -63,3 +63,34 @@ void ABaseCamp::OnConstruction(const FTransform& Transform)
 		OxygenSphere->SetSphereRadius(OxygenRegenRadius);
 	}
 }
+
+// -------------------------------------------------------------------------
+// SHIP REPAIR PROGRESSION
+// -------------------------------------------------------------------------
+
+int32 ABaseCamp::GetShipSystemLevel(EShipSystem SystemID)
+{
+	// Check if we have data for this system yet
+	if (ShipRepairLevels.Contains(SystemID))
+	{
+		return ShipRepairLevels[SystemID];
+	}
+	
+	// If it's not in the map, it hasn't been upgraded, so it's Level 0
+	return 0; 
+}
+
+void ABaseCamp::UpgradeShipSystem(EShipSystem SystemID)
+{
+	if (ShipRepairLevels.Contains(SystemID))
+	{
+		ShipRepairLevels[SystemID]++; // Increment existing level
+	}
+	else
+	{
+		ShipRepairLevels.Add(SystemID, 1); // First upgrade, set to Level 1
+	}
+
+	// TODO Later: You can add an Event Dispatcher here like OnShipUpgraded.Broadcast(SystemID);
+	// if you want the base visuals to change when an upgrade happens!
+}

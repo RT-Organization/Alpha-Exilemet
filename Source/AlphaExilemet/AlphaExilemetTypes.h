@@ -27,6 +27,17 @@ enum class EToolType : uint8
 	GasRod
 };
 
+// Ship repair components
+UENUM(BlueprintType)
+enum class EShipSystem : uint8
+{
+	Hull,
+	Armor,
+	OxygenSystem,
+	Engine,
+	Thrusters
+};
+
 // -------------------------------------------------------------------------
 // BASE COST STRUCT
 // -------------------------------------------------------------------------
@@ -121,6 +132,9 @@ USTRUCT(BlueprintType)
 struct FShipRepairRow : public FTableRowBase
 {
 	GENERATED_BODY()
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ship Repair")
+	EShipSystem SystemID = EShipSystem::Hull;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ship Repair")
 	FText DisplayName;
@@ -131,6 +145,7 @@ struct FShipRepairRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ship Repair")
 	UTexture2D* Icon = nullptr;
 
+	// The length of this array determines the Max Level (e.g., 3 for Hull, 6 for Thrusters)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ship Repair")
 	TArray<FUpgradeCost> CostPerLevel;
 };

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "AlphaExilemetTypes.h" // ADD THIS for EShipSystem
 #include "BaseCamp.generated.h"
 
 class USphereComponent;
@@ -35,4 +36,20 @@ public:
 	
 	// This runs whenever you change a variable in the editor
 	virtual void OnConstruction(const FTransform& Transform) override;
+
+	// -------------------------------------------------------------------------
+	// SHIP REPAIR PROGRESSION
+	// -------------------------------------------------------------------------
+	
+	// Maps the Ship System to its current repair level
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Base|Ship Repairs")
+	TMap<EShipSystem, int32> ShipRepairLevels;
+
+	// Safely gets the current level of a specific system
+	UFUNCTION(BlueprintPure, Category = "Base|Ship Repairs")
+	int32 GetShipSystemLevel(EShipSystem SystemID);
+
+	// Increments the level of a specific system
+	UFUNCTION(BlueprintCallable, Category = "Base|Ship Repairs")
+	void UpgradeShipSystem(EShipSystem SystemID);
 };
