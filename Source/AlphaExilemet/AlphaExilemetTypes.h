@@ -31,11 +31,11 @@ enum class EToolType : uint8
 UENUM(BlueprintType)
 enum class EShipSystem : uint8
 {
-	Hull,
-	Armor,
-	OxygenSystem,
-	Engine,
-	Thrusters
+	AtmosphericScrubber,
+	TopographyScanner,
+	HazardDampener,
+	MatterRetriever,
+	MolecularRefiner
 };
 
 // -------------------------------------------------------------------------
@@ -134,7 +134,7 @@ struct FShipRepairRow : public FTableRowBase
 	GENERATED_BODY()
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ship Repair")
-	EShipSystem SystemID = EShipSystem::Hull;
+	EShipSystem SystemID = EShipSystem::AtmosphericScrubber;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ship Repair")
 	FText DisplayName;
