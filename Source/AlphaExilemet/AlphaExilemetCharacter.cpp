@@ -30,29 +30,22 @@ AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 	// MultiplierPerLevel: A percentage multiplier. 1.0 = no change. 1.1 = +10%. 0.85 = -15%.
 	// -------------------------------------------------------------------------
 	
-	// Health: Starts at 100, adds exactly 25 per level (100 -> 125 -> 150)
 	HealthProgression.BaseValue = 100.0f;
 	HealthProgression.AdditivePerLevel = 25.0f;
 	HealthProgression.MultiplierPerLevel = 1.0f; 
-
-	// Oxygen Drain: Starts at 2.0. We want it to go down, so we multiply by 0.85 per level.
-	// (Level 0: 2.0 -> Level 1: 1.7 -> Level 2: 1.44)
+	
 	OxygenDrainProgression.BaseValue = 2.0f;
 	OxygenDrainProgression.AdditivePerLevel = 0.0f;
 	OxygenDrainProgression.MultiplierPerLevel = 0.85f; 
-
-	// Agility Base Walk Speed: Starts at 600 speed, multiplies by 1.1 (+10% speed) per level
+	
 	AgilityProgression.BaseValue = 600.0f;
 	AgilityProgression.AdditivePerLevel = 0.0f;
 	AgilityProgression.MultiplierPerLevel = 1.1f;
-
-	// Jump Height: Starts at Unreal Default (420), adds a flat 50 height per level
+	
 	JumpProgression.BaseValue = 420.0f;
 	JumpProgression.AdditivePerLevel = 50.0f;
 	JumpProgression.MultiplierPerLevel = 1.0f;
-
-	// Sprint Multiplier: Starts at 1.5x (50% faster than walking). 
-	// Adds +0.1 to the multiplier per level. (Level 0: 1.5x -> Level 5: 2.0x)
+	
 	SprintMultiplierProgression.BaseValue = 1.5f;
 	SprintMultiplierProgression.AdditivePerLevel = 0.1f;
 	SprintMultiplierProgression.MultiplierPerLevel = 1.0f;
