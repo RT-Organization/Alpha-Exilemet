@@ -38,6 +38,20 @@ enum class EShipSystem : uint8
 	MolecularRefiner
 };
 
+UENUM(BlueprintType)
+enum class EShopItemCategory : uint8
+{
+	Tool,
+	SpecialItem
+};
+
+UENUM(BlueprintType)
+enum class ESpecialItem : uint8
+{
+	TeleportBeacon
+	// You can add more here later!
+};
+
 // -------------------------------------------------------------------------
 // BASE COST STRUCT
 // -------------------------------------------------------------------------
@@ -148,4 +162,36 @@ struct FShipRepairRow : public FTableRowBase
 	// The length of this array determines the Max Level (e.g., 3 for Hull, 6 for Thrusters)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ship Repair")
 	TArray<FUpgradeCost> CostPerLevel;
+};
+
+//5. SHOP TABLE
+USTRUCT(BlueprintType)
+struct FShopItemRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	// Tells the UI if this goes in the top row (Tools) or bottom list (Special)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data")
+	EShopItemCategory Category = EShopItemCategory::Tool;
+
+	// If Category is 'Tool', the UI will read this ID
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data", meta=(EditCondition="Category == EShopItemCategory::Tool", EditConditionHides))
+	EToolType ToolID = EToolType::Pickaxe;
+
+	// If Category is 'SpecialItem', the UI will read this ID
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data", meta=(EditCondition="Category == EShopItemCategory::SpecialItem", EditConditionHides))
+	ESpecialItem SpecialItemID = ESpecialItem::TeleportBeacon;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data", meta=(MultiLine="true"))
+	FText Description;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data")
+	UTexture2D* Icon = nullptr;
+
+	// Notice: Just an int32! No materials needed for the shop.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data")
+	int32 CurrencyCost = 0; 
 };

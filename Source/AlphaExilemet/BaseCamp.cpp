@@ -94,3 +94,34 @@ void ABaseCamp::UpgradeShipSystem(EShipSystem SystemID)
 	// TODO Later: You can add an Event Dispatcher here like OnShipUpgraded.Broadcast(SystemID);
 	// if you want the base visuals to change when an upgrade happens!
 }
+
+// -------------------------------------------------------------------------
+// SHOP PROGRESSION / UNLOCKS
+// -------------------------------------------------------------------------
+
+bool ABaseCamp::IsToolUnlocked(EToolType ToolID)
+{
+	return UnlockedTools.Contains(ToolID);
+}
+
+bool ABaseCamp::IsSpecialItemUnlocked(ESpecialItem ItemID)
+{
+	return UnlockedSpecialItems.Contains(ItemID);
+}
+
+void ABaseCamp::UnlockTool(EToolType ToolID)
+{
+	if (!UnlockedTools.Contains(ToolID))
+	{
+		UnlockedTools.Add(ToolID);
+		// TODO: Call a function on the Player Character to give them the actual tool!
+	}
+}
+
+void ABaseCamp::UnlockSpecialItem(ESpecialItem ItemID)
+{
+	if (!UnlockedSpecialItems.Contains(ItemID))
+	{
+		UnlockedSpecialItems.Add(ItemID);
+	}
+}

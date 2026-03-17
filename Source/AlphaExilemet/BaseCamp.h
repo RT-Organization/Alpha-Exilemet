@@ -52,4 +52,26 @@ public:
 	// Increments the level of a specific system
 	UFUNCTION(BlueprintCallable, Category = "Base|Ship Repairs")
 	void UpgradeShipSystem(EShipSystem SystemID);
+	
+	// -------------------------------------------------------------------------
+	// SHOP PROGRESSION / UNLOCKS
+	// -------------------------------------------------------------------------
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Base|Shop Unlocks")
+	TArray<EToolType> UnlockedTools;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Base|Shop Unlocks")
+	TArray<ESpecialItem> UnlockedSpecialItems;
+
+	UFUNCTION(BlueprintPure, Category = "Base|Shop Unlocks")
+	bool IsToolUnlocked(EToolType ToolID);
+
+	UFUNCTION(BlueprintPure, Category = "Base|Shop Unlocks")
+	bool IsSpecialItemUnlocked(ESpecialItem ItemID);
+
+	UFUNCTION(BlueprintCallable, Category = "Base|Shop Unlocks")
+	void UnlockTool(EToolType ToolID);
+
+	UFUNCTION(BlueprintCallable, Category = "Base|Shop Unlocks")
+	void UnlockSpecialItem(ESpecialItem ItemID);
 };
