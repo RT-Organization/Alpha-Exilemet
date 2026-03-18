@@ -178,6 +178,10 @@ struct FShopItemRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data", meta=(EditCondition="Category == EShopItemCategory::Tool", EditConditionHides))
 	EToolType ToolID = EToolType::Pickaxe;
 
+	// ADD THIS: The actual Blueprint class to spawn when the player buys this tool
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data", meta=(EditCondition="Category == EShopItemCategory::Tool", EditConditionHides))
+	TSubclassOf<class AToolBase> ToolClass;
+
 	// If Category is 'SpecialItem', the UI will read this ID
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data", meta=(EditCondition="Category == EShopItemCategory::SpecialItem", EditConditionHides))
 	ESpecialItem SpecialItemID = ESpecialItem::TeleportBeacon;

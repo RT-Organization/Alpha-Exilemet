@@ -113,8 +113,7 @@ void ABaseCamp::UnlockTool(EToolType ToolID)
 {
 	if (!UnlockedTools.Contains(ToolID))
 	{
-		UnlockedTools.Add(ToolID);
-		// TODO: Call a function on the Player Character to give them the actual tool!
+		UnlockedTools.Add(ToolID); 
 	}
 }
 
