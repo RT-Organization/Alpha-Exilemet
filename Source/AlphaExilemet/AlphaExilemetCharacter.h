@@ -163,6 +163,18 @@ public:
 	float InteractionDistance;
 	
 	// -------------------------------------------------------------------------
+	// SPECIAL ITEM INVENTORY
+	// -------------------------------------------------------------------------
+	
+	// True if the player is currently carrying a special item
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
+	bool bHasSpecialItem = false;
+
+	// Which specific special item are they holding?
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
+	ESpecialItem EquippedSpecialItem;
+	
+	// -------------------------------------------------------------------------
 	// METHODS
 	// -------------------------------------------------------------------------
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="AlphaExilemet|Equipment")
