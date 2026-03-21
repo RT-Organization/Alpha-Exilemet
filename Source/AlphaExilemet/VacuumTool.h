@@ -37,6 +37,13 @@ protected:
 	virtual void UpgradeStat(FName StatName) override;
 	
 	/* ----------------------------- */
+	/* INVENTORY           */
+	/* ----------------------------- */
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="Vacuum|Inventory")
+	TMap<FName, int32> HarvestedSlime;
+	
+	/* ----------------------------- */
 	/* SETTINGS            */
 	/* ----------------------------- */
 

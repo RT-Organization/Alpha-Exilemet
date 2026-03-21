@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Engine/DataTable.h"
 #include "ResourceBase.generated.h"
 
 UCLASS()
@@ -34,6 +35,10 @@ protected:
 	/*            STATS              */
 	/* ----------------------------- */
 	
+	// Select the Resources Data Table, then pick the exact Resource from the dropdown
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Resource")
+	FDataTableRowHandle ResourceID;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Resource")
 	float Health = 100.f;
 	

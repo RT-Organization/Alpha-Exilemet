@@ -39,10 +39,11 @@ protected:
 	
 	
 	/* ----------------------------- */
-	/*           INVENTORY           */
+	/* INVENTORY                     */
 	/* ----------------------------- */
-	// slot array (each slot: ore and amount)
 	
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="Pickaxe|Inventory")
+	TArray<FName> HarvestedOres;
 	
 	
 	/* ----------------------------- */

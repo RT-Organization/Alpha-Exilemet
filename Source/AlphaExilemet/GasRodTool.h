@@ -37,6 +37,13 @@ protected:
 	virtual void UpgradeStat(FName StatName) override;
 	
 	/* ----------------------------- */
+	/* INVENTORY					 */
+	/* ----------------------------- */
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="GasRod|Inventory")
+	TArray<FName> HarvestedGas;
+	
+	/* ----------------------------- */
 	/* SETTINGS            */
 	/* ----------------------------- */
 

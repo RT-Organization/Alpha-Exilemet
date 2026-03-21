@@ -162,6 +162,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Interaction")
 	float InteractionDistance;
 	
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="AlphaExilemet|Equipment")
+	void Equip(AToolBase* NewTool);
+	virtual void Equip_Implementation(AToolBase* NewTool);
+
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="AlphaExilemet|Equipment")
+	void Unequip();
+	virtual void Unequip_Implementation();
+	
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Interaction")
+	void TryInteract();
+	
 	// -------------------------------------------------------------------------
 	// SPECIAL ITEM INVENTORY
 	// -------------------------------------------------------------------------
@@ -173,20 +184,6 @@ public:
 	// Which specific special item are they holding?
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
 	ESpecialItem EquippedSpecialItem;
-	
-	// -------------------------------------------------------------------------
-	// METHODS
-	// -------------------------------------------------------------------------
-	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="AlphaExilemet|Equipment")
-	void Equip(AToolBase* NewTool);
-	virtual void Equip_Implementation(AToolBase* NewTool);
-
-	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="AlphaExilemet|Equipment")
-	void Unequip();
-	virtual void Unequip_Implementation();
-	
-	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Interaction")
-	void TryInteract();
 
 	// -------------------------------------------------------------------------
 	// UPGRADE SYSTEM METHODS

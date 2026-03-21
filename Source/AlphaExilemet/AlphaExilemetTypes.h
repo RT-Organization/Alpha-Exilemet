@@ -52,6 +52,15 @@ enum class ESpecialItem : uint8
 	// You can add more here later!
 };
 
+// Defines the physical state of a resource to know WHICH tool can harvest it
+UENUM(BlueprintType)
+enum class EResourceType : uint8
+{
+	Solid    UMETA(DisplayName = "Solid (Pickaxe)"),
+	Liquid   UMETA(DisplayName = "Liquid/Slime (Vacuum)"),
+	Gas      UMETA(DisplayName = "Gas (Gas Rod)")
+};
+
 // -------------------------------------------------------------------------
 // BASE COST STRUCT
 // -------------------------------------------------------------------------
@@ -125,8 +134,10 @@ struct FResourceRow : public FTableRowBase
 {
 	GENERATED_BODY()
 
-	// (The Row Name itself will be MAT00, SL01, etc.)
-	
+	// What kind of resource is this? (Solid, Liquid, Gas)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
+	EResourceType ResourceType = EResourceType::Solid;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
 	FText DisplayName;
 
@@ -136,9 +147,27 @@ struct FResourceRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
 	UTexture2D* Icon = nullptr;
 
-	// How many credits this sells for at the Sell Terminal
+	// How many credits this gives when clicked "Sell" in the Terminal
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
 	int32 SellValue = 0; 
+
+	// -------------------------------------------------------------------------
+	// SLIME / VACUUM SPECIFIC DATA
+	// -------------------------------------------------------------------------
+
+	// How much space 1 unit of this slime takes up in the Vacuum's capacity
+	// (e.g., Basic Slime = 1 space, Rare Slime = 5 spaces)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Slime Settings", meta=(EditCondition="ResourceType == EResourceType::Liquid", EditConditionHides))
+	int32 VolumeCost = 1;
+
+	// The primary/starting color for the Vacuum UI Progress Bar gradient
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Slime Settings", meta=(EditCondition="ResourceType == EResourceType::Liquid", EditConditionHides))
+	FLinearColor PrimaryColor = FLinearColor::Green;
+
+	// The secondary/ending color for the gradient. 
+	// (Note: To make a solid color, just make this exactly the same as the PrimaryColor)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Slime Settings", meta=(EditCondition="ResourceType == EResourceType::Liquid", EditConditionHides))
+	FLinearColor SecondaryColor = FLinearColor::Green;
 };
 
 // 4. SHIP REPAIR TABLE (For the Ship Terminal)
@@ -199,3 +228,4 @@ struct FShopItemRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data")
 	int32 CurrencyCost = 0; 
 };
+
