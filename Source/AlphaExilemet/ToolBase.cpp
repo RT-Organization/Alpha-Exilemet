@@ -55,6 +55,11 @@ int32 AToolBase::GetToolStatLevel(FName StatName)
 	return 0; // If not found, it is Level 0
 }
 
+float AToolBase::GetMaxCapacity() const
+{
+	return 0.0f;
+}
+
 void AToolBase::UpgradeStat(FName StatName)
 {
 	// Add 1 to the level if it exists, otherwise initialize it at Level 1

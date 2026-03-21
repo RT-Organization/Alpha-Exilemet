@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "ToolBase.h"
+#include "AlphaExilemetTypes.h"
 #include "GasRodTool.generated.h"
 
 UCLASS()
@@ -18,21 +19,32 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+public:
 	/* ----------------------------- */
-	/* STATS              */
+	/* STATS						 */
 	/* ----------------------------- */
 
-	// Absorption Speed Level (0-5)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="GasRod|Stats")
-	int32 ABS = 0;
+	int32 AbsSpeedLevel = 0;
 
-	// Range Level (0-5)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="GasRod|Stats")
-	int32 RNG = 0;
+	int32 RangeLevel = 0;
 
-	// Quantity / Max Spheres Level (0-5)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="GasRod|Stats")
-	int32 MAX = 0;
+	int32 CapacityLevel = 0;
+
+	/* ----------------------------- */
+	/* PROGRESSION MATH				 */
+	/* ----------------------------- */
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Progression")
+	FStatProgression AbsSpeedProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Progression")
+	FStatProgression RangeProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Progression")
+	FStatProgression CapacityProgression;
 
 	virtual void UpgradeStat(FName StatName) override;
 	
@@ -44,9 +56,14 @@ protected:
 	TArray<FName> HarvestedGas;
 	
 	/* ----------------------------- */
-	/* SETTINGS            */
+	/* COWORKER GAMEPLAY GETTERS     */
 	/* ----------------------------- */
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="GasRod|Settings")
-	float BaseRodRange = 800.f;
+	UFUNCTION(BlueprintPure, Category="GasRod|Stats")
+	float GetAbsorptionSpeed() const;
+
+	UFUNCTION(BlueprintPure, Category="GasRod|Stats")
+	float GetRodRange() const;
+
+	virtual float GetMaxCapacity() const override;
 };

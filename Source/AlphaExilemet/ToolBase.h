@@ -84,6 +84,10 @@ public:
 	// Helper function to get this tool's stat level
 	UFUNCTION(BlueprintPure, Category = "Tool|Progression")
 	int32 GetToolStatLevel(FName StatName);
+	
+	// Returns the true Max Capacity based on the tool's current upgrades
+	UFUNCTION(BlueprintPure, Category="Tool|Stats")
+	virtual float GetMaxCapacity() const;
 
 	// Called when the Terminal upgrades a stat
 	UFUNCTION(BlueprintCallable, Category = "Tool|Progression")

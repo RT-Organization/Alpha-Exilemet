@@ -3,6 +3,15 @@
 AGasRodTool::AGasRodTool()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	
+	CapacityProgression.BaseValue = 3.0f;
+	CapacityProgression.AdditivePerLevel = 1.0f;
+
+	AbsSpeedProgression.BaseValue = 10.0f;
+	AbsSpeedProgression.AdditivePerLevel = 2.0f; 
+
+	RangeProgression.BaseValue = 1000.0f;
+	RangeProgression.AdditivePerLevel = 200.0f;  
 }
 
 void AGasRodTool::BeginPlay()
@@ -23,7 +32,7 @@ void AGasRodTool::StopUsing_Implementation()
 }
 
 /* ----------------------------- */
-/*         STAT UPGRADES         */
+/* STAT UPGRADES         */
 /* ----------------------------- */
 
 void AGasRodTool::UpgradeStat(FName StatName)
@@ -31,17 +40,23 @@ void AGasRodTool::UpgradeStat(FName StatName)
 	// 1. Call the parent function so ToolBase saves the level internally
 	Super::UpgradeStat(StatName);
 
-	// 2. Add your buffs here!
-	if (StatName == "Rod_AbsSpeed")
-	{
-		ABS += 1;
-	}
-	else if (StatName == "Rod_Distance")
-	{
-		RNG += 1;
-	}
-	else if (StatName == "Rod_Quantity")
-	{
-		MAX += 1;
-	}
+	// 2. Increment specific levels
+	if (StatName == "Rod_AbsSpeed") AbsSpeedLevel++;
+	else if (StatName == "Rod_Distance") RangeLevel++;
+	else if (StatName == "Rod_Quantity") CapacityLevel++;
+}
+
+float AGasRodTool::GetAbsorptionSpeed() const
+{
+	return AbsSpeedProgression.GetValueAtLevel(AbsSpeedLevel);
+}
+
+float AGasRodTool::GetRodRange() const
+{
+	return RangeProgression.GetValueAtLevel(RangeLevel);
+}
+
+float AGasRodTool::GetMaxCapacity() const
+{
+	return CapacityProgression.GetValueAtLevel(CapacityLevel);
 }

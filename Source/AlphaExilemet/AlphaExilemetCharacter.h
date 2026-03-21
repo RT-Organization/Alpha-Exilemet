@@ -9,44 +9,6 @@ class AToolBase;
 class UCameraComponent;
 
 // -------------------------------------------------------------------------
-// STRUCTS (Scalable AAA Progression)
-// -------------------------------------------------------------------------
-USTRUCT(BlueprintType)
-struct FStatProgression
-{
-	GENERATED_BODY()
-
-	// The starting value at Level 0
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Progression")
-	float BaseValue;
-
-	// Flat amount added per level (e.g., +20 Health)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Progression")
-	float AdditivePerLevel;
-
-	// Multiplier applied per level (e.g., 1.1 for +10%, or 0.9 for -10%)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Progression")
-	float MultiplierPerLevel;
-
-	// Default Constructor
-	FStatProgression()
-	{
-		BaseValue = 100.0f;
-		AdditivePerLevel = 0.0f;
-		MultiplierPerLevel = 1.0f;
-	}
-
-	// Helper function to calculate the exact value at any given level
-	float GetValueAtLevel(int32 Level) const
-	{
-		// Formula: (Base + (Additive * Level)) * (Multiplier ^ Level)
-		float FlatTotal = BaseValue + (AdditivePerLevel * Level);
-		float MultipliedTotal = FlatTotal * FMath::Pow(MultiplierPerLevel, Level);
-		return MultipliedTotal;
-	}
-};
-
-// -------------------------------------------------------------------------
 // DELEGATES
 // -------------------------------------------------------------------------
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStatChangedSignature, float, CurrentValue, float, MaxValue);

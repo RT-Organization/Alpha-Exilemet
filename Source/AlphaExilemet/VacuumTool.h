@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "ToolBase.h"
+#include "AlphaExilemetTypes.h"
 #include "VacuumTool.generated.h"
 
 UCLASS()
@@ -18,21 +19,33 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+public:
 	/* ----------------------------- */
 	/* STATS              */
 	/* ----------------------------- */
 
-	// Speed Level (0-5)
+	// Track current upgrade levels
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Vacuum|Stats")
-	int32 SPD = 0;
+	int32 SpeedLevel = 0;
 
-	// Range Level (0-5)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Vacuum|Stats")
-	int32 RNG = 0;
+	int32 RangeLevel = 0;
 
-	// Capacity Level (0-5)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Vacuum|Stats")
-	int32 CAP = 0;
+	int32 CapacityLevel = 0;
+
+	/* ----------------------------- */
+	/* PROGRESSION MATH		        */
+	/* ----------------------------- */
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Vacuum|Progression")
+	FStatProgression SpeedProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Vacuum|Progression")
+	FStatProgression RangeProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Vacuum|Progression")
+	FStatProgression CapacityProgression;
 
 	virtual void UpgradeStat(FName StatName) override;
 	
@@ -47,9 +60,17 @@ protected:
 	/* SETTINGS            */
 	/* ----------------------------- */
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Vacuum|Settings")
-	float BaseVacuumRange = 600.f;
+	// Deleted BaseVacuumRange and BaseVacuumPower because Progression handles it!
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Vacuum|Settings")
-	float BaseVacuumPower = 15.f;
+	/* ----------------------------- */
+	/* COWORKER GAMEPLAY GETTERS     */
+	/* ----------------------------- */
+
+	UFUNCTION(BlueprintPure, Category="Vacuum|Stats")
+	float GetVacuumSpeed() const;
+
+	UFUNCTION(BlueprintPure, Category="Vacuum|Stats")
+	float GetVacuumRange() const;
+
+	virtual float GetMaxCapacity() const override;
 };

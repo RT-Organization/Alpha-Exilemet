@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "PickaxeTool.h"
 #include "ResourceBase.h"
 
@@ -13,6 +11,16 @@
 
 APickaxeTool::APickaxeTool()
 {
+	PrimaryActorTick.bCanEverTick = true;
+	
+	StrengthProgression.BaseValue = 8.0f;
+	StrengthProgression.AdditivePerLevel = 4.0f;
+
+	CapacityProgression.BaseValue = 1.0f;
+	CapacityProgression.AdditivePerLevel = 1.0f;
+
+	LuckProgression.BaseValue = 0.0f;
+	LuckProgression.AdditivePerLevel = 5.0f;
 }
 
 void APickaxeTool::BeginPlay()
@@ -20,10 +28,8 @@ void APickaxeTool::BeginPlay()
 	Super::BeginPlay();
 }
 
-
-
 /* ----------------------------- */
-/*           INPUT               */
+/* INPUT               */
 /* ----------------------------- */
 
 void APickaxeTool::StartUsing_Implementation()
@@ -35,9 +41,8 @@ void APickaxeTool::StopUsing_Implementation()
 	StopMiningTimer();
 }
 
-
 /* ----------------------------- */
-/*        MINING CONTROL         */
+/* MINING CONTROL         */
 /* ----------------------------- */
 
 void APickaxeTool::StartMiningTimer()
@@ -54,112 +59,80 @@ void APickaxeTool::StopMiningTimer()
 {
 	GetWorldTimerManager().ClearTimer(MiningTimer);
 }
-// TODO: Here or in Blueprints, change timer to play animation, PerformMiningTrace on Animation Event
-// (just override StartUsing/StopUsing)
-
-
-/* ----------------------------- */
-/*         MINING TRACE          */
-/* ----------------------------- */
 
 void APickaxeTool::PerformMiningTrace()
 {
-	ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
 	if (!OwnerCharacter)
-		return;
+	{
+		OwnerCharacter = Cast<ACharacter>(GetOwner());
+		if (!OwnerCharacter) return;
+	}
 	
-	APlayerController* PlrCtrl = Cast<APlayerController>(OwnerCharacter->GetController());
-	if (!PlrCtrl)
-		return;
+	APlayerController* PC = Cast<APlayerController>(OwnerCharacter->GetController());
+	if (!PC) return;
 	
-	APlayerCameraManager* CameraManager = PlrCtrl->PlayerCameraManager;
-	if (!CameraManager)
-		return;
-	
-	
+	APlayerCameraManager* CameraManager = PC->PlayerCameraManager;
+	if (!CameraManager) return;
 	
 	FVector Start = CameraManager->GetCameraLocation();
 	FVector Forward = CameraManager->GetCameraRotation().Vector();
 	FVector End = Start + Forward * MiningRange;
 	
-	// TODO: DELETE Debug
-	DrawDebugLine(
-		GetWorld(),
-		Start,
-		End,
-		FColor::Green,
-		false,
-		1.0f,
-		0,
-		2.0f
-	);
-	
 	FHitResult Hit;
-	
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(this);
 	Params.AddIgnoredActor(OwnerCharacter);
 	
-	bool bHit = GetWorld()->LineTraceSingleByChannel(
-		Hit,
-		Start,
-		End,
-		ECC_Visibility,
-		Params
-	);
+	bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
 	
-	if (!bHit)
-		return;
+	if (!bHit) return;
 	
 	AActor* HitActor = Hit.GetActor();
-	
-	if (!HitActor)
-		return;
+	if (!HitActor) return;
 	
 	ApplyMiningDamage(HitActor);
 }
 
-
-
 /* ----------------------------- */
-/*         DAMAGE LOGIC          */
+/* DAMAGE LOGIC          */
 /* ----------------------------- */
 
 void APickaxeTool::ApplyMiningDamage(AActor* Target)
 {
-	if (!Target)
-		return;
+	if (!Target) return;
 	
 	AResourceBase* Resource = Cast<AResourceBase>(Target);
+	if (!Resource) return;
 	
-	if (!Resource)
-		return;
-	
-	float Damage = BaseMiningDamage + STR * StrengthScaling;
+	float Damage = GetMiningStrength(); 
 	
 	Resource->ApplyResourceDamage(Damage);
 }
 
 /* ----------------------------- */
-/*         STAT UPGRADES         */
+/* STAT UPGRADES         */
 /* ----------------------------- */
 
 void APickaxeTool::UpgradeStat(FName StatName)
 {
-	// 1. Call the parent function so ToolBase saves the level internally
 	Super::UpgradeStat(StatName);
 
-	// 2. Add your buffs here!
-	if (StatName == "Pickaxe_Force")
-	{
-		STR += 1;
-	}
-	else if (StatName == "Pickaxe_Fortune")
-	{
-		LU += 1;
-	}
-	else if (StatName == "Pickaxe_Capacity")
-	{
-		CAP += 1;
-	}
+	if (StatName == "Pickaxe_Strength") StrengthLevel++;
+	else if (StatName == "Pickaxe_Capacity") CapacityLevel++;
+	else if (StatName == "Pickaxe_Luck") LuckLevel++;
+}
+
+float APickaxeTool::GetMiningStrength() const
+{
+	return StrengthProgression.GetValueAtLevel(StrengthLevel);
+}
+
+float APickaxeTool::GetMiningLuck() const
+{
+	return LuckProgression.GetValueAtLevel(LuckLevel);
+}
+
+float APickaxeTool::GetMaxCapacity() const
+{
+	return CapacityProgression.GetValueAtLevel(CapacityLevel);
 }

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "ToolBase.h"
+#include "AlphaExilemetTypes.h"
 #include "PickaxeTool.generated.h"
 
 class ACharacter;
@@ -22,21 +23,34 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	
+public:
 	/* ----------------------------- */
-	/*            STATS              */
+	/* STATS                         */
 	/* ----------------------------- */
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
-	int32 STR = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
+	int32 StrengthLevel = 0;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
-	int32 CAP = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
+	int32 CapacityLevel = 0;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
-	int32 LU = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
+	int32 LuckLevel = 0;
+
+	/* ----------------------------- */
+	/* PROGRESSION MATH			     */
+	/* ----------------------------- */
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Pickaxe|Progression")
+	FStatProgression StrengthProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Pickaxe|Progression")
+	FStatProgression CapacityProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Pickaxe|Progression")
+	FStatProgression LuckProgression;
 	
 	virtual void UpgradeStat(FName StatName) override;
-	
 	
 	/* ----------------------------- */
 	/* INVENTORY                     */
@@ -45,36 +59,41 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="Pickaxe|Inventory")
 	TArray<FName> HarvestedOres;
 	
-	
 	/* ----------------------------- */
-	/*           MINING              */
+	/* MINING                        */
 	/* ----------------------------- */
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Mining")
-	float BaseMiningDamage = 20.f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Mining")
-	float StrengthScaling = 8.f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Mining")
 	float MiningRange = 500.f;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickaxe|Mining")
 	float MiningInterval = 0.2f;
 	
 	FTimerHandle MiningTimer;
-	
-	
-	
+
 	/* ----------------------------- */
-	/*        INTERNAL LOGIC         */
+	/* COWORKER GAMEPLAY GETTERS     */
 	/* ----------------------------- */
 	
+	UFUNCTION(BlueprintPure, Category="Pickaxe|Stats")
+	float GetMiningStrength() const;
+
+	UFUNCTION(BlueprintPure, Category="Pickaxe|Stats")
+	float GetMiningLuck() const;
+
+	virtual float GetMaxCapacity() const override;
+	
+protected:
+	/* ----------------------------- */
+	/* INTERNAL LOGIC				 */
+	/* ----------------------------- */
+	
+	UPROPERTY()
+	ACharacter* OwnerCharacter;
+
 	void StartMiningTimer();
 	void StopMiningTimer();
 	
-	UFUNCTION(BlueprintCallable, Category="Pickaxe|Mining")
 	void PerformMiningTrace();
-
-	UFUNCTION(BlueprintCallable, Category="Pickaxe|Mining")
 	void ApplyMiningDamage(AActor* Target);
 };
-// TODO: Mineral Inventory, Add minerals to inventory on mine complete
