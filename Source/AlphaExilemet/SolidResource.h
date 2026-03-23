@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DroppedSolidResource.h"
 #include "ResourceBase.h"
 #include "SolidResource.generated.h"
 

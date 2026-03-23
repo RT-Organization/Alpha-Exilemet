@@ -110,6 +110,30 @@ void APickaxeTool::ApplyMiningDamage(AActor* Target)
 	bool wasDepleted = Solid->ApplyResourceDamage(Damage);
 }
 
+bool APickaxeTool::TryAddOre(const FDataTableRowHandle& ResourceID, int32 Quantity)
+{
+	if (Quantity <= 0) return false;
+	
+	FName Key = ResourceID.RowName;
+	
+	if (HarvestedOres.Contains(Key))
+	{
+		HarvestedOres[Key] += Quantity;
+		return true;
+	}
+	
+	int32 MaxSlots = FMath::FloorToInt(GetMaxCapacity());
+	int32 CurrentSlots = HarvestedOres.Num();
+	
+	if (CurrentSlots >= MaxSlots)
+	{
+		return false; // inventario pieno di tipi
+	}
+	
+	HarvestedOres.Add(Key, Quantity);
+	return true;
+}
+
 /* ----------------------------- */
 /* STAT UPGRADES         */
 /* ----------------------------- */

@@ -83,6 +83,9 @@ public:
 
 	virtual float GetMaxCapacity() const override;
 	
+	UFUNCTION(BlueprintCallable, Category="Pickaxe|Inventory")
+	bool TryAddOre(const FDataTableRowHandle& ResourceID, int32 Quantity = 1);
+	
 protected:
 	/* ----------------------------- */
 	/* INTERNAL LOGIC				 */
@@ -94,6 +97,8 @@ protected:
 	void StartMiningTimer();
 	void StopMiningTimer();
 	
+	UFUNCTION(BlueprintCallable, Category="Pickaxe|Harvesting")
 	void PerformMiningTrace();
+	UFUNCTION(BlueprintCallable, Category="Pickaxe|Harvesting")
 	void ApplyMiningDamage(AActor* Target);
 };

@@ -3,6 +3,8 @@
 
 #include "SolidResource.h"
 
+#include "DroppedSolidResource.h"
+
 ASolidResource::ASolidResource()
 {
 	OreMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("OreMesh"));
@@ -20,5 +22,23 @@ void ASolidResource::DepleteResource()
 
 void ASolidResource::SpawnDroppedResource()
 {
+	UStaticMesh* MeshAsset = OreMesh->GetStaticMesh();
+	if (!MeshAsset) return;
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	ADroppedSolidResource* Dropped = GetWorld()->SpawnActor<ADroppedSolidResource>(
+		ADroppedSolidResource::StaticClass(),
+		GetActorLocation(),
+		FRotator::ZeroRotator,
+		Params
+	);
 	
+	if (!Dropped) return;
+
+	Dropped->InitDroppedResource(MeshAsset, ResourceID);
+	
+	Dropped->SetActorScale3D(GetActorScale3D());
 }
