@@ -20,4 +20,9 @@ public:
 	
 	// Sets default values for this actor's properties
 	ASolidResource();
+	
+protected:
+	virtual void DepleteResource() override;
+	
+	void SpawnDroppedResource();
 };

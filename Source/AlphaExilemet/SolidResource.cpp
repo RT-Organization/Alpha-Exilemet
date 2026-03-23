@@ -10,3 +10,15 @@ ASolidResource::ASolidResource()
 
 	OreMesh->SetCollisionProfileName(TEXT("BlockAll"));
 }
+
+void ASolidResource::DepleteResource()
+{
+	Super::DepleteResource();
+	
+	SpawnDroppedResource();
+}
+
+void ASolidResource::SpawnDroppedResource()
+{
+	
+}

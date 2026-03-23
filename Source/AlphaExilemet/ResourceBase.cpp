@@ -20,10 +20,12 @@ void AResourceBase::BeginPlay()
 	InitialScale = GetActorScale3D();
 }
 
-void AResourceBase::ApplyResourceDamage(float DamageAmount)
+bool AResourceBase::ApplyResourceDamage(float DamageAmount)
 {
+	bool wasDepletedByThisDamage = false;
+	
 	if (bIsDepleted)
-		return;
+		return wasDepletedByThisDamage;
 	
 	Health -= DamageAmount;
 	
@@ -32,6 +34,7 @@ void AResourceBase::ApplyResourceDamage(float DamageAmount)
 	if (Health <= 0.f)
 	{
 		DepleteResource();
+		wasDepletedByThisDamage = true;
 		
 		GetWorldTimerManager().SetTimer(
 			RegenTimer,
@@ -41,6 +44,8 @@ void AResourceBase::ApplyResourceDamage(float DamageAmount)
 			false
 		);
 	}
+	
+	return wasDepletedByThisDamage;
 }
 
 void AResourceBase::RegenerateResource()

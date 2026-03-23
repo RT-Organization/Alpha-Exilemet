@@ -1,5 +1,6 @@
 #include "PickaxeTool.h"
 #include "ResourceBase.h"
+#include  "SolidResource.h"
 
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
@@ -101,12 +102,12 @@ void APickaxeTool::ApplyMiningDamage(AActor* Target)
 {
 	if (!Target) return;
 	
-	AResourceBase* Resource = Cast<AResourceBase>(Target);
-	if (!Resource) return;
+	ASolidResource* Solid = Cast<ASolidResource>(Target);
+	if (!Solid) return;
 	
 	float Damage = GetMiningStrength(); 
 	
-	Resource->ApplyResourceDamage(Damage);
+	bool wasDepleted = Solid->ApplyResourceDamage(Damage);
 }
 
 /* ----------------------------- */

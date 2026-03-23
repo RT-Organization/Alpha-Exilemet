@@ -71,11 +71,12 @@ protected:
 	/* ----------------------------- */
 	
 	void RegenerateResource();
-	void DepleteResource();
+	virtual void DepleteResource();
 	
 	void UpdateScale();
 public:	
+	// Returns true if damage causes this resource to be depleted when it wasn't
 	UFUNCTION(BlueprintCallable, Category="Resource")
-	void ApplyResourceDamage(float DamageAmount);
+	bool ApplyResourceDamage(float DamageAmount);
 	
 };
