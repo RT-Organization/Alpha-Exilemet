@@ -53,7 +53,7 @@ public:
 	/* ----------------------------- */
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="GasRod|Inventory")
-	TArray<FName> HarvestedGas;
+	TMap<FName, int32> HarvestedGas;
 	
 	/* ----------------------------- */
 	/* COWORKER GAMEPLAY GETTERS     */

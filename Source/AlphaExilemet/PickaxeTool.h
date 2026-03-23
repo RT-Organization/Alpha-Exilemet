@@ -57,7 +57,7 @@ public:
 	/* ----------------------------- */
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="Pickaxe|Inventory")
-	TArray<FName> HarvestedOres;
+	TMap<FName, int32> HarvestedOres;
 	
 	/* ----------------------------- */
 	/* MINING                        */
