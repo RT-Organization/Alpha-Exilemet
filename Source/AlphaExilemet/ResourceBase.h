@@ -73,7 +73,7 @@ protected:
 	void RegenerateResource();
 	virtual void DepleteResource();
 	
-	void UpdateScale();
+	virtual void UpdateScale();
 public:	
 	// Returns true if damage causes this resource to be depleted when it wasn't
 	UFUNCTION(BlueprintCallable, Category="Resource")

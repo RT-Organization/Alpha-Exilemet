@@ -19,10 +19,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Solid")
 	UStaticMeshComponent* OreMesh;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Drop")
+	float DropImpulseStrength = 300.f;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Drop", meta=(ClampMin="0.0", ClampMax="360.0"))
+	float DropImpulseAngle = 45.f;
+	
 	// Sets default values for this actor's properties
 	ASolidResource();
 	
 protected:
+	virtual void UpdateScale() override;
+	
 	virtual void DepleteResource() override;
 	
 	void SpawnDroppedResource();
