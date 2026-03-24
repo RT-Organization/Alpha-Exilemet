@@ -27,11 +27,11 @@
 			"Enabled": true
 		},
 		{
-<<<<<<< Updated upstream
 			"Name": "BlueprintFileUtils",
-=======
+			"Enabled": true
+		},
+		{
 			"Name": "GizmoFramework",
->>>>>>> Stashed changes
 			"Enabled": true
 		}
 	]
