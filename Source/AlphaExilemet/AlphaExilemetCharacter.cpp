@@ -224,7 +224,7 @@ void AAlphaExilemetCharacter::RecalculateStats()
 	OxygenDrainRate = OxygenDrainProgression.GetValueAtLevel(CurrentOxygenLevel);
 	
 	// Apply math progression to Character Movement (Agility)
-	GetCharacterMovement()->MaxWalkSpeed = AgilityProgression.GetValueAtLevel(CurrentAgilityLevel);
+	BaseWalkSpeed = AgilityProgression.GetValueAtLevel(CurrentAgilityLevel);
 	GetCharacterMovement()->JumpZVelocity = JumpProgression.GetValueAtLevel(CurrentAgilityLevel);
 	CurrentSprintMultiplier = SprintMultiplierProgression.GetValueAtLevel(CurrentAgilityLevel);
 
