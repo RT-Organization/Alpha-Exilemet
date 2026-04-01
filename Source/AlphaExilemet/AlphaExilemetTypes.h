@@ -193,11 +193,6 @@ struct FResourceRow : public FTableRowBase
 	// SLIME / VACUUM SPECIFIC DATA
 	// -------------------------------------------------------------------------
 
-	// How much space 1 unit of this slime takes up in the Vacuum's capacity
-	// (e.g., Basic Slime = 1 space, Rare Slime = 5 spaces)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Slime Settings", meta=(EditCondition="ResourceType == EResourceType::Liquid", EditConditionHides))
-	int32 VolumeCost = 1;
-
 	// The primary/starting color for the Vacuum UI Progress Bar gradient
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Slime Settings", meta=(EditCondition="ResourceType == EResourceType::Liquid", EditConditionHides))
 	FLinearColor PrimaryColor = FLinearColor::Green;

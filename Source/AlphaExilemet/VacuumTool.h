@@ -3,7 +3,10 @@
 #include "CoreMinimal.h"
 #include "ToolBase.h"
 #include "AlphaExilemetTypes.h"
+#include "LiquidResource.h"
 #include "VacuumTool.generated.h"
+
+class ACharacter;
 
 UCLASS()
 class ALPHAEXILEMET_API AVacuumTool : public AToolBase
@@ -15,16 +18,15 @@ public:
 
 	virtual void StartUsing_Implementation() override;
 	virtual void StopUsing_Implementation() override;
-
+	
 protected:
 	virtual void BeginPlay() override;
 
 public:
 	/* ----------------------------- */
-	/* STATS              */
+	/* STATS                         */
 	/* ----------------------------- */
 
-	// Track current upgrade levels
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Vacuum|Stats")
 	int32 SpeedLevel = 0;
 
@@ -35,7 +37,7 @@ public:
 	int32 CapacityLevel = 0;
 
 	/* ----------------------------- */
-	/* PROGRESSION MATH		        */
+	/* PROGRESSION                   */
 	/* ----------------------------- */
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Vacuum|Progression")
@@ -48,29 +50,61 @@ public:
 	FStatProgression CapacityProgression;
 
 	virtual void UpgradeStat(FName StatName) override;
-	
+
 	/* ----------------------------- */
-	/* INVENTORY           */
+	/* INVENTORY                     */
 	/* ----------------------------- */
-	
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="Vacuum|Inventory")
 	TMap<FName, int32> HarvestedSlime;
+
+	/* ----------------------------- */
+	/* VACUUM                        */
+	/* ----------------------------- */
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Vacuum|Vacuum")
+	float AbsorptionDamagePerTick = 5.f;
+
+	FTimerHandle VacuumTimer;
 	
 	/* ----------------------------- */
-	/* SETTINGS            */
+	/* EVENTS                        */
 	/* ----------------------------- */
 
-	// Deleted BaseVacuumRange and BaseVacuumPower because Progression handles it!
-
+	UFUNCTION(BlueprintImplementableEvent, Category="Vacuum|Events")
+	void OnLiquidHitting(ALiquidResource* Liquid);
+	
 	/* ----------------------------- */
-	/* COWORKER GAMEPLAY GETTERS     */
+	/* GETTERS                       */
 	/* ----------------------------- */
 
 	UFUNCTION(BlueprintPure, Category="Vacuum|Stats")
-	float GetVacuumSpeed() const;
+	float GetAbsorptionInterval() const;
 
 	UFUNCTION(BlueprintPure, Category="Vacuum|Stats")
 	float GetVacuumRange() const;
 
 	virtual float GetMaxCapacity() const override;
+
+	UFUNCTION(BlueprintPure, Category="Vacuum|Inventory")
+	float GetCurrentStoredSlime() const;
+
+	UFUNCTION(BlueprintPure, Category="Vacuum|Inventory")
+	float GetFillPercent() const;
+
+protected:
+	/* ----------------------------- */
+	/* INTERNAL                      */
+	/* ----------------------------- */
+
+	UPROPERTY()
+	ACharacter* OwnerCharacter;
+
+	void StartVacuumTimer();
+	void StopVacuumTimer();
+
+	UFUNCTION(BlueprintCallable, Category="Vacuum|Harvesting")
+	void PerformVacuumTrace();
+
+	void AbsorbSlime(FName SlimeType, float Amount);
 };

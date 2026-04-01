@@ -1,9 +1,15 @@
 #include "VacuumTool.h"
+#include "LiquidResource.h"
+
+#include "GameFramework/Character.h"
+#include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
+#include "TimerManager.h"
 
 AVacuumTool::AVacuumTool()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	
+
 	CapacityProgression.BaseValue = 100.0f;
 	CapacityProgression.AdditivePerLevel = 50.0f;
 
@@ -19,36 +25,148 @@ void AVacuumTool::BeginPlay()
 	Super::BeginPlay();
 }
 
+/* ----------------------------- */
+/* INPUT                         */
+/* ----------------------------- */
+
 void AVacuumTool::StartUsing_Implementation()
 {
 	Super::StartUsing_Implementation();
-	// TODO: Implement suction logic (e.g., raycast/sphere trace to pull Slime)
+	StartVacuumTimer();
 }
 
 void AVacuumTool::StopUsing_Implementation()
 {
 	Super::StopUsing_Implementation();
-	// TODO: Stop suction logic / Stop visual effects
+	StopVacuumTimer();
 }
 
 /* ----------------------------- */
-/* STAT UPGRADES				 */
+/* TIMER                         */
+/* ----------------------------- */
+
+void AVacuumTool::StartVacuumTimer()
+{
+	GetWorldTimerManager().SetTimer(
+		VacuumTimer,
+		this,
+		&AVacuumTool::PerformVacuumTrace,
+		GetAbsorptionInterval(),
+		true
+	);
+}
+
+void AVacuumTool::StopVacuumTimer()
+{
+	GetWorldTimerManager().ClearTimer(VacuumTimer);
+}
+
+/* ----------------------------- */
+/* TRACE                         */
+/* ----------------------------- */
+
+void AVacuumTool::PerformVacuumTrace()
+{
+	if (GetCurrentStoredSlime() >= FMath::FloorToInt(GetMaxCapacity()))
+	{
+		// Optional: trigger "tank full" feedback
+		return;
+	}
+
+	if (!OwnerCharacter)
+	{
+		OwnerCharacter = Cast<ACharacter>(GetOwner());
+		if (!OwnerCharacter) return;
+	}
+
+	APlayerController* PC = Cast<APlayerController>(OwnerCharacter->GetController());
+	if (!PC) return;
+
+	APlayerCameraManager* CameraManager = PC->PlayerCameraManager;
+	if (!CameraManager) return;
+
+	FVector Start = CameraManager->GetCameraLocation();
+	FVector Forward = CameraManager->GetCameraRotation().Vector();
+	FVector End = Start + Forward * GetVacuumRange();
+
+	FHitResult Hit;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+	Params.AddIgnoredActor(OwnerCharacter);
+
+	if (!GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+		return;
+
+	ALiquidResource* Liquid = Cast<ALiquidResource>(Hit.GetActor());
+	if (!Liquid) return;
+	
+	OnLiquidHitting(Liquid);
+
+	float Extracted = Liquid->DrainLiquid(AbsorptionDamagePerTick);
+
+	AbsorbSlime(Liquid->GetLiquidType(), Extracted);
+}
+
+/* ----------------------------- */
+/* ABSORPTION                    */
+/* ----------------------------- */
+
+void AVacuumTool::AbsorbSlime(FName SlimeType, float Amount)
+{
+	if (Amount <= 0.f) return;
+
+	float MaxCapacity = GetMaxCapacity();
+	float Current = GetCurrentStoredSlime();
+
+	float Available = MaxCapacity - Current;
+	if (Available <= 0.f) return;
+
+	float Actual = FMath::Min(Amount, Available);
+
+	int32 IntAmount = FMath::FloorToInt(Actual);
+	if (IntAmount <= 0) return;
+
+	HarvestedSlime.FindOrAdd(SlimeType) += IntAmount;
+}
+
+/* ----------------------------- */
+/* INVENTORY                     */
+/* ----------------------------- */
+
+float AVacuumTool::GetCurrentStoredSlime() const
+{
+	int32 Total = 0;
+
+	for (const auto& Pair : HarvestedSlime)
+	{
+		Total += Pair.Value;
+	}
+
+	return (float)Total;
+}
+
+float AVacuumTool::GetFillPercent() const
+{
+	return GetCurrentStoredSlime() / GetMaxCapacity();
+}
+
+/* ----------------------------- */
+/* STATS                         */
 /* ----------------------------- */
 
 void AVacuumTool::UpgradeStat(FName StatName)
 {
-	// 1. Call the parent function so ToolBase saves the level internally
 	Super::UpgradeStat(StatName);
 
-	// 2. Increment specific levels
 	if (StatName == "Vacuum_Speed") SpeedLevel++;
 	else if (StatName == "Vacuum_Capacity") CapacityLevel++;
 	else if (StatName == "Vacuum_Distance") RangeLevel++;
 }
 
-float AVacuumTool::GetVacuumSpeed() const
+float AVacuumTool::GetAbsorptionInterval() const
 {
-	return SpeedProgression.GetValueAtLevel(SpeedLevel);
+	float Rate = SpeedProgression.GetValueAtLevel(SpeedLevel);
+	return FMath::Max(0.01f, 1.0f / Rate);
 }
 
 float AVacuumTool::GetVacuumRange() const

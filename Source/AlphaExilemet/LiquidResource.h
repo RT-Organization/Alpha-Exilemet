@@ -10,8 +10,14 @@ class ALPHAEXILEMET_API ALiquidResource : public AResourceBase
 	GENERATED_BODY()
 	
 public:	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Liquid")
-	UStaticMeshComponent* SlimeMesh;
-	
 	ALiquidResource();
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Liquid")
+	UStaticMeshComponent* LiquidMesh;
+
+	UFUNCTION(BlueprintCallable, Category="Liquid")
+	float DrainLiquid(float Amount);
+
+	UFUNCTION(BlueprintPure, Category="Liquid")
+	FName GetLiquidType() const;
 };
