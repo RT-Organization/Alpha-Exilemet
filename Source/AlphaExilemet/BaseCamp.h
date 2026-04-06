@@ -53,6 +53,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Base|Ship Repairs")
 	void UpgradeShipSystem(EShipSystem SystemID);
 	
+	// The starting size of the safe zone at Level 0
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Base|Ship Repairs")
+	float BaseOxygenRadius = 500.f;
+
+	// How much the sphere grows per Atmospheric Scrubber level (1500 = 15 meters)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Base|Ship Repairs")
+	float RadiusAddedPerLevel = 1500.f;
+
+	// Function to physically apply the current levels to the base
+	UFUNCTION(BlueprintCallable, Category = "Base|Ship Repairs")
+	void ApplyShipUpgrades();
+	
+	// Called to sync the visual Forcefield with the physical sphere
+	UFUNCTION(BlueprintImplementableEvent, Category = "Base|Ship Repairs")
+	void BP_UpdateForcefieldRadius(float NewRadius);
+	
 	// -------------------------------------------------------------------------
 	// SHOP PROGRESSION / UNLOCKS
 	// -------------------------------------------------------------------------

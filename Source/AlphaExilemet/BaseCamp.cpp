@@ -22,7 +22,8 @@ ABaseCamp::ABaseCamp()
 void ABaseCamp::BeginPlay()
 {
 	Super::BeginPlay();
-	OxygenSphere->SetSphereRadius(OxygenRegenRadius);
+	
+	ApplyShipUpgrades(); 
 	
 	TArray<AActor*> OverlappingActors;
 	OxygenSphere->GetOverlappingActors(OverlappingActors, AAlphaExilemetCharacter::StaticClass());
@@ -62,6 +63,9 @@ void ABaseCamp::OnConstruction(const FTransform& Transform)
 	{
 		OxygenSphere->SetSphereRadius(OxygenRegenRadius);
 	}
+
+	// Tell the Blueprint to update the VFX
+	BP_UpdateForcefieldRadius(OxygenRegenRadius);
 }
 
 // -------------------------------------------------------------------------
@@ -91,8 +95,27 @@ void ABaseCamp::UpgradeShipSystem(EShipSystem SystemID)
 		ShipRepairLevels.Add(SystemID, 1); // First upgrade, set to Level 1
 	}
 
-	// TODO Later: You can add an Event Dispatcher here like OnShipUpgraded.Broadcast(SystemID);
-	// if you want the base visuals to change when an upgrade happens!
+	// Update the physical world immediately after the upgrade
+	ApplyShipUpgrades(); 
+}
+
+void ABaseCamp::ApplyShipUpgrades()
+{
+	// --------------------------------------------------
+	// 1. Atmospheric Scrubber
+	// --------------------------------------------------
+	int32 ScrubberLevel = GetShipSystemLevel(EShipSystem::AtmosphericScrubber);
+	OxygenRegenRadius = BaseOxygenRadius + (RadiusAddedPerLevel * ScrubberLevel);
+	
+	if (OxygenSphere)
+	{
+		OxygenSphere->SetSphereRadius(OxygenRegenRadius);
+	}
+
+	// Tell the Blueprint to update the VFX
+	BP_UpdateForcefieldRadius(OxygenRegenRadius);
+
+	// (We will add Systems 2, 3, 4, and 5 here as we build them!)
 }
 
 // -------------------------------------------------------------------------
