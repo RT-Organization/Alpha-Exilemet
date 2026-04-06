@@ -60,3 +60,11 @@ float AGasRodTool::GetMaxCapacity() const
 {
 	return CapacityProgression.GetValueAtLevel(CapacityLevel);
 }
+
+/* ----------------------------- */
+/* INVENTORY			         */
+/* ----------------------------- */
+void AGasRodTool::ClearInventory()
+{
+	HarvestedGas.Empty();
+}

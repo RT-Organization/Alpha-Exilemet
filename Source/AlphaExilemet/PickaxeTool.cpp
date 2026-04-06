@@ -161,3 +161,11 @@ float APickaxeTool::GetMaxCapacity() const
 {
 	return CapacityProgression.GetValueAtLevel(CapacityLevel);
 }
+
+/* ----------------------------- */
+/* INVENTORY			         */
+/* ----------------------------- */
+void APickaxeTool::ClearInventory()
+{
+	HarvestedOres.Empty();
+}

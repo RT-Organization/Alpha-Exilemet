@@ -20,9 +20,11 @@ protected:
 	
 	// Internal timer handle to know when the blend finishes
 	FTimerHandle CameraBlendTimerHandle;
+	FTimerHandle StopBlendTimerHandle;
 
 	// Internal function called by the timer
 	void OnBlendComplete();
+	void RestoreInput();
 
 	// Cache the interactor so the timer can pass it to the Blueprint event
 	UPROPERTY()

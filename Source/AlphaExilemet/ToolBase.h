@@ -96,6 +96,6 @@ public:
 	/* ----------------------------- */
 	/* TOOL INVENTORY        */
 	/* ----------------------------- */
-
+	virtual void ClearInventory();
 	
 };

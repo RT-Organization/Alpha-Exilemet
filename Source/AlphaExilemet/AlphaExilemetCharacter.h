@@ -7,6 +7,7 @@
 
 class AToolBase;
 class UCameraComponent;
+class USpringArmComponent;
 
 // -------------------------------------------------------------------------
 // DELEGATES
@@ -46,6 +47,12 @@ public:
 	// -------------------------------------------------------------------------
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Camera")
 	UCameraComponent* FirstPersonCameraComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Camera")
+	USpringArmComponent* DeathCameraBoom;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Camera")
+	UCameraComponent* DeathCameraComponent;
 
 	// -------------------------------------------------------------------------
 	// CURRENT UPGRADE LEVELS
@@ -75,6 +82,12 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
 	FStatProgression SprintMultiplierProgression;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
+	FStatProgression GravityScaleProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
+	FStatProgression AirControlProgression;
 
 	// -------------------------------------------------------------------------
 	// RUNTIME SURVIVAL VARIABLES
@@ -158,4 +171,21 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Progression")
 	void RecalculateStats();
+	
+	// -------------------------------------------------------------------------
+	// DEATH
+	// -------------------------------------------------------------------------
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Runtime")
+	bool bIsDead = false;
+
+	// Handles the physical death
+	void Die();
+
+	// Event to tell Blueprints to show the "You Died" UI panel
+	UFUNCTION(BlueprintImplementableEvent, Category = "AlphaExilemet|Events")
+	void BP_OnPlayerDied();
+
+	// Called from your UI button to bring Finn back
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Runtime")
+	void RespawnPlayer(FVector SpawnLocation, FRotator SpawnRotation);
 };

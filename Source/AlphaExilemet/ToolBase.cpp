@@ -46,6 +46,11 @@ void AToolBase::StopUsing_Implementation()
 	// default empty
 }
 
+void AToolBase::ClearInventory()
+{
+	// Default empty
+}
+
 int32 AToolBase::GetToolStatLevel(FName StatName)
 {
 	if (ToolUpgradeLevels.Contains(StatName))

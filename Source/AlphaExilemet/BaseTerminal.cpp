@@ -65,9 +65,30 @@ void ABaseTerminal::StopTerminalInteraction(AAlphaExilemetCharacter* Interactor)
 	APlayerController* PC = Cast<APlayerController>(Interactor->GetController());
 	if (PC)
 	{
+		// 1. Start the camera blend back to the player
 		PC->SetViewTargetWithBlend(Interactor, CameraBlendTime, EViewTargetBlendFunction::VTBlend_Cubic);
 
-		// DELETE the EnableInput line and ADD these two instead:
+		// 2. Cache the interactor to use in the timer
+		CurrentInteractor = Interactor;
+
+		// 3. Wait for the blend to finish BEFORE giving them control back
+		GetWorld()->GetTimerManager().SetTimer(
+			StopBlendTimerHandle, 
+			this, 
+			&ABaseTerminal::RestoreInput, 
+			CameraBlendTime, 
+			false
+		);
+	}
+}
+
+void ABaseTerminal::RestoreInput()
+{
+	if (!CurrentInteractor) return;
+
+	APlayerController* PC = Cast<APlayerController>(CurrentInteractor->GetController());
+	if (PC)
+	{
 		PC->SetIgnoreMoveInput(false);
 		PC->SetIgnoreLookInput(false);
 	}

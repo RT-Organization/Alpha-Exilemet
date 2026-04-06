@@ -150,6 +150,11 @@ float AVacuumTool::GetFillPercent() const
 	return GetCurrentStoredSlime() / GetMaxCapacity();
 }
 
+void AVacuumTool::ClearInventory()
+{
+	HarvestedSlime.Empty();
+}
+
 /* ----------------------------- */
 /* STATS                         */
 /* ----------------------------- */

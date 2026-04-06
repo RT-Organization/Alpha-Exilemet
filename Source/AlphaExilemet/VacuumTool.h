@@ -57,6 +57,8 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="Vacuum|Inventory")
 	TMap<FName, int32> HarvestedSlime;
+	
+	virtual void ClearInventory() override;
 
 	/* ----------------------------- */
 	/* VACUUM                        */

@@ -4,6 +4,7 @@
 #include "DrawDebugHelpers.h"
 #include "Interactable.h"
 #include "TimerManager.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 AAlphaExilemetCharacter::AAlphaExilemetCharacter()
@@ -24,12 +25,6 @@ AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 	// -------------------------------------------------------------------------
 	// DEFAULT PROGRESSION CONFIGURATION
 	// -------------------------------------------------------------------------
-	// HOW TO MODIFY: 
-	// BaseValue: What the stat starts at when the player is Level 0.
-	// AdditivePerLevel: A flat amount added every time you upgrade (e.g., +25 HP).
-	// MultiplierPerLevel: A percentage multiplier. 1.0 = no change. 1.1 = +10%. 0.85 = -15%.
-	// -------------------------------------------------------------------------
-	
 	HealthProgression.BaseValue = 100.0f;
 	HealthProgression.AdditivePerLevel = 25.0f;
 	HealthProgression.MultiplierPerLevel = 1.0f; 
@@ -49,6 +44,14 @@ AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 	SprintMultiplierProgression.BaseValue = 1.5f;
 	SprintMultiplierProgression.AdditivePerLevel = 0.1f;
 	SprintMultiplierProgression.MultiplierPerLevel = 1.0f;
+	
+	GravityScaleProgression.BaseValue = 1.5f; 
+	GravityScaleProgression.AdditivePerLevel = -0.1f;
+	GravityScaleProgression.MultiplierPerLevel = 1.0f;
+
+	AirControlProgression.BaseValue = 0.05f;
+	AirControlProgression.AdditivePerLevel = 0.05f;
+	AirControlProgression.MultiplierPerLevel = 1.0f;
 
 	// -------------------------------------------------------------------------
 	// DEFAULT STATS
@@ -68,6 +71,19 @@ AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 	bIsInSafeZone = false;
 	OxygenDrainRate = OxygenDrainProgression.BaseValue;
 	CurrentSprintMultiplier = SprintMultiplierProgression.BaseValue;
+	
+	// --- DEATH CAMERA SETUP ---
+	DeathCameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("DeathCameraBoom"));
+	DeathCameraBoom->SetupAttachment(RootComponent); 
+	DeathCameraBoom->TargetArmLength = 500.0f;
+	DeathCameraBoom->SetRelativeRotation(FRotator(-45.0f, 0.0f, 0.0f));
+	DeathCameraBoom->bDoCollisionTest = true;
+	DeathCameraBoom->bUsePawnControlRotation = false;
+
+	DeathCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("DeathCamera"));
+	DeathCameraComponent->SetupAttachment(DeathCameraBoom, USpringArmComponent::SocketName);
+	DeathCameraComponent->bUsePawnControlRotation = false;
+	DeathCameraComponent->SetActive(false);
 }
 
 void AAlphaExilemetCharacter::BeginPlay()
@@ -105,9 +121,9 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 			Health = FMath::Clamp(Health - (SuffocationDamageRate * DeltaTime), 0.0f, MaxHealth);
 			OnHealthChanged.Broadcast(Health, MaxHealth);
 
-			if (Health <= 0.0f)
+			if (Health <= 0.0f && !bIsDead)
 			{
-				// TODO: Implement Death logic
+				Die();
 			}
 		}
 	}
@@ -225,8 +241,11 @@ void AAlphaExilemetCharacter::RecalculateStats()
 	
 	// Apply math progression to Character Movement (Agility)
 	BaseWalkSpeed = AgilityProgression.GetValueAtLevel(CurrentAgilityLevel);
+	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
 	GetCharacterMovement()->JumpZVelocity = JumpProgression.GetValueAtLevel(CurrentAgilityLevel);
 	CurrentSprintMultiplier = SprintMultiplierProgression.GetValueAtLevel(CurrentAgilityLevel);
+	GetCharacterMovement()->GravityScale = GravityScaleProgression.GetValueAtLevel(CurrentAgilityLevel);
+	GetCharacterMovement()->AirControl = AirControlProgression.GetValueAtLevel(CurrentAgilityLevel);
 
 	// Push UI updates
 	OnHealthChanged.Broadcast(Health, MaxHealth);
@@ -253,4 +272,81 @@ void AAlphaExilemetCharacter::UpgradeStat(EPlayerStat StatToUpgrade)
 		Health = MaxHealth;
 		OnHealthChanged.Broadcast(Health, MaxHealth);
 	}
+}
+
+// -------------------------------------------------------------------------
+// DEATH
+// -------------------------------------------------------------------------
+void AAlphaExilemetCharacter::Die()
+{
+	bIsDead = true;
+
+	// 1. Disable Input and completely stop momentum
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PC)
+	{
+		PC->DisableInput(PC);
+	}
+	GetCharacterMovement()->StopMovementImmediately(); // Kills velocity
+	GetCharacterMovement()->DisableMovement();         // Prevents gravity/falling on the capsule
+
+	// 2. Switch Cameras
+	FirstPersonCameraComponent->SetActive(false);
+	DeathCameraComponent->SetActive(true);
+
+	// 3. Attach the Death Camera to the Mesh so it follows the ragdoll
+	// We use KeepWorldTransform so it doesn't suddenly snap to the floor
+	DeathCameraBoom->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepWorldTransform);
+
+	// 4. Clear all tool inventories safely using our new OOP function
+	for (AToolBase* Tool : OwnedTools)
+	{
+		if (Tool)
+		{
+			Tool->ClearInventory();
+		}
+	}
+
+	// 5. Trigger Ragdoll
+	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
+	GetMesh()->SetSimulatePhysics(true);
+
+	// 6. Tell BP to show the UI
+	BP_OnPlayerDied();
+}
+
+void AAlphaExilemetCharacter::RespawnPlayer(FVector SpawnLocation, FRotator SpawnRotation)
+{
+	// 1. Reset Stats
+	Health = MaxHealth;
+	Oxygen = MaxOxygen;
+	bIsDead = false;
+
+	OnHealthChanged.Broadcast(Health, MaxHealth);
+	OnOxygenChanged.Broadcast(Oxygen, MaxOxygen);
+	
+	// 2. Revert Cameras
+	DeathCameraComponent->SetActive(false);
+	FirstPersonCameraComponent->SetActive(true);
+
+	// 3. Fix Physics and re-attach Mesh
+	GetMesh()->SetSimulatePhysics(false);
+	GetMesh()->SetCollisionProfileName(TEXT("CharacterMesh"));
+	GetMesh()->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	GetMesh()->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -90.f), FRotator(0.f, -90.f, 0.f)); 
+
+	// 4. Re-attach the Death Camera back to the Capsule for next time
+	DeathCameraBoom->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	DeathCameraBoom->SetRelativeRotation(FRotator(-45.0f, 0.0f, 0.0f));
+
+	// 5. Teleport to Base
+	SetActorLocationAndRotation(SpawnLocation, SpawnRotation);
+
+	// 6. Re-enable Input and Movement
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PC)
+	{
+		PC->EnableInput(PC);
+	}
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking); // Turns movement back on
 }

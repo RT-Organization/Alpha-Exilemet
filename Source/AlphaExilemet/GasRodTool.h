@@ -55,6 +55,8 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="GasRod|Inventory")
 	TMap<FName, int32> HarvestedGas;
 	
+	virtual void ClearInventory() override;
+	
 	/* ----------------------------- */
 	/* COWORKER GAMEPLAY GETTERS     */
 	/* ----------------------------- */
