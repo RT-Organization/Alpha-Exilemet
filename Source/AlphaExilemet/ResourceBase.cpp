@@ -78,3 +78,18 @@ void AResourceBase::UpdateScale()
 	
 	SetActorScale3D(FVector(HealthRatio));
 }
+
+void AResourceBase::SetOutline(bool bEnable)
+{
+	TArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+
+	for (UStaticMeshComponent* MeshComp : Meshes)
+	{
+		if (MeshComp)
+		{
+			MeshComp->SetRenderCustomDepth(bEnable);
+			MeshComp->SetCustomDepthStencilValue(1);
+		}
+	}
+}

@@ -16,52 +16,54 @@ public:
 	ABaseCamp();
 	
 protected:
+	// -------------------------------------------------------------------------
+	// ENGINE OVERRIDES
+	// -------------------------------------------------------------------------
 	virtual void BeginPlay() override;
-	
+	virtual void OnConstruction(const FTransform& Transform) override;
+
+public:
+	// -------------------------------------------------------------------------
+	// COMPONENTS
+	// -------------------------------------------------------------------------
 	// Sphere defining the oxygen regeneration area
-	UPROPERTY(EditAnywhere, Category="Base")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Base|Components")
 	USphereComponent* OxygenSphere;
 
-	// Overlap function declarations
-	UFUNCTION()
-	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
-
-	UFUNCTION()
-	void OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
-	
-public:
 	// Radius in world units for oxygen regeneration
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Base")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Base|Components")
 	float OxygenRegenRadius;
-	
-	// This runs whenever you change a variable in the editor
-	virtual void OnConstruction(const FTransform& Transform) override;
 
 	// -------------------------------------------------------------------------
 	// SHIP REPAIR PROGRESSION
 	// -------------------------------------------------------------------------
-	
 	// Maps the Ship System to its current repair level
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Base|Ship Repairs")
 	TMap<EShipSystem, int32> ShipRepairLevels;
 
-	// Safely gets the current level of a specific system
+	// Progression Structs for easy Editor tweaking
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Base|Ship Repairs|Progression")
+	FStatProgression ScrubberProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Base|Ship Repairs|Progression")
+	FStatProgression ScannerProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Base|Ship Repairs|Progression")
+	FStatProgression DampenerProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Base|Ship Repairs|Progression")
+	FStatProgression RetrieverProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Base|Ship Repairs|Progression")
+	FStatProgression RefinerProgression;
+
+	// Core Upgrade Methods
 	UFUNCTION(BlueprintPure, Category = "Base|Ship Repairs")
 	int32 GetShipSystemLevel(EShipSystem SystemID);
 
-	// Increments the level of a specific system
 	UFUNCTION(BlueprintCallable, Category = "Base|Ship Repairs")
 	void UpgradeShipSystem(EShipSystem SystemID);
-	
-	// The starting size of the safe zone at Level 0
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Base|Ship Repairs")
-	float BaseOxygenRadius = 500.f;
 
-	// How much the sphere grows per Atmospheric Scrubber level (1500 = 15 meters)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Base|Ship Repairs")
-	float RadiusAddedPerLevel = 1500.f;
-
-	// Function to physically apply the current levels to the base
 	UFUNCTION(BlueprintCallable, Category = "Base|Ship Repairs")
 	void ApplyShipUpgrades();
 	
@@ -72,7 +74,6 @@ public:
 	// -------------------------------------------------------------------------
 	// SHOP PROGRESSION / UNLOCKS
 	// -------------------------------------------------------------------------
-	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Base|Shop Unlocks")
 	TArray<EToolType> UnlockedTools;
 
@@ -90,4 +91,14 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Base|Shop Unlocks")
 	void UnlockSpecialItem(ESpecialItem ItemID);
+
+protected:
+	// -------------------------------------------------------------------------
+	// EVENT HANDLERS
+	// -------------------------------------------------------------------------
+	UFUNCTION()
+	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+	UFUNCTION()
+	void OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 };

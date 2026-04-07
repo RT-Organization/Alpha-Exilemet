@@ -2,29 +2,55 @@
 #include "Components/SphereComponent.h"
 #include "AlphaExilemetCharacter.h"
 
+// -------------------------------------------------------------------------
+// CONSTRUCTOR & SETUP
+// -------------------------------------------------------------------------
 ABaseCamp::ABaseCamp()
 {
-	// Disable Tick completely to improve performance
 	PrimaryActorTick.bCanEverTick = false; 
 
-	OxygenRegenRadius = 500.f;
-	
+	// 1. Component Setup
 	OxygenSphere = CreateDefaultSubobject<USphereComponent>(TEXT("OxygenSphere"));
-	OxygenSphere->InitSphereRadius(OxygenRegenRadius);
 	OxygenSphere->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
 	RootComponent = OxygenSphere;
 
-	// Bind the Overlap Events
+	// 2. Default Progression Math Setup
+	ScrubberProgression.BaseValue = 500.0f; 
+	ScrubberProgression.AdditivePerLevel = 1500.0f; 
+
+	ScannerProgression.BaseValue = 0.0f; 
+	ScannerProgression.AdditivePerLevel = 1000.0f; 
+
+	DampenerProgression.BaseValue = 1.0f; 
+	DampenerProgression.AdditivePerLevel = 0.0f;
+	DampenerProgression.MultiplierPerLevel = 0.95f; // 5% damage reduction per level
+
+	RetrieverProgression.BaseValue = 0.0f;
+	RetrieverProgression.AdditivePerLevel = 5.0f; // +5% retained per level
+
+	RefinerProgression.BaseValue = 1.0f;
+	RefinerProgression.AdditivePerLevel = 0.05f; // +5% payout per level
+
+	// Initialize Sphere size
+	OxygenRegenRadius = ScrubberProgression.BaseValue;
+	OxygenSphere->InitSphereRadius(OxygenRegenRadius);
+
+	// 3. Bind Events
 	OxygenSphere->OnComponentBeginOverlap.AddDynamic(this, &ABaseCamp::OnOverlapBegin);
 	OxygenSphere->OnComponentEndOverlap.AddDynamic(this, &ABaseCamp::OnOverlapEnd);
 }
 
+// -------------------------------------------------------------------------
+// ENGINE OVERRIDES
+// -------------------------------------------------------------------------
 void ABaseCamp::BeginPlay()
 {
 	Super::BeginPlay();
 	
+	// Apply saved upgrades to the world immediately
 	ApplyShipUpgrades(); 
 	
+	// Check if the player spawned inside the bubble
 	TArray<AActor*> OverlappingActors;
 	OxygenSphere->GetOverlappingActors(OverlappingActors, AAlphaExilemetCharacter::StaticClass());
 
@@ -37,24 +63,6 @@ void ABaseCamp::BeginPlay()
 	}
 }
 
-void ABaseCamp::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
-{
-	// If the player steps into the base camp, set them to safe
-	if (AAlphaExilemetCharacter* Character = Cast<AAlphaExilemetCharacter>(OtherActor))
-	{
-		Character->bIsInSafeZone = true;
-	}
-}
-
-void ABaseCamp::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
-{
-	// If the player leaves the base camp, they are no longer safe
-	if (AAlphaExilemetCharacter* Character = Cast<AAlphaExilemetCharacter>(OtherActor))
-	{
-		Character->bIsInSafeZone = false;
-	}
-}
-
 void ABaseCamp::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
@@ -64,23 +72,18 @@ void ABaseCamp::OnConstruction(const FTransform& Transform)
 		OxygenSphere->SetSphereRadius(OxygenRegenRadius);
 	}
 
-	// Tell the Blueprint to update the VFX
 	BP_UpdateForcefieldRadius(OxygenRegenRadius);
 }
 
 // -------------------------------------------------------------------------
 // SHIP REPAIR PROGRESSION
 // -------------------------------------------------------------------------
-
 int32 ABaseCamp::GetShipSystemLevel(EShipSystem SystemID)
 {
-	// Check if we have data for this system yet
 	if (ShipRepairLevels.Contains(SystemID))
 	{
 		return ShipRepairLevels[SystemID];
 	}
-	
-	// If it's not in the map, it hasn't been upgraded, so it's Level 0
 	return 0; 
 }
 
@@ -88,40 +91,48 @@ void ABaseCamp::UpgradeShipSystem(EShipSystem SystemID)
 {
 	if (ShipRepairLevels.Contains(SystemID))
 	{
-		ShipRepairLevels[SystemID]++; // Increment existing level
+		ShipRepairLevels[SystemID]++; 
 	}
 	else
 	{
-		ShipRepairLevels.Add(SystemID, 1); // First upgrade, set to Level 1
+		ShipRepairLevels.Add(SystemID, 1); 
 	}
 
-	// Update the physical world immediately after the upgrade
 	ApplyShipUpgrades(); 
 }
 
 void ABaseCamp::ApplyShipUpgrades()
 {
-	// --------------------------------------------------
-	// 1. Atmospheric Scrubber
-	// --------------------------------------------------
+	// 1. Atmospheric Scrubber (Oxygen Bubble)
 	int32 ScrubberLevel = GetShipSystemLevel(EShipSystem::AtmosphericScrubber);
-	OxygenRegenRadius = BaseOxygenRadius + (RadiusAddedPerLevel * ScrubberLevel);
+	OxygenRegenRadius = ScrubberProgression.GetValueAtLevel(ScrubberLevel);
 	
 	if (OxygenSphere)
 	{
 		OxygenSphere->SetSphereRadius(OxygenRegenRadius);
 	}
-
-	// Tell the Blueprint to update the VFX
 	BP_UpdateForcefieldRadius(OxygenRegenRadius);
 
-	// (We will add Systems 2, 3, 4, and 5 here as we build them!)
+	// 2. Topography Scanner (Player Outline Sphere)
+	int32 ScannerLevel = GetShipSystemLevel(EShipSystem::TopographyScanner);
+	float NewScannerRadius = ScannerProgression.GetValueAtLevel(ScannerLevel);
+
+	if (AAlphaExilemetCharacter* Player = Cast<AAlphaExilemetCharacter>(GetWorld()->GetFirstPlayerController()->GetPawn()))
+	{
+		if (Player->ScannerSphere)
+		{
+			Player->ScannerSphere->SetSphereRadius(NewScannerRadius);
+		}
+	}
+
+	// Note: Systems 3 (Dampener), 4 (Retriever), and 5 (Refiner) don't need physical 
+	// world updates here. The player/widgets will just call GetShipSystemLevel() 
+	// when calculating damage, death, or selling!
 }
 
 // -------------------------------------------------------------------------
 // SHOP PROGRESSION / UNLOCKS
 // -------------------------------------------------------------------------
-
 bool ABaseCamp::IsToolUnlocked(EToolType ToolID)
 {
 	return UnlockedTools.Contains(ToolID);
@@ -145,5 +156,24 @@ void ABaseCamp::UnlockSpecialItem(ESpecialItem ItemID)
 	if (!UnlockedSpecialItems.Contains(ItemID))
 	{
 		UnlockedSpecialItems.Add(ItemID);
+	}
+}
+
+// -------------------------------------------------------------------------
+// EVENT HANDLERS
+// -------------------------------------------------------------------------
+void ABaseCamp::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (AAlphaExilemetCharacter* Character = Cast<AAlphaExilemetCharacter>(OtherActor))
+	{
+		Character->bIsInSafeZone = true;
+	}
+}
+
+void ABaseCamp::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	if (AAlphaExilemetCharacter* Character = Cast<AAlphaExilemetCharacter>(OtherActor))
+	{
+		Character->bIsInSafeZone = false;
 	}
 }

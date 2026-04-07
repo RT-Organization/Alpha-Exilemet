@@ -8,6 +8,7 @@
 class AToolBase;
 class UCameraComponent;
 class USpringArmComponent;
+class USphereComponent;
 
 // -------------------------------------------------------------------------
 // DELEGATES
@@ -125,6 +126,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
 	float Currency;
 	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
+	bool bIsSurvivalActive;
+	
 	// -------------------------------------------------------------------------
 	// EQUIPMENT & INTERACTION
 	// -------------------------------------------------------------------------
@@ -171,6 +175,18 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Progression")
 	void RecalculateStats();
+	
+	// -------------------------------------------------------------------------
+	// SCANNER SYSTEM
+	// -------------------------------------------------------------------------
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Scanner")
+	USphereComponent* ScannerSphere;
+
+	UFUNCTION()
+	void OnScannerOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+	UFUNCTION()
+	void OnScannerOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 	
 	// -------------------------------------------------------------------------
 	// DEATH

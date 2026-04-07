@@ -5,6 +5,8 @@
 #include "Interactable.h"
 #include "TimerManager.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Components/SphereComponent.h"
+#include "ResourceBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 AAlphaExilemetCharacter::AAlphaExilemetCharacter()
@@ -65,12 +67,25 @@ AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 	Oxygen = MaxOxygen;
 
 	Currency = 0.0f;
+	
+	bIsSurvivalActive = false;
+	
 	CurrentTool = nullptr;
 	InteractionDistance = 300.0f;
 
 	bIsInSafeZone = false;
 	OxygenDrainRate = OxygenDrainProgression.BaseValue;
 	CurrentSprintMultiplier = SprintMultiplierProgression.BaseValue;
+	
+	// --- SCANNER SETUP ---
+	ScannerSphere = CreateDefaultSubobject<USphereComponent>(TEXT("ScannerSphere"));
+	ScannerSphere->SetupAttachment(RootComponent);
+	ScannerSphere->InitSphereRadius(0.0f);
+	ScannerSphere->SetCollisionProfileName(TEXT("Trigger"));
+
+	// Bind the overlap events
+	ScannerSphere->OnComponentBeginOverlap.AddDynamic(this, &AAlphaExilemetCharacter::OnScannerOverlapBegin);
+	ScannerSphere->OnComponentEndOverlap.AddDynamic(this, &AAlphaExilemetCharacter::OnScannerOverlapEnd);
 	
 	// --- DEATH CAMERA SETUP ---
 	DeathCameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("DeathCameraBoom"));
@@ -101,29 +116,32 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 	// -------------------------------------------------------------------------
 	// COMPLETELY SMOOTH SURVIVAL LOGIC
 	// -------------------------------------------------------------------------
-	if (bIsInSafeZone)
+	if (bIsSurvivalActive)
 	{
-		if (Oxygen < MaxOxygen)
+		if (bIsInSafeZone)
 		{
-			Oxygen = FMath::Clamp(Oxygen + (OxygenRegenRate * DeltaTime), 0.0f, MaxOxygen);
-			OnOxygenChanged.Broadcast(Oxygen, MaxOxygen);
-		}
-	}
-	else
-	{
-		if (Oxygen > 0.0f)
-		{
-			Oxygen = FMath::Clamp(Oxygen - (OxygenDrainRate * DeltaTime), 0.0f, MaxOxygen);
-			OnOxygenChanged.Broadcast(Oxygen, MaxOxygen);
+			if (Oxygen < MaxOxygen)
+			{
+				Oxygen = FMath::Clamp(Oxygen + (OxygenRegenRate * DeltaTime), 0.0f, MaxOxygen);
+				OnOxygenChanged.Broadcast(Oxygen, MaxOxygen);
+			}
 		}
 		else
 		{
-			Health = FMath::Clamp(Health - (SuffocationDamageRate * DeltaTime), 0.0f, MaxHealth);
-			OnHealthChanged.Broadcast(Health, MaxHealth);
-
-			if (Health <= 0.0f && !bIsDead)
+			if (Oxygen > 0.0f)
 			{
-				Die();
+				Oxygen = FMath::Clamp(Oxygen - (OxygenDrainRate * DeltaTime), 0.0f, MaxOxygen);
+				OnOxygenChanged.Broadcast(Oxygen, MaxOxygen);
+			}
+			else
+			{
+				Health = FMath::Clamp(Health - (SuffocationDamageRate * DeltaTime), 0.0f, MaxHealth);
+				OnHealthChanged.Broadcast(Health, MaxHealth);
+
+				if (Health <= 0.0f && !bIsDead)
+				{
+					Die();
+				}
 			}
 		}
 	}
@@ -271,6 +289,25 @@ void AAlphaExilemetCharacter::UpgradeStat(EPlayerStat StatToUpgrade)
 	{
 		Health = MaxHealth;
 		OnHealthChanged.Broadcast(Health, MaxHealth);
+	}
+}
+
+// -------------------------------------------------------------------------
+// SCANNER SYSTEM
+// -------------------------------------------------------------------------
+void AAlphaExilemetCharacter::OnScannerOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (AResourceBase* Resource = Cast<AResourceBase>(OtherActor))
+	{
+		Resource->SetOutline(true);
+	}
+}
+
+void AAlphaExilemetCharacter::OnScannerOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	if (AResourceBase* Resource = Cast<AResourceBase>(OtherActor))
+	{
+		Resource->SetOutline(false);
 	}
 }
 
