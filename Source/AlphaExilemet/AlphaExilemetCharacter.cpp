@@ -182,7 +182,7 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 	// -------------------------------------------------------------------------
 	// SURFACE HAZARD DETECTION
 	// -------------------------------------------------------------------------
-	if (GetCharacterMovement()->IsMovingOnGround())
+	/*if (GetCharacterMovement()->IsMovingOnGround())
 	{
 		// Check the floor directly under the player
 		UPhysicalMaterial* FloorMat = GetCharacterMovement()->CurrentFloor.HitResult.PhysMaterial.Get();
@@ -208,7 +208,7 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 			GetCharacterMovement()->GroundFriction = DefaultGroundFriction;
 			GetCharacterMovement()->BrakingDecelerationWalking = DefaultBrakingDeceleration;
 		}
-	}
+	}*/
 }
 
 void AAlphaExilemetCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
