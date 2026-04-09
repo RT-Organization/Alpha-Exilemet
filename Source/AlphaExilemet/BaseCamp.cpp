@@ -1,5 +1,6 @@
 #include "BaseCamp.h"
 #include "Components/SphereComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "AlphaExilemetCharacter.h"
 
 // -------------------------------------------------------------------------
@@ -166,7 +167,10 @@ void ABaseCamp::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Othe
 {
 	if (AAlphaExilemetCharacter* Character = Cast<AAlphaExilemetCharacter>(OtherActor))
 	{
-		Character->bIsInSafeZone = true;
+		if (OtherComp == Character->GetCapsuleComponent())
+		{
+			Character->bIsInSafeZone = true;
+		}
 	}
 }
 
@@ -174,6 +178,9 @@ void ABaseCamp::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherA
 {
 	if (AAlphaExilemetCharacter* Character = Cast<AAlphaExilemetCharacter>(OtherActor))
 	{
-		Character->bIsInSafeZone = false;
+		if (OtherComp == Character->GetCapsuleComponent())
+		{
+			Character->bIsInSafeZone = false;
+		}
 	}
 }

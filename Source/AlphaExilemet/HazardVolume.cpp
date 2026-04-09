@@ -106,8 +106,6 @@ void AHazardVolume::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 {
 	AAlphaExilemetCharacter* Player = Cast<AAlphaExilemetCharacter>(OtherActor);
 	
-	// CRUCIAL FIX: Only trigger if the component overlapping is the actual physical Capsule!
-	// This prevents the giant invisible Scanner Sphere from triggering the swamp early.
 	if (Player && OtherComp == Player->GetCapsuleComponent())
 	{
 		OverlappingPlayer = Player;
@@ -121,9 +119,9 @@ void AHazardVolume::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 				DampenerMod = BaseCampRef->DampenerProgression.GetValueAtLevel(DampenerLevel);
 			}
 
-			// Apply the slow math to the BaseWalkSpeed so it stacks correctly
+			// We calculate the penalty, but assign it to our new variable!
 			float ActualSpeedMultiplier = 1.0f - ((1.0f - SpeedMultiplier) * DampenerMod);
-			Player->GetCharacterMovement()->MaxWalkSpeed = Player->BaseWalkSpeed * ActualSpeedMultiplier;
+			Player->HazardSpeedMultiplier = ActualSpeedMultiplier;
 		}
 	}
 }
@@ -132,10 +130,12 @@ void AHazardVolume::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* Ot
 {
 	AAlphaExilemetCharacter* Player = Cast<AAlphaExilemetCharacter>(OtherActor);
 	
-	// Only trigger the reset if the Capsule leaves
 	if (Player && OtherComp == Player->GetCapsuleComponent() && OtherActor == OverlappingPlayer)
 	{
-		OverlappingPlayer->RecalculateStats(); // Resets speed back to normal
+		// Reset the multiplier back to normal!
+		OverlappingPlayer->HazardSpeedMultiplier = 1.0f;
+		
+		OverlappingPlayer->RecalculateStats(); 
 		OverlappingPlayer = nullptr;
 	}
 }

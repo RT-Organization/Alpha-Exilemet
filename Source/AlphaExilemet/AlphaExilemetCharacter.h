@@ -129,7 +129,30 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
 	bool bIsSurvivalActive;
 	
+	// --- CENTRALIZED MOVEMENT LOGIC ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement")
+	bool bIsSprinting = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement")
+	float MaxAngleForBaseAcceleration = 45.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement")
+	float SecondsBeforeBaseAccelerationOccurs = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement")
+	float BaseAccelerationMultiplier = 1.5f;
+
+	// Runtime trackers
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Movement")
+	float TimeSpentMovingTowardsBase = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Movement")
+	float CurrentBaseBoostMultiplier = 1.0f;
+	
 	// --- HAZARD PHYSICS ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
+	float HazardSpeedMultiplier = 1.0f;
+	
 	UPROPERTY(EditDefaultsOnly, Category = "AlphaExilemet|Hazards")
 	class UPhysicalMaterial* IcePhysicalMaterial;
 	

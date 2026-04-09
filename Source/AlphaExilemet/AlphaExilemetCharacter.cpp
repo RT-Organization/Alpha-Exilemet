@@ -180,9 +180,68 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 	}
 	
 	// -------------------------------------------------------------------------
+	// CENTRALIZED MOVEMENT & SPEED LOGIC
+	// -------------------------------------------------------------------------
+	if (BaseCampRef)
+	{
+		// 1. Are we in a hazard OR already inside the Safe Zone? 
+		// If so, strip the Base Boost entirely!
+		if (HazardSpeedMultiplier < 1.0f || bIsInSafeZone)
+		{
+			TimeSpentMovingTowardsBase = 0.0f;
+			CurrentBaseBoostMultiplier = 1.0f;
+		}
+		else
+		{
+			// 2. Calculate Direction and Velocity (Ignoring Z / Up and Down)
+			FVector Velocity = GetVelocity();
+			if (Velocity.SizeSquared2D() > 10.0f) // If the player is actually moving
+			{
+				FVector VelocityDir = Velocity.GetSafeNormal2D();
+				FVector ToBaseDir = (BaseCampRef->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+				
+				// 3. Dot Product to find the angle
+				float DotProduct = FVector::DotProduct(VelocityDir, ToBaseDir);
+				float AngleDegrees = FMath::RadiansToDegrees(FMath::Acos(DotProduct));
+
+				// 4. Check if walking towards base
+				if (AngleDegrees <= MaxAngleForBaseAcceleration)
+				{
+					TimeSpentMovingTowardsBase += DeltaTime;
+				}
+				else
+				{
+					TimeSpentMovingTowardsBase = 0.0f;
+				}
+			}
+			else
+			{
+				// Reset if standing still
+				TimeSpentMovingTowardsBase = 0.0f; 
+			}
+
+			// 5. Apply the Boost if enough time has passed
+			if (TimeSpentMovingTowardsBase >= SecondsBeforeBaseAccelerationOccurs)
+			{
+				CurrentBaseBoostMultiplier = BaseAccelerationMultiplier;
+			}
+			else
+			{
+				CurrentBaseBoostMultiplier = 1.0f;
+			}
+		}
+	}
+
+	// 6. CALCULATE THE FINAL MASTER SPEED
+	float SprintMod = bIsSprinting ? CurrentSprintMultiplier : 1.0f;
+	
+	// Formula: Base Speed * Sprint Boost * Base Return Boost * Hazard Slow
+	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * SprintMod * CurrentBaseBoostMultiplier * HazardSpeedMultiplier;
+	
+	// -------------------------------------------------------------------------
 	// SURFACE HAZARD DETECTION
 	// -------------------------------------------------------------------------
-	/*if (GetCharacterMovement()->IsMovingOnGround())
+	if (GetCharacterMovement()->IsMovingOnGround())
 	{
 		// Check the floor directly under the player
 		UPhysicalMaterial* FloorMat = GetCharacterMovement()->CurrentFloor.HitResult.PhysMaterial.Get();
@@ -208,7 +267,7 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 			GetCharacterMovement()->GroundFriction = DefaultGroundFriction;
 			GetCharacterMovement()->BrakingDecelerationWalking = DefaultBrakingDeceleration;
 		}
-	}*/
+	}
 }
 
 void AAlphaExilemetCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
