@@ -129,6 +129,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
 	bool bIsSurvivalActive;
 	
+	// --- HAZARD PHYSICS ---
+	UPROPERTY(EditDefaultsOnly, Category = "AlphaExilemet|Hazards")
+	class UPhysicalMaterial* IcePhysicalMaterial;
+	
+	UPROPERTY()
+	class ABaseCamp* BaseCampRef;
+	
+	float DefaultGroundFriction;
+	float DefaultBrakingDeceleration;
+	
 	// -------------------------------------------------------------------------
 	// EQUIPMENT & INTERACTION
 	// -------------------------------------------------------------------------

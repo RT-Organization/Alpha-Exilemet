@@ -7,6 +7,9 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Components/SphereComponent.h"
 #include "ResourceBase.h"
+#include "PhysicalMaterials/PhysicalMaterial.h"
+#include "BaseCamp.h"
+#include "Kismet/GameplayStatics.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 AAlphaExilemetCharacter::AAlphaExilemetCharacter()
@@ -107,6 +110,13 @@ void AAlphaExilemetCharacter::BeginPlay()
 	
 	// Apply stats immediately upon spawning
 	RecalculateStats();
+
+	// Store default friction so we can return to normal
+	DefaultGroundFriction = GetCharacterMovement()->GroundFriction;
+	DefaultBrakingDeceleration = GetCharacterMovement()->BrakingDecelerationWalking;
+
+	// Cache Base Camp
+	BaseCampRef = Cast<ABaseCamp>(UGameplayStatics::GetActorOfClass(GetWorld(), ABaseCamp::StaticClass()));
 }
 
 void AAlphaExilemetCharacter::Tick(float DeltaTime)
@@ -166,6 +176,37 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 		if (HitResult.GetActor()->Implements<UInteractable>())
 		{
 			bIsLookingAtInteractable = true;
+		}
+	}
+	
+	// -------------------------------------------------------------------------
+	// SURFACE HAZARD DETECTION
+	// -------------------------------------------------------------------------
+	if (GetCharacterMovement()->IsMovingOnGround())
+	{
+		// Check the floor directly under the player
+		UPhysicalMaterial* FloorMat = GetCharacterMovement()->CurrentFloor.HitResult.PhysMaterial.Get();
+		
+		if (FloorMat == IcePhysicalMaterial)
+		{
+			float DampenerMod = 1.0f;
+			if (BaseCampRef)
+			{
+				int32 DampenerLevel = BaseCampRef->GetShipSystemLevel(EShipSystem::HazardDampener);
+				DampenerMod = BaseCampRef->DampenerProgression.GetValueAtLevel(DampenerLevel);
+			}
+			
+			float IceFriction = 0.5f / DampenerMod;
+			float IceBraking = 100.0f / DampenerMod;
+
+			GetCharacterMovement()->GroundFriction = IceFriction;
+			GetCharacterMovement()->BrakingDecelerationWalking = IceBraking;
+		}
+		else
+		{
+			// Normal Ground - Restore Defaults
+			GetCharacterMovement()->GroundFriction = DefaultGroundFriction;
+			GetCharacterMovement()->BrakingDecelerationWalking = DefaultBrakingDeceleration;
 		}
 	}
 }
