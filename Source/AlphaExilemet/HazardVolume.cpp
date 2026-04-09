@@ -2,12 +2,15 @@
 #include "Components/BoxComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/CapsuleComponent.h" // Needed to verify the player's physical body
+#include "Components/CapsuleComponent.h" 
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "AlphaExilemetCharacter.h"
 #include "BaseCamp.h"
-#include "Kismet/GameplayStatics.h"
-#include "GameFramework/CharacterMovementComponent.h"
 
+// -------------------------------------------------------------------------
+// CONSTRUCTOR
+// -------------------------------------------------------------------------
 AHazardVolume::AHazardVolume()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -24,11 +27,15 @@ AHazardVolume::AHazardVolume()
 	HazardMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HazardMesh"));
 	HazardMesh->SetupAttachment(RootComponent);
 
+	// Default Setup
+	HazardShape = EHazardShape::Box;
 	DamagePerSecond = 5.0f;
 	SpeedMultiplier = 0.5f; 
-	HazardShape = EHazardShape::Box; // Default to Box
+	bIsSlippery = false;
+	SlipperyFriction = 0.5f;
+	SlipperyBraking = 100.0f;
 
-	// Bind Overlaps to ALL shapes. OnConstruction manages which one fires.
+	// Bind Overlaps to ALL shapes. OnConstruction dictates which one generates events.
 	HazardZone->OnComponentBeginOverlap.AddDynamic(this, &AHazardVolume::OnOverlapBegin);
 	HazardZone->OnComponentEndOverlap.AddDynamic(this, &AHazardVolume::OnOverlapEnd);
 
@@ -39,11 +46,14 @@ AHazardVolume::AHazardVolume()
 	HazardMesh->OnComponentEndOverlap.AddDynamic(this, &AHazardVolume::OnOverlapEnd);
 }
 
+// -------------------------------------------------------------------------
+// ENGINE OVERRIDES
+// -------------------------------------------------------------------------
 void AHazardVolume::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
-	// 1. Turn OFF collision for all shapes first
+	// Reset all
 	HazardZone->SetCollisionProfileName(TEXT("NoCollision"));
 	HazardZone->SetGenerateOverlapEvents(false);
 	
@@ -53,7 +63,7 @@ void AHazardVolume::OnConstruction(const FTransform& Transform)
 	HazardMesh->SetCollisionProfileName(TEXT("NoCollision"));
 	HazardMesh->SetGenerateOverlapEvents(false);
 
-	// 2. Turn ON collision only for the selected shape
+	// Activate chosen shape
 	switch (HazardShape)
 	{
 		case EHazardShape::Box:
@@ -81,6 +91,7 @@ void AHazardVolume::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	// Apply Damage Over Time
 	if (OverlappingPlayer && DamagePerSecond > 0.0f)
 	{
 		float DampenerMod = 1.0f;
@@ -91,7 +102,6 @@ void AHazardVolume::Tick(float DeltaTime)
 		}
 
 		float ActualDamage = (DamagePerSecond * DampenerMod) * DeltaTime;
-
 		OverlappingPlayer->Health = FMath::Clamp(OverlappingPlayer->Health - ActualDamage, 0.0f, OverlappingPlayer->MaxHealth);
 		OverlappingPlayer->OnHealthChanged.Broadcast(OverlappingPlayer->Health, OverlappingPlayer->MaxHealth);
 
@@ -102,6 +112,9 @@ void AHazardVolume::Tick(float DeltaTime)
 	}
 }
 
+// -------------------------------------------------------------------------
+// OVERLAP EVENTS
+// -------------------------------------------------------------------------
 void AHazardVolume::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	AAlphaExilemetCharacter* Player = Cast<AAlphaExilemetCharacter>(OtherActor);
@@ -109,19 +122,25 @@ void AHazardVolume::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 	if (Player && OtherComp == Player->GetCapsuleComponent())
 	{
 		OverlappingPlayer = Player;
+		
+		float DampenerMod = 1.0f;
+		if (BaseCampRef)
+		{
+			int32 DampenerLevel = BaseCampRef->GetShipSystemLevel(EShipSystem::HazardDampener);
+			DampenerMod = BaseCampRef->DampenerProgression.GetValueAtLevel(DampenerLevel);
+		}
 
+		// 1. Slow Movement (e.g., Swamp Water)
 		if (SpeedMultiplier < 1.0f)
 		{
-			float DampenerMod = 1.0f;
-			if (BaseCampRef)
-			{
-				int32 DampenerLevel = BaseCampRef->GetShipSystemLevel(EShipSystem::HazardDampener);
-				DampenerMod = BaseCampRef->DampenerProgression.GetValueAtLevel(DampenerLevel);
-			}
+			Player->HazardSpeedMultiplier = 1.0f - ((1.0f - SpeedMultiplier) * DampenerMod);
+		}
 
-			// We calculate the penalty, but assign it to our new variable!
-			float ActualSpeedMultiplier = 1.0f - ((1.0f - SpeedMultiplier) * DampenerMod);
-			Player->HazardSpeedMultiplier = ActualSpeedMultiplier;
+		// 2. Slippery Physics (e.g., Frozen Lake)
+		if (bIsSlippery)
+		{
+			Player->GetCharacterMovement()->GroundFriction = SlipperyFriction / DampenerMod;
+			Player->GetCharacterMovement()->BrakingDecelerationWalking = SlipperyBraking / DampenerMod;
 		}
 	}
 }
@@ -132,8 +151,15 @@ void AHazardVolume::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* Ot
 	
 	if (Player && OtherComp == Player->GetCapsuleComponent() && OtherActor == OverlappingPlayer)
 	{
-		// Reset the multiplier back to normal!
+		// Reset Speed Multiplier
 		OverlappingPlayer->HazardSpeedMultiplier = 1.0f;
+		
+		// Reset Slippery Physics
+		if (bIsSlippery)
+		{
+			OverlappingPlayer->GetCharacterMovement()->GroundFriction = OverlappingPlayer->DefaultGroundFriction;
+			OverlappingPlayer->GetCharacterMovement()->BrakingDecelerationWalking = OverlappingPlayer->DefaultBrakingDeceleration;
+		}
 		
 		OverlappingPlayer->RecalculateStats(); 
 		OverlappingPlayer = nullptr;

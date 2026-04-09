@@ -1,35 +1,55 @@
 #include "AlphaExilemetCharacter.h"
 #include "ToolBase.h"
 #include "Camera/CameraComponent.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Components/SphereComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "DrawDebugHelpers.h"
 #include "Interactable.h"
 #include "TimerManager.h"
-#include "GameFramework/SpringArmComponent.h"
-#include "Components/SphereComponent.h"
 #include "ResourceBase.h"
-#include "PhysicalMaterials/PhysicalMaterial.h"
 #include "BaseCamp.h"
-#include "Kismet/GameplayStatics.h"
-#include "GameFramework/CharacterMovementComponent.h"
 
+// -------------------------------------------------------------------------
+// CONSTRUCTOR
+// -------------------------------------------------------------------------
 AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
+	// --- CAMERA SETUP ---
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	FirstPersonCameraComponent->SetupAttachment(GetMesh(), FName("head"));
-	FirstPersonCameraComponent->SetRelativeLocation(FVector(0.f, 0.f, 0.f));
-	FirstPersonCameraComponent->SetRelativeRotation(FRotator(0.f, 0.f, 0.f));
+	FirstPersonCameraComponent->SetRelativeLocation(FVector::ZeroVector);
+	FirstPersonCameraComponent->SetRelativeRotation(FRotator::ZeroRotator);
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 	
-	// Start all stats at Level 0
+	DeathCameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("DeathCameraBoom"));
+	DeathCameraBoom->SetupAttachment(RootComponent); 
+	DeathCameraBoom->TargetArmLength = 500.0f;
+	DeathCameraBoom->SetRelativeRotation(FRotator(-45.0f, 0.0f, 0.0f));
+	DeathCameraBoom->bDoCollisionTest = true;
+	DeathCameraBoom->bUsePawnControlRotation = false;
+
+	DeathCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("DeathCamera"));
+	DeathCameraComponent->SetupAttachment(DeathCameraBoom, USpringArmComponent::SocketName);
+	DeathCameraComponent->bUsePawnControlRotation = false;
+	DeathCameraComponent->SetActive(false);
+
+	// --- SCANNER SETUP ---
+	ScannerSphere = CreateDefaultSubobject<USphereComponent>(TEXT("ScannerSphere"));
+	ScannerSphere->SetupAttachment(RootComponent);
+	ScannerSphere->InitSphereRadius(0.0f);
+	ScannerSphere->SetCollisionProfileName(TEXT("Trigger"));
+	ScannerSphere->OnComponentBeginOverlap.AddDynamic(this, &AAlphaExilemetCharacter::OnScannerOverlapBegin);
+	ScannerSphere->OnComponentEndOverlap.AddDynamic(this, &AAlphaExilemetCharacter::OnScannerOverlapEnd);
+	
+	// --- PROGRESSION DEFAULTS ---
 	SystemUpgradeLevels.Add(EPlayerStat::Health, 0);
 	SystemUpgradeLevels.Add(EPlayerStat::Oxygen, 0);
 	SystemUpgradeLevels.Add(EPlayerStat::Agility, 0);
 	
-	// -------------------------------------------------------------------------
-	// DEFAULT PROGRESSION CONFIGURATION
-	// -------------------------------------------------------------------------
 	HealthProgression.BaseValue = 100.0f;
 	HealthProgression.AdditivePerLevel = 25.0f;
 	HealthProgression.MultiplierPerLevel = 1.0f; 
@@ -58,64 +78,35 @@ AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 	AirControlProgression.AdditivePerLevel = 0.05f;
 	AirControlProgression.MultiplierPerLevel = 1.0f;
 
-	// -------------------------------------------------------------------------
-	// DEFAULT STATS
-	// -------------------------------------------------------------------------
+	// --- RUNTIME DEFAULTS ---
 	MaxOxygen = 100.0f;
 	OxygenRegenRate = 10.0f;
 	SuffocationDamageRate = 5.0f;
-    
 	MaxHealth = HealthProgression.BaseValue;
 	Health = MaxHealth;
 	Oxygen = MaxOxygen;
-
 	Currency = 0.0f;
-	
 	bIsSurvivalActive = false;
-	
+	bIsInSafeZone = false;
 	CurrentTool = nullptr;
 	InteractionDistance = 300.0f;
-
-	bIsInSafeZone = false;
 	OxygenDrainRate = OxygenDrainProgression.BaseValue;
 	CurrentSprintMultiplier = SprintMultiplierProgression.BaseValue;
-	
-	// --- SCANNER SETUP ---
-	ScannerSphere = CreateDefaultSubobject<USphereComponent>(TEXT("ScannerSphere"));
-	ScannerSphere->SetupAttachment(RootComponent);
-	ScannerSphere->InitSphereRadius(0.0f);
-	ScannerSphere->SetCollisionProfileName(TEXT("Trigger"));
-
-	// Bind the overlap events
-	ScannerSphere->OnComponentBeginOverlap.AddDynamic(this, &AAlphaExilemetCharacter::OnScannerOverlapBegin);
-	ScannerSphere->OnComponentEndOverlap.AddDynamic(this, &AAlphaExilemetCharacter::OnScannerOverlapEnd);
-	
-	// --- DEATH CAMERA SETUP ---
-	DeathCameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("DeathCameraBoom"));
-	DeathCameraBoom->SetupAttachment(RootComponent); 
-	DeathCameraBoom->TargetArmLength = 500.0f;
-	DeathCameraBoom->SetRelativeRotation(FRotator(-45.0f, 0.0f, 0.0f));
-	DeathCameraBoom->bDoCollisionTest = true;
-	DeathCameraBoom->bUsePawnControlRotation = false;
-
-	DeathCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("DeathCamera"));
-	DeathCameraComponent->SetupAttachment(DeathCameraBoom, USpringArmComponent::SocketName);
-	DeathCameraComponent->bUsePawnControlRotation = false;
-	DeathCameraComponent->SetActive(false);
 }
 
+// -------------------------------------------------------------------------
+// ENGINE OVERRIDES
+// -------------------------------------------------------------------------
 void AAlphaExilemetCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	// Apply stats immediately upon spawning
 	RecalculateStats();
 
-	// Store default friction so we can return to normal
+	// Cache standard physics to return to when leaving hazard ice
 	DefaultGroundFriction = GetCharacterMovement()->GroundFriction;
 	DefaultBrakingDeceleration = GetCharacterMovement()->BrakingDecelerationWalking;
 
-	// Cache Base Camp
 	BaseCampRef = Cast<ABaseCamp>(UGameplayStatics::GetActorOfClass(GetWorld(), ABaseCamp::StaticClass()));
 }
 
@@ -123,9 +114,7 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// -------------------------------------------------------------------------
-	// COMPLETELY SMOOTH SURVIVAL LOGIC
-	// -------------------------------------------------------------------------
+	// --- 1. SURVIVAL LOGIC (OXYGEN & HEALTH) ---
 	if (bIsSurvivalActive)
 	{
 		if (bIsInSafeZone)
@@ -156,11 +145,8 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 		}
 	}
 	
-	// -------------------------------------------------------------------------
-	// INTERACTION PROMPT LOGIC
-	// -------------------------------------------------------------------------
+	// --- 2. INTERACTION PROMPT LOGIC ---
 	bIsLookingAtInteractable = false;
-
 	FVector StartLoc = FirstPersonCameraComponent->GetComponentLocation();
 	FVector ForwardVector = FirstPersonCameraComponent->GetForwardVector();
 	FVector EndLoc = StartLoc + (ForwardVector * InteractionDistance);
@@ -169,23 +155,17 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 	FCollisionQueryParams CollisionParams;
 	CollisionParams.AddIgnoredActor(this); 
 	
-	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, CollisionParams);
-
-	if (bHit && HitResult.GetActor())
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, CollisionParams))
 	{
-		if (HitResult.GetActor()->Implements<UInteractable>())
+		if (HitResult.GetActor() && HitResult.GetActor()->Implements<UInteractable>())
 		{
 			bIsLookingAtInteractable = true;
 		}
 	}
 	
-	// -------------------------------------------------------------------------
-	// CENTRALIZED MOVEMENT & SPEED LOGIC
-	// -------------------------------------------------------------------------
+	// --- 3. CENTRALIZED MOVEMENT LOGIC ---
 	if (BaseCampRef)
 	{
-		// 1. Are we in a hazard OR already inside the Safe Zone? 
-		// If so, strip the Base Boost entirely!
 		if (HazardSpeedMultiplier < 1.0f || bIsInSafeZone)
 		{
 			TimeSpentMovingTowardsBase = 0.0f;
@@ -193,18 +173,15 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 		}
 		else
 		{
-			// 2. Calculate Direction and Velocity (Ignoring Z / Up and Down)
 			FVector Velocity = GetVelocity();
-			if (Velocity.SizeSquared2D() > 10.0f) // If the player is actually moving
+			if (Velocity.SizeSquared2D() > 10.0f) 
 			{
 				FVector VelocityDir = Velocity.GetSafeNormal2D();
 				FVector ToBaseDir = (BaseCampRef->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
 				
-				// 3. Dot Product to find the angle
 				float DotProduct = FVector::DotProduct(VelocityDir, ToBaseDir);
 				float AngleDegrees = FMath::RadiansToDegrees(FMath::Acos(DotProduct));
 
-				// 4. Check if walking towards base
 				if (AngleDegrees <= MaxAngleForBaseAcceleration)
 				{
 					TimeSpentMovingTowardsBase += DeltaTime;
@@ -216,58 +193,16 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 			}
 			else
 			{
-				// Reset if standing still
 				TimeSpentMovingTowardsBase = 0.0f; 
 			}
 
-			// 5. Apply the Boost if enough time has passed
-			if (TimeSpentMovingTowardsBase >= SecondsBeforeBaseAccelerationOccurs)
-			{
-				CurrentBaseBoostMultiplier = BaseAccelerationMultiplier;
-			}
-			else
-			{
-				CurrentBaseBoostMultiplier = 1.0f;
-			}
+			CurrentBaseBoostMultiplier = (TimeSpentMovingTowardsBase >= SecondsBeforeBaseAccelerationOccurs) ? BaseAccelerationMultiplier : 1.0f;
 		}
 	}
 
-	// 6. CALCULATE THE FINAL MASTER SPEED
+	// Apply final combined movement speed
 	float SprintMod = bIsSprinting ? CurrentSprintMultiplier : 1.0f;
-	
-	// Formula: Base Speed * Sprint Boost * Base Return Boost * Hazard Slow
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * SprintMod * CurrentBaseBoostMultiplier * HazardSpeedMultiplier;
-	
-	// -------------------------------------------------------------------------
-	// SURFACE HAZARD DETECTION
-	// -------------------------------------------------------------------------
-	if (GetCharacterMovement()->IsMovingOnGround())
-	{
-		// Check the floor directly under the player
-		UPhysicalMaterial* FloorMat = GetCharacterMovement()->CurrentFloor.HitResult.PhysMaterial.Get();
-		
-		if (FloorMat == IcePhysicalMaterial)
-		{
-			float DampenerMod = 1.0f;
-			if (BaseCampRef)
-			{
-				int32 DampenerLevel = BaseCampRef->GetShipSystemLevel(EShipSystem::HazardDampener);
-				DampenerMod = BaseCampRef->DampenerProgression.GetValueAtLevel(DampenerLevel);
-			}
-			
-			float IceFriction = 0.5f / DampenerMod;
-			float IceBraking = 100.0f / DampenerMod;
-
-			GetCharacterMovement()->GroundFriction = IceFriction;
-			GetCharacterMovement()->BrakingDecelerationWalking = IceBraking;
-		}
-		else
-		{
-			// Normal Ground - Restore Defaults
-			GetCharacterMovement()->GroundFriction = DefaultGroundFriction;
-			GetCharacterMovement()->BrakingDecelerationWalking = DefaultBrakingDeceleration;
-		}
-	}
 }
 
 void AAlphaExilemetCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -280,17 +215,13 @@ void AAlphaExilemetCharacter::SetupPlayerInputComponent(UInputComponent* PlayerI
 // -------------------------------------------------------------------------
 void AAlphaExilemetCharacter::Equip_Implementation(AToolBase* NewTool)
 {
-	if (CurrentTool)
-	{
-		Unequip();
-	}
+	if (CurrentTool) Unequip();
 	
 	if (NewTool)
 	{
 		CurrentTool = NewTool;
 		NewTool->SetOwner(this);
 		NewTool->OnEquip();
-
 		OnToolEquipped.Broadcast(NewTool);
 	}
 }
@@ -317,47 +248,37 @@ void AAlphaExilemetCharacter::TryInteract()
 	FCollisionQueryParams CollisionParams;
 	CollisionParams.AddIgnoredActor(this); 
 
-	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, CollisionParams);
-	DrawDebugLine(GetWorld(), StartLoc, EndLoc, FColor::Red, false, 2.0f);
-	
-	if (bHit && HitResult.GetActor())
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, CollisionParams))
 	{
-		AActor* HitActor = HitResult.GetActor();
-		
-		if (HitActor->Implements<UInteractable>())
+		if (AActor* HitActor = HitResult.GetActor())
 		{
-			IInteractable::Execute_Interact(HitActor, this);
+			if (HitActor->Implements<UInteractable>())
+			{
+				IInteractable::Execute_Interact(HitActor, this);
+			}
 		}
 	}
 }
 
 // -------------------------------------------------------------------------
-// UPGRADE SYSTEM
+// PROGRESSION
 // -------------------------------------------------------------------------
 int32 AAlphaExilemetCharacter::GetSystemStatLevel(EPlayerStat StatName)
 {
-	if (SystemUpgradeLevels.Contains(StatName))
-	{
-		return SystemUpgradeLevels[StatName];
-	}
-	return 0;
+	return SystemUpgradeLevels.Contains(StatName) ? SystemUpgradeLevels[StatName] : 0;
 }
 
 void AAlphaExilemetCharacter::RecalculateStats()
 {
-	// Fetch the levels dynamically from the Map
 	int32 CurrentHealthLevel = GetSystemStatLevel(EPlayerStat::Health);
 	int32 CurrentOxygenLevel = GetSystemStatLevel(EPlayerStat::Oxygen);
 	int32 CurrentAgilityLevel = GetSystemStatLevel(EPlayerStat::Agility);
 
-	// Apply math progression to Health
 	MaxHealth = HealthProgression.GetValueAtLevel(CurrentHealthLevel);
 	Health = FMath::Clamp(Health, 0.0f, MaxHealth); 
 
-	// Apply math progression to Oxygen
 	OxygenDrainRate = OxygenDrainProgression.GetValueAtLevel(CurrentOxygenLevel);
 	
-	// Apply math progression to Character Movement (Agility)
 	BaseWalkSpeed = AgilityProgression.GetValueAtLevel(CurrentAgilityLevel);
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
 	GetCharacterMovement()->JumpZVelocity = JumpProgression.GetValueAtLevel(CurrentAgilityLevel);
@@ -365,26 +286,19 @@ void AAlphaExilemetCharacter::RecalculateStats()
 	GetCharacterMovement()->GravityScale = GravityScaleProgression.GetValueAtLevel(CurrentAgilityLevel);
 	GetCharacterMovement()->AirControl = AirControlProgression.GetValueAtLevel(CurrentAgilityLevel);
 
-	// Push UI updates
 	OnHealthChanged.Broadcast(Health, MaxHealth);
 	OnOxygenChanged.Broadcast(Oxygen, MaxOxygen);
 }
 
 void AAlphaExilemetCharacter::UpgradeStat(EPlayerStat StatToUpgrade)
 {
-	// Check if it exists and is under max level (5)
-	if (SystemUpgradeLevels.Contains(StatToUpgrade))
+	if (SystemUpgradeLevels.Contains(StatToUpgrade) && SystemUpgradeLevels[StatToUpgrade] < 5)
 	{
-		if (SystemUpgradeLevels[StatToUpgrade] < 5)
-		{
-			SystemUpgradeLevels[StatToUpgrade]++;
-		}
+		SystemUpgradeLevels[StatToUpgrade]++;
 	}
 
-	// Update speeds and limits based on new level
 	RecalculateStats();
 
-	// If upgraded Health, heal the player to full
 	if (StatToUpgrade == EPlayerStat::Health)
 	{
 		Health = MaxHealth;
@@ -412,49 +326,37 @@ void AAlphaExilemetCharacter::OnScannerOverlapEnd(UPrimitiveComponent* Overlappe
 }
 
 // -------------------------------------------------------------------------
-// DEATH
+// DEATH & RESPAWN
 // -------------------------------------------------------------------------
 void AAlphaExilemetCharacter::Die()
 {
 	bIsDead = true;
 
-	// 1. Disable Input and completely stop momentum
-	APlayerController* PC = Cast<APlayerController>(GetController());
-	if (PC)
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		PC->DisableInput(PC);
 	}
-	GetCharacterMovement()->StopMovementImmediately(); // Kills velocity
-	GetCharacterMovement()->DisableMovement();         // Prevents gravity/falling on the capsule
+	
+	GetCharacterMovement()->StopMovementImmediately(); 
+	GetCharacterMovement()->DisableMovement();         
 
-	// 2. Switch Cameras
 	FirstPersonCameraComponent->SetActive(false);
 	DeathCameraComponent->SetActive(true);
-
-	// 3. Attach the Death Camera to the Mesh so it follows the ragdoll
-	// We use KeepWorldTransform so it doesn't suddenly snap to the floor
 	DeathCameraBoom->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepWorldTransform);
 
-	// 4. Clear all tool inventories safely using our new OOP function
 	for (AToolBase* Tool : OwnedTools)
 	{
-		if (Tool)
-		{
-			Tool->ClearInventory();
-		}
+		if (Tool) Tool->ClearInventory();
 	}
 
-	// 5. Trigger Ragdoll
 	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
 	GetMesh()->SetSimulatePhysics(true);
 
-	// 6. Tell BP to show the UI
 	BP_OnPlayerDied();
 }
 
 void AAlphaExilemetCharacter::RespawnPlayer(FVector SpawnLocation, FRotator SpawnRotation)
 {
-	// 1. Reset Stats
 	Health = MaxHealth;
 	Oxygen = MaxOxygen;
 	bIsDead = false;
@@ -462,28 +364,23 @@ void AAlphaExilemetCharacter::RespawnPlayer(FVector SpawnLocation, FRotator Spaw
 	OnHealthChanged.Broadcast(Health, MaxHealth);
 	OnOxygenChanged.Broadcast(Oxygen, MaxOxygen);
 	
-	// 2. Revert Cameras
 	DeathCameraComponent->SetActive(false);
 	FirstPersonCameraComponent->SetActive(true);
 
-	// 3. Fix Physics and re-attach Mesh
 	GetMesh()->SetSimulatePhysics(false);
 	GetMesh()->SetCollisionProfileName(TEXT("CharacterMesh"));
 	GetMesh()->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 	GetMesh()->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -90.f), FRotator(0.f, -90.f, 0.f)); 
 
-	// 4. Re-attach the Death Camera back to the Capsule for next time
 	DeathCameraBoom->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 	DeathCameraBoom->SetRelativeRotation(FRotator(-45.0f, 0.0f, 0.0f));
 
-	// 5. Teleport to Base
 	SetActorLocationAndRotation(SpawnLocation, SpawnRotation);
 
-	// 6. Re-enable Input and Movement
-	APlayerController* PC = Cast<APlayerController>(GetController());
-	if (PC)
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		PC->EnableInput(PC);
 	}
-	GetCharacterMovement()->SetMovementMode(MOVE_Walking); // Turns movement back on
+	
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking); 
 }

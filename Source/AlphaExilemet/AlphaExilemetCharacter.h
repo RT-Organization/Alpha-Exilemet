@@ -9,6 +9,7 @@ class AToolBase;
 class UCameraComponent;
 class USpringArmComponent;
 class USphereComponent;
+class ABaseCamp;
 
 // -------------------------------------------------------------------------
 // DELEGATES
@@ -46,136 +47,139 @@ public:
 	// -------------------------------------------------------------------------
 	// COMPONENTS
 	// -------------------------------------------------------------------------
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Camera")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Components")
 	UCameraComponent* FirstPersonCameraComponent;
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Camera")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Components")
 	USpringArmComponent* DeathCameraBoom;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Camera")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Components")
 	UCameraComponent* DeathCameraComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Components")
+	USphereComponent* ScannerSphere;
+
 	// -------------------------------------------------------------------------
-	// CURRENT UPGRADE LEVELS
+	// PROGRESSION & STATS CONFIGURATION
 	// -------------------------------------------------------------------------
 	// Maps the Stat (e.g., Health, Oxygen) to its current level (0-5)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Levels")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Progression|Levels")
 	TMap<EPlayerStat, int32> SystemUpgradeLevels;
 
-	// Helper function to get a stat level safely
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Progression|Math")
+	FStatProgression HealthProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Progression|Math")
+	FStatProgression OxygenDrainProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Progression|Math")
+	FStatProgression AgilityProgression;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Progression|Math")
+	FStatProgression JumpProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Progression|Math")
+	FStatProgression SprintMultiplierProgression;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Progression|Math")
+	FStatProgression GravityScaleProgression;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Progression|Math")
+	FStatProgression AirControlProgression;
+
 	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Progression")
 	int32 GetSystemStatLevel(EPlayerStat StatName);
 
-	// -------------------------------------------------------------------------
-	// STRUCT PROGRESSION CONFIGURATION
-	// -------------------------------------------------------------------------
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
-	FStatProgression HealthProgression;
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Progression")
+	void UpgradeStat(EPlayerStat StatToUpgrade);
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
-	FStatProgression OxygenDrainProgression;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
-	FStatProgression AgilityProgression;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
-	FStatProgression JumpProgression;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
-	FStatProgression SprintMultiplierProgression;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
-	FStatProgression GravityScaleProgression;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Stats|Progression")
-	FStatProgression AirControlProgression;
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Progression")
+	void RecalculateStats();
 
 	// -------------------------------------------------------------------------
 	// RUNTIME SURVIVAL VARIABLES
 	// -------------------------------------------------------------------------
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
-	float Health;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Survival")
+	bool bIsSurvivalActive;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
-	float MaxHealth;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
-	float Oxygen;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
-	float MaxOxygen;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Survival")
 	bool bIsInSafeZone;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Stats")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Survival")
+	float Health;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Survival")
+	float MaxHealth;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Survival")
+	float Oxygen;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Survival")
+	float MaxOxygen;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Survival")
 	float OxygenDrainRate;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Stats")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Survival")
 	float OxygenRegenRate;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Stats")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Survival")
 	float SuffocationDamageRate;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Movement")
-	float BaseWalkSpeed;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Runtime")
-	float CurrentSprintMultiplier;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Survival")
 	float Currency;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
-	bool bIsSurvivalActive;
-	
-	// --- CENTRALIZED MOVEMENT LOGIC ---
+	// -------------------------------------------------------------------------
+	// MOVEMENT & HAZARD PHYSICS
+	// -------------------------------------------------------------------------
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement")
 	bool bIsSprinting = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Movement")
+	float BaseWalkSpeed;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Movement")
+	float CurrentSprintMultiplier;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement|Base Boost")
 	float MaxAngleForBaseAcceleration = 45.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement|Base Boost")
 	float SecondsBeforeBaseAccelerationOccurs = 2.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement|Base Boost")
 	float BaseAccelerationMultiplier = 1.5f;
 
-	// Runtime trackers
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Movement")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Movement|Base Boost")
 	float TimeSpentMovingTowardsBase = 0.0f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Movement")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Movement|Base Boost")
 	float CurrentBaseBoostMultiplier = 1.0f;
 	
-	// --- HAZARD PHYSICS ---
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Runtime")
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement|Hazards")
 	float HazardSpeedMultiplier = 1.0f;
-	
-	UPROPERTY(EditDefaultsOnly, Category = "AlphaExilemet|Hazards")
-	class UPhysicalMaterial* IcePhysicalMaterial;
-	
-	UPROPERTY()
-	class ABaseCamp* BaseCampRef;
-	
+
+	// Cached physics values to restore when leaving ice
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Movement|Hazards")
 	float DefaultGroundFriction;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Movement|Hazards")
 	float DefaultBrakingDeceleration;
-	
+
 	// -------------------------------------------------------------------------
-	// EQUIPMENT & INTERACTION
+	// EQUIPMENT & INVENTORY
 	// -------------------------------------------------------------------------
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Equipment")
 	AToolBase* CurrentTool;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
 	TArray<AToolBase*> OwnedTools;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Interaction")
-	bool bIsLookingAtInteractable;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Interaction")
-	float InteractionDistance;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
+	bool bHasSpecialItem = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
+	ESpecialItem EquippedSpecialItem;
 	
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="AlphaExilemet|Equipment")
 	void Equip(AToolBase* NewTool);
@@ -185,35 +189,17 @@ public:
 	void Unequip();
 	virtual void Unequip_Implementation();
 	
+	// -------------------------------------------------------------------------
+	// INTERACTION & SCANNING
+	// -------------------------------------------------------------------------
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Interaction")
+	bool bIsLookingAtInteractable;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Interaction")
+	float InteractionDistance;
+	
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Interaction")
 	void TryInteract();
-	
-	// -------------------------------------------------------------------------
-	// SPECIAL ITEM INVENTORY
-	// -------------------------------------------------------------------------
-	
-	// True if the player is currently carrying a special item
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
-	bool bHasSpecialItem = false;
-
-	// Which specific special item are they holding?
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
-	ESpecialItem EquippedSpecialItem;
-
-	// -------------------------------------------------------------------------
-	// UPGRADE SYSTEM METHODS
-	// -------------------------------------------------------------------------
-	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Progression")
-	void UpgradeStat(EPlayerStat StatToUpgrade);
-
-	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Progression")
-	void RecalculateStats();
-	
-	// -------------------------------------------------------------------------
-	// SCANNER SYSTEM
-	// -------------------------------------------------------------------------
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Scanner")
-	USphereComponent* ScannerSphere;
 
 	UFUNCTION()
 	void OnScannerOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
@@ -222,19 +208,21 @@ public:
 	void OnScannerOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 	
 	// -------------------------------------------------------------------------
-	// DEATH
+	// DEATH & RESPAWN
 	// -------------------------------------------------------------------------
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Runtime")
 	bool bIsDead = false;
 
-	// Handles the physical death
 	void Die();
 
-	// Event to tell Blueprints to show the "You Died" UI panel
 	UFUNCTION(BlueprintImplementableEvent, Category = "AlphaExilemet|Events")
 	void BP_OnPlayerDied();
 
-	// Called from your UI button to bring Finn back
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Runtime")
 	void RespawnPlayer(FVector SpawnLocation, FRotator SpawnRotation);
+
+private:
+	// Cached reference
+	UPROPERTY()
+	ABaseCamp* BaseCampRef;
 };

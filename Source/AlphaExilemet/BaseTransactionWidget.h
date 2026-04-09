@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "AlphaExilemetTypes.h" // We bring in your FUpgradeCost struct!
+#include "AlphaExilemetTypes.h"
 #include "BaseTransactionWidget.generated.h"
 
 class AAlphaExilemetCharacter;

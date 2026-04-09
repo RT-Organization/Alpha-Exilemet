@@ -88,18 +88,21 @@ int32 ABaseCamp::GetShipSystemLevel(EShipSystem SystemID)
 	return 0; 
 }
 
-void ABaseCamp::UpgradeShipSystem(EShipSystem SystemID)
+void ABaseCamp::UpgradeShipSystem(EShipSystem SystemToUpgrade)
 {
-	if (ShipRepairLevels.Contains(SystemID))
+	// 1. If the system isn't in the map yet, add it at Level 0 so we can upgrade it!
+	if (!ShipRepairLevels.Contains(SystemToUpgrade))
 	{
-		ShipRepairLevels[SystemID]++; 
-	}
-	else
-	{
-		ShipRepairLevels.Add(SystemID, 1); 
+		ShipRepairLevels.Add(SystemToUpgrade, 0);
 	}
 
-	ApplyShipUpgrades(); 
+	// 2. Now safely upgrade it up to the max level of 5
+	if (ShipRepairLevels[SystemToUpgrade] < 5)
+	{
+		ShipRepairLevels[SystemToUpgrade]++;
+	}
+
+	ApplyShipUpgrades();
 }
 
 void ABaseCamp::ApplyShipUpgrades()

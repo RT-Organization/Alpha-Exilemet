@@ -8,10 +8,10 @@ class UBoxComponent;
 class USphereComponent;
 class UStaticMeshComponent;
 class USceneComponent;
+class UPrimitiveComponent;
 class AAlphaExilemetCharacter;
 class ABaseCamp;
 
-// The Dropdown Menu for the Editor
 UENUM(BlueprintType)
 enum class EHazardShape : uint8
 {
@@ -35,7 +35,9 @@ protected:
 public:	
 	virtual void Tick(float DeltaTime) override;
 
-	// --- COMPONENTS ---
+	// -------------------------------------------------------------------------
+	// COMPONENTS
+	// -------------------------------------------------------------------------
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hazard|Components")
 	USceneComponent* DefaultRoot;
 
@@ -48,28 +50,43 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hazard|Components")
 	UStaticMeshComponent* HazardMesh;
 
-	// --- HAZARD SETTINGS ---
-	// Choose the shape of the hazard area from the dropdown
+	// -------------------------------------------------------------------------
+	// HAZARD SETTINGS (DAMAGE & SLOW)
+	// -------------------------------------------------------------------------
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hazard|Settings")
 	EHazardShape HazardShape;
 
-	// How much damage this deals per second
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hazard|Settings")
 	float DamagePerSecond;
 
-	// 1.0 is normal speed. 0.5 is half speed.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hazard|Settings")
 	float SpeedMultiplier;
+	
+	// -------------------------------------------------------------------------
+	// HAZARD SETTINGS (ICE PHYSICS)
+	// -------------------------------------------------------------------------
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hazard|Settings|Ice")
+	bool bIsSlippery;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hazard|Settings|Ice", meta = (EditCondition = "bIsSlippery"))
+	float SlipperyFriction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hazard|Settings|Ice", meta = (EditCondition = "bIsSlippery"))
+	float SlipperyBraking;
 
 protected:
-	// --- RUNTIME VARIABLES ---
+	// -------------------------------------------------------------------------
+	// RUNTIME CACHE
+	// -------------------------------------------------------------------------
 	UPROPERTY()
 	AAlphaExilemetCharacter* OverlappingPlayer;
 
 	UPROPERTY()
 	ABaseCamp* BaseCampRef;
 
-	// --- OVERLAP EVENTS ---
+	// -------------------------------------------------------------------------
+	// EVENT HANDLERS
+	// -------------------------------------------------------------------------
 	UFUNCTION()
 	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
