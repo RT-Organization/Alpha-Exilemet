@@ -5,10 +5,20 @@
 #include "HazardVolume.generated.h"
 
 class UBoxComponent;
+class USphereComponent;
 class UStaticMeshComponent;
 class USceneComponent;
 class AAlphaExilemetCharacter;
 class ABaseCamp;
+
+// The Dropdown Menu for the Editor
+UENUM(BlueprintType)
+enum class EHazardShape : uint8
+{
+	Box            UMETA(DisplayName = "Box Volume"),
+	Sphere         UMETA(DisplayName = "Sphere Volume"),
+	CustomMesh     UMETA(DisplayName = "Custom Mesh (Must have collision)")
+};
 
 UCLASS()
 class ALPHAEXILEMET_API AHazardVolume : public AActor
@@ -33,12 +43,15 @@ public:
 	UBoxComponent* HazardZone;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hazard|Components")
+	USphereComponent* HazardSphere;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hazard|Components")
 	UStaticMeshComponent* HazardMesh;
 
 	// --- HAZARD SETTINGS ---
-	// Check this to use the Mesh's collision instead of the Box
+	// Choose the shape of the hazard area from the dropdown
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hazard|Settings")
-	bool bUseMeshForOverlap;
+	EHazardShape HazardShape;
 
 	// How much damage this deals per second
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hazard|Settings")

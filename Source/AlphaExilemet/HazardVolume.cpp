@@ -1,6 +1,8 @@
 #include "HazardVolume.h"
 #include "Components/BoxComponent.h"
+#include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/CapsuleComponent.h" // Needed to verify the player's physical body
 #include "AlphaExilemetCharacter.h"
 #include "BaseCamp.h"
 #include "Kismet/GameplayStatics.h"
@@ -10,26 +12,28 @@ AHazardVolume::AHazardVolume()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	// 1. Setup Root
 	DefaultRoot = CreateDefaultSubobject<USceneComponent>(TEXT("DefaultRoot"));
 	RootComponent = DefaultRoot;
 
-	// 2. Setup Box
 	HazardZone = CreateDefaultSubobject<UBoxComponent>(TEXT("HazardZone"));
 	HazardZone->SetupAttachment(RootComponent);
 	
-	// 3. Setup Mesh
+	HazardSphere = CreateDefaultSubobject<USphereComponent>(TEXT("HazardSphere"));
+	HazardSphere->SetupAttachment(RootComponent);
+
 	HazardMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HazardMesh"));
 	HazardMesh->SetupAttachment(RootComponent);
 
-	// Default hazard settings
 	DamagePerSecond = 5.0f;
 	SpeedMultiplier = 0.5f; 
-	bUseMeshForOverlap = false;
+	HazardShape = EHazardShape::Box; // Default to Box
 
-	// Bind Overlaps to BOTH. OnConstruction will manage which one actually fires.
+	// Bind Overlaps to ALL shapes. OnConstruction manages which one fires.
 	HazardZone->OnComponentBeginOverlap.AddDynamic(this, &AHazardVolume::OnOverlapBegin);
 	HazardZone->OnComponentEndOverlap.AddDynamic(this, &AHazardVolume::OnOverlapEnd);
+
+	HazardSphere->OnComponentBeginOverlap.AddDynamic(this, &AHazardVolume::OnOverlapBegin);
+	HazardSphere->OnComponentEndOverlap.AddDynamic(this, &AHazardVolume::OnOverlapEnd);
 
 	HazardMesh->OnComponentBeginOverlap.AddDynamic(this, &AHazardVolume::OnOverlapBegin);
 	HazardMesh->OnComponentEndOverlap.AddDynamic(this, &AHazardVolume::OnOverlapEnd);
@@ -39,25 +43,31 @@ void AHazardVolume::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
-	// This runs in the Editor. It toggles collision based on your checkbox.
-	if (bUseMeshForOverlap)
-	{
-		// Turn OFF the Box
-		HazardZone->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		
-		// Turn ON the Mesh as a trigger
-		HazardMesh->SetCollisionProfileName(TEXT("Trigger"));
-		HazardMesh->SetGenerateOverlapEvents(true);
-	}
-	else
-	{
-		// Turn ON the Box as a trigger
-		HazardZone->SetCollisionProfileName(TEXT("Trigger"));
-		HazardZone->SetGenerateOverlapEvents(true);
+	// 1. Turn OFF collision for all shapes first
+	HazardZone->SetCollisionProfileName(TEXT("NoCollision"));
+	HazardZone->SetGenerateOverlapEvents(false);
+	
+	HazardSphere->SetCollisionProfileName(TEXT("NoCollision"));
+	HazardSphere->SetGenerateOverlapEvents(false);
+	
+	HazardMesh->SetCollisionProfileName(TEXT("NoCollision"));
+	HazardMesh->SetGenerateOverlapEvents(false);
 
-		// Turn OFF the Mesh overlap (but keep it visible)
-		HazardMesh->SetCollisionProfileName(TEXT("NoCollision"));
-		HazardMesh->SetGenerateOverlapEvents(false);
+	// 2. Turn ON collision only for the selected shape
+	switch (HazardShape)
+	{
+		case EHazardShape::Box:
+			HazardZone->SetCollisionProfileName(TEXT("Trigger"));
+			HazardZone->SetGenerateOverlapEvents(true);
+			break;
+		case EHazardShape::Sphere:
+			HazardSphere->SetCollisionProfileName(TEXT("Trigger"));
+			HazardSphere->SetGenerateOverlapEvents(true);
+			break;
+		case EHazardShape::CustomMesh:
+			HazardMesh->SetCollisionProfileName(TEXT("Trigger"));
+			HazardMesh->SetGenerateOverlapEvents(true);
+			break;
 	}
 }
 
@@ -74,7 +84,6 @@ void AHazardVolume::Tick(float DeltaTime)
 	if (OverlappingPlayer && DamagePerSecond > 0.0f)
 	{
 		float DampenerMod = 1.0f;
-		
 		if (BaseCampRef)
 		{
 			int32 DampenerLevel = BaseCampRef->GetShipSystemLevel(EShipSystem::HazardDampener);
@@ -95,7 +104,11 @@ void AHazardVolume::Tick(float DeltaTime)
 
 void AHazardVolume::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (AAlphaExilemetCharacter* Player = Cast<AAlphaExilemetCharacter>(OtherActor))
+	AAlphaExilemetCharacter* Player = Cast<AAlphaExilemetCharacter>(OtherActor);
+	
+	// CRUCIAL FIX: Only trigger if the component overlapping is the actual physical Capsule!
+	// This prevents the giant invisible Scanner Sphere from triggering the swamp early.
+	if (Player && OtherComp == Player->GetCapsuleComponent())
 	{
 		OverlappingPlayer = Player;
 
@@ -108,17 +121,21 @@ void AHazardVolume::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 				DampenerMod = BaseCampRef->DampenerProgression.GetValueAtLevel(DampenerLevel);
 			}
 
+			// Apply the slow math to the BaseWalkSpeed so it stacks correctly
 			float ActualSpeedMultiplier = 1.0f - ((1.0f - SpeedMultiplier) * DampenerMod);
-			Player->GetCharacterMovement()->MaxWalkSpeed *= ActualSpeedMultiplier;
+			Player->GetCharacterMovement()->MaxWalkSpeed = Player->BaseWalkSpeed * ActualSpeedMultiplier;
 		}
 	}
 }
 
 void AHazardVolume::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	if (OtherActor == OverlappingPlayer)
+	AAlphaExilemetCharacter* Player = Cast<AAlphaExilemetCharacter>(OtherActor);
+	
+	// Only trigger the reset if the Capsule leaves
+	if (Player && OtherComp == Player->GetCapsuleComponent() && OtherActor == OverlappingPlayer)
 	{
-		OverlappingPlayer->RecalculateStats();
+		OverlappingPlayer->RecalculateStats(); // Resets speed back to normal
 		OverlappingPlayer = nullptr;
 	}
 }
