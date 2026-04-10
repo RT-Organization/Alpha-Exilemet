@@ -176,9 +176,7 @@ struct FResourceRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
 	EResourceType ResourceType = EResourceType::Solid;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
-	FText DisplayName;
-
+	// Popup text that tells the player where to find this resource in the world
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data", meta=(MultiLine="true"))
 	FText Description;
 
@@ -190,16 +188,17 @@ struct FResourceRow : public FTableRowBase
 	int32 SellValue = 0; 
 
 	// -------------------------------------------------------------------------
-	// SLIME / VACUUM SPECIFIC DATA
+	// VISUAL / COLOR SETTINGS
 	// -------------------------------------------------------------------------
 
-	// The primary/starting color for the Vacuum UI Progress Bar gradient
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Slime Settings", meta=(EditCondition="ResourceType == EResourceType::Liquid", EditConditionHides))
-	FLinearColor PrimaryColor = FLinearColor::Green;
+	// The primary color used for Solids, Gases, and the starting gradient for Slimes.
+	// Notice: No EditCondition here, so it shows up for ALL resource types.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Visuals")
+	FLinearColor PrimaryColor = FLinearColor::White;
 
 	// The secondary/ending color for the gradient. 
-	// (Note: To make a solid color, just make this exactly the same as the PrimaryColor)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Slime Settings", meta=(EditCondition="ResourceType == EResourceType::Liquid", EditConditionHides))
+	// Notice: EditCondition ensures this ONLY shows up for Liquid/Slime.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Visuals", meta=(EditCondition="ResourceType == EResourceType::Liquid", EditConditionHides))
 	FLinearColor SecondaryColor = FLinearColor::Green;
 };
 
