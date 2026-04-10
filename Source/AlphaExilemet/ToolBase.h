@@ -43,6 +43,17 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Tool")
 	UStaticMeshComponent* Mesh;
 	
+	
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool|Animations")
+	UAnimMontage* EquipAnimation;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool|Animations")
+	UAnimMontage* IdleAnimation;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool|Animations")
+	UAnimMontage* UseAnimation;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool|Animations")
+	UAnimMontage* HolsterAnimation;
+	
 	/* ----------------------------- */
 	/*         TOOL EVENTS           */
 	/* ----------------------------- */
