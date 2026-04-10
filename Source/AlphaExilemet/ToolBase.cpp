@@ -46,7 +46,7 @@ void AToolBase::StopUsing_Implementation()
 	// default empty
 }
 
-void AToolBase::ClearInventory()
+void AToolBase::ClearInventory(float RetainedFraction)
 {
 	// Default empty
 }

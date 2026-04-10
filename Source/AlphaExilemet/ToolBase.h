@@ -96,6 +96,6 @@ public:
 	/* ----------------------------- */
 	/* TOOL INVENTORY        */
 	/* ----------------------------- */
-	virtual void ClearInventory();
+	virtual void ClearInventory(float RetainedFraction = 0.0f);
 	
 };

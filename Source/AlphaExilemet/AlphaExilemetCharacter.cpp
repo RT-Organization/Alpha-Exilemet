@@ -236,6 +236,34 @@ void AAlphaExilemetCharacter::Unequip_Implementation()
 }
 
 // -------------------------------------------------------------------------
+// ECONOMY & SELLING
+// -------------------------------------------------------------------------
+
+int32 AAlphaExilemetCharacter::GetRefinedSellValue(int32 BaseTotalValue)
+{
+	float RefinerMultiplier = 1.0f;
+
+	if (BaseCampRef)
+	{
+		// 1. Get the current upgrade level
+		int32 RefinerLevel = BaseCampRef->GetShipSystemLevel(EShipSystem::MolecularRefiner);
+		
+		// 2. Get the multiplier (e.g., Level 0 = 1.0x, Level 2 = 1.2x)
+		RefinerMultiplier = BaseCampRef->RefinerProgression.GetValueAtLevel(RefinerLevel);
+	}
+
+	// 3. Multiply and round down to keep currency as a clean integer
+	return FMath::FloorToInt(BaseTotalValue * RefinerMultiplier);
+}
+
+void AAlphaExilemetCharacter::ProcessSale(int32 BaseTotalValue)
+{
+	// Automatically calculate the bonus and add it to the wallet
+	int32 FinalPayout = GetRefinedSellValue(BaseTotalValue);
+	Currency += FinalPayout;
+}
+
+// -------------------------------------------------------------------------
 // INTERACTION
 // -------------------------------------------------------------------------
 void AAlphaExilemetCharacter::TryInteract()
@@ -337,22 +365,43 @@ void AAlphaExilemetCharacter::Die()
 		PC->DisableInput(PC);
 	}
 	
-	GetCharacterMovement()->StopMovementImmediately(); 
-	GetCharacterMovement()->DisableMovement();         
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();        
 
 	FirstPersonCameraComponent->SetActive(false);
 	DeathCameraComponent->SetActive(true);
 	DeathCameraBoom->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepWorldTransform);
 
-	for (AToolBase* Tool : OwnedTools)
+	// --- 1. EMERGENCY MATTER RETRIEVER LOGIC ---
+	float RetainedFraction = 0.0f;
+	
+	if (BaseCampRef)
 	{
-		if (Tool) Tool->ClearInventory();
+		// Fetch the current upgrade level for the Retriever
+		int32 RetrieverLevel = BaseCampRef->GetShipSystemLevel(EShipSystem::MatterRetriever);
+		
+		// This returns values like 0.0, 5.0, 10.0 based on your Progression setup
+		float RetainedPercentage = BaseCampRef->RetrieverProgression.GetValueAtLevel(RetrieverLevel);
+		
+		// Convert to a normalized decimal (e.g., 25.0 becomes 0.25f)
+		RetainedFraction = FMath::Clamp(RetainedPercentage / 100.0f, 0.0f, 1.0f);
 	}
 
-	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
-	GetMesh()->SetSimulatePhysics(true);
+	// --- 2. APPLY TO TOOLS ---
+	for (AToolBase* Tool : OwnedTools)
+	{
+		if (Tool) 
+		{
+			// Note: You must update AToolBase to accept this float! 
+			// Inside the tool, drop (1.0f - RetainedFraction) amount of the stored inventory.
+			Tool->ClearInventory(RetainedFraction); 
+		}
+	}
 
-	BP_OnPlayerDied();
+	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll")); //
+	GetMesh()->SetSimulatePhysics(true); //
+
+	BP_OnPlayerDied(); //
 }
 
 void AAlphaExilemetCharacter::RespawnPlayer(FVector SpawnLocation, FRotator SpawnRotation)

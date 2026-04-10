@@ -64,7 +64,25 @@ float AGasRodTool::GetMaxCapacity() const
 /* ----------------------------- */
 /* INVENTORY			         */
 /* ----------------------------- */
-void AGasRodTool::ClearInventory()
+void AGasRodTool::ClearInventory(float RetainedFraction)
 {
-	HarvestedGas.Empty();
+	if (RetainedFraction <= 0.0f)
+	{
+		HarvestedGas.Empty();
+		return;
+	}
+
+	for (auto It = HarvestedGas.CreateIterator(); It; ++It)
+	{
+		int32 RetainedAmount = FMath::FloorToInt(It.Value() * RetainedFraction);
+		
+		if (RetainedAmount > 0)
+		{
+			It.Value() = RetainedAmount;
+		}
+		else
+		{
+			It.RemoveCurrent();
+		}
+	}
 }

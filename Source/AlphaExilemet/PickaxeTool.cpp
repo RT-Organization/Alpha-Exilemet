@@ -165,7 +165,28 @@ float APickaxeTool::GetMaxCapacity() const
 /* ----------------------------- */
 /* INVENTORY			         */
 /* ----------------------------- */
-void APickaxeTool::ClearInventory()
+/* ----------------------------- */
+/* INVENTORY                     */
+/* ----------------------------- */
+void APickaxeTool::ClearInventory(float RetainedFraction)
 {
-	HarvestedOres.Empty();
+	if (RetainedFraction <= 0.0f)
+	{
+		HarvestedOres.Empty();
+		return;
+	}
+
+	for (auto It = HarvestedOres.CreateIterator(); It; ++It)
+	{
+		int32 RetainedAmount = FMath::FloorToInt(It.Value() * RetainedFraction);
+		
+		if (RetainedAmount > 0)
+		{
+			It.Value() = RetainedAmount;
+		}
+		else
+		{
+			It.RemoveCurrent();
+		}
+	}
 }

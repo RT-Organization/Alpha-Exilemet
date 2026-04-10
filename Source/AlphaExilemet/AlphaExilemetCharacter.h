@@ -190,6 +190,18 @@ public:
 	virtual void Unequip_Implementation();
 	
 	// -------------------------------------------------------------------------
+	// ECONOMY & SELLING
+	// -------------------------------------------------------------------------
+
+	// Calculates the final payout with the Molecular Refiner multiplier applied
+	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Economy")
+	int32 GetRefinedSellValue(int32 BaseTotalValue);
+
+	// Adds the refined currency to the player's wallet
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Economy")
+	void ProcessSale(int32 BaseTotalValue);
+	
+	// -------------------------------------------------------------------------
 	// INTERACTION & SCANNING
 	// -------------------------------------------------------------------------
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Interaction")

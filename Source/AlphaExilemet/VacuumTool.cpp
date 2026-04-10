@@ -150,9 +150,27 @@ float AVacuumTool::GetFillPercent() const
 	return GetCurrentStoredSlime() / GetMaxCapacity();
 }
 
-void AVacuumTool::ClearInventory()
+void AVacuumTool::ClearInventory(float RetainedFraction)
 {
-	HarvestedSlime.Empty();
+	if (RetainedFraction <= 0.0f)
+	{
+		HarvestedSlime.Empty();
+		return;
+	}
+
+	for (auto It = HarvestedSlime.CreateIterator(); It; ++It)
+	{
+		int32 RetainedAmount = FMath::FloorToInt(It.Value() * RetainedFraction);
+		
+		if (RetainedAmount > 0)
+		{
+			It.Value() = RetainedAmount;
+		}
+		else
+		{
+			It.RemoveCurrent();
+		}
+	}
 }
 
 /* ----------------------------- */

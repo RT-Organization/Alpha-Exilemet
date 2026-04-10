@@ -59,7 +59,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="Pickaxe|Inventory")
 	TMap<FName, int32> HarvestedOres;
 	
-	virtual void ClearInventory() override;
+	virtual void ClearInventory(float RetainedFraction = 0.0f) override;
 	
 	/* ----------------------------- */
 	/* MINING                        */
