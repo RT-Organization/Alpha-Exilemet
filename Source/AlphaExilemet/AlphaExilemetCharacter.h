@@ -16,6 +16,8 @@ class ABaseCamp;
 // -------------------------------------------------------------------------
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStatChangedSignature, float, CurrentValue, float, MaxValue);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToolEquippedSignature, AToolBase*, NewTool);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryUpdatedSignature);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToolWieldedSignature, int32, ActiveSlotIndex);
 
 UCLASS()
 class ALPHAEXILEMET_API AAlphaExilemetCharacter : public ACharacter
@@ -169,25 +171,50 @@ public:
 	// -------------------------------------------------------------------------
 	// EQUIPMENT & INVENTORY
 	// -------------------------------------------------------------------------
+
+	// --- Variables ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Equipment")
 	AToolBase* CurrentTool;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
 	TArray<AToolBase*> OwnedTools;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Inventory")
+	int32 ActiveToolIndex = -1;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AlphaExilemet|Inventory")
+	int32 MaxInventorySize = 3;
+
+	// --- Special Items ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
 	bool bHasSpecialItem = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
 	ESpecialItem EquippedSpecialItem;
-	
-	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="AlphaExilemet|Equipment")
-	void Equip(AToolBase* NewTool);
-	virtual void Equip_Implementation(AToolBase* NewTool);
 
-	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="AlphaExilemet|Equipment")
-	void Unequip();
-	virtual void Unequip_Implementation();
+	// --- Core Inventory Functions ---
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
+	void AddToolToInventory(AToolBase* NewTool);
+
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
+	void WieldTool(int32 Index);
+
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
+	void HolsterCurrentTool();
+
+	// --- Animation Helper Functions ---
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
+	void SnapCurrentToolToHand();
+
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
+	void SnapCurrentToolToHolster();
+
+	// --- Delegates/Events ---
+	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Events")
+	FOnInventoryUpdatedSignature OnInventoryUpdated;
+
+	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Events")
+	FOnToolWieldedSignature OnToolWielded;
 	
 	// -------------------------------------------------------------------------
 	// ECONOMY & SELLING

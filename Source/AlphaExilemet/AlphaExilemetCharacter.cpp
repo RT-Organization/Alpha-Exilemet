@@ -213,25 +213,67 @@ void AAlphaExilemetCharacter::SetupPlayerInputComponent(UInputComponent* PlayerI
 // -------------------------------------------------------------------------
 // EQUIPMENT
 // -------------------------------------------------------------------------
-void AAlphaExilemetCharacter::Equip_Implementation(AToolBase* NewTool)
+void AAlphaExilemetCharacter::AddToolToInventory(AToolBase* NewTool)
 {
-	if (CurrentTool) Unequip();
-	
-	if (NewTool)
+	if (!NewTool || OwnedTools.Contains(NewTool)) return;
+
+	if (OwnedTools.Num() < MaxInventorySize)
 	{
-		CurrentTool = NewTool;
+		OwnedTools.Add(NewTool);
 		NewTool->SetOwner(this);
-		NewTool->OnEquip();
-		OnToolEquipped.Broadcast(NewTool);
+
+		// Immediately attach to the specific Holster socket on the player mesh
+		NewTool->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, NewTool->HolsterSocketName);
+
+		OnInventoryUpdated.Broadcast();
 	}
 }
 
-void AAlphaExilemetCharacter::Unequip_Implementation()
+void AAlphaExilemetCharacter::WieldTool(int32 Index)
+{
+	if (!OwnedTools.IsValidIndex(Index)) return;
+	if (Index == ActiveToolIndex) return; 
+
+	HolsterCurrentTool();
+
+	ActiveToolIndex = Index;
+	CurrentTool = OwnedTools[Index];
+
+	// TEMP finchè non vengono aggiunti eventi di Notify
+	SnapCurrentToolToHand(); 
+	
+	CurrentTool->OnEquip(); 
+	OnToolEquipped.Broadcast(CurrentTool); 
+	OnToolWielded.Broadcast(ActiveToolIndex); 
+}
+
+void AAlphaExilemetCharacter::HolsterCurrentTool()
 {
 	if (CurrentTool)
 	{
 		CurrentTool->OnUnequip();
+		
+		// TEMP finchè non vengono aggiunti eventi di Notify
+		SnapCurrentToolToHolster();
+		
 		CurrentTool = nullptr;
+		ActiveToolIndex = -1;
+	}
+}
+
+void AAlphaExilemetCharacter::SnapCurrentToolToHand()
+{
+	if (CurrentTool)
+	{
+		CurrentTool->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("weapon_r"));
+	}
+}
+
+void AAlphaExilemetCharacter::SnapCurrentToolToHolster()
+{
+	if (CurrentTool)
+	{
+		CurrentTool->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, CurrentTool->HolsterSocketName);
 	}
 }
 

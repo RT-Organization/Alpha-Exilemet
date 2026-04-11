@@ -64,11 +64,17 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category="Tool")
 	void OnUnequip();
 	
-	
+	// Called when the item is spawned from the shop
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Tool|Spawning")
+	void MaterializeItem();
+	virtual void MaterializeItem_Implementation();
 	
 	/* ----------------------------- */
 	/*         TOOL INPUT            */
 	/* ----------------------------- */
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tool|Equipment")
+	FName HolsterSocketName = "spine_03";
 	
 	// Press input
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Tool")

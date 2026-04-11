@@ -21,18 +21,13 @@ void AToolBase::BeginPlay()
 	
 }
 
+// In ToolBase.cpp
 void AToolBase::Interact_Implementation(AAlphaExilemetCharacter* Interactor)
 {
 	if (Interactor)
 	{
-		//Add tool to the player's inventory
-		Interactor->OwnedTools.AddUnique(this);
-
-		//Equip the tool
-		Interactor->Equip(this);
-
-		//Disable world collision so the player doesn't trip over it or interact with it again
 		SetActorEnableCollision(false);
+		Interactor->AddToolToInventory(this);
 	}
 }
 
@@ -76,4 +71,9 @@ void AToolBase::UpgradeStat(FName StatName)
 	{
 		ToolUpgradeLevels.Add(StatName, 1);
 	}
+}
+
+void AToolBase::MaterializeItem_Implementation()
+{
+	// Default empty, we will design the effect in Blueprint
 }
