@@ -7,11 +7,15 @@
 // Sets default values
 AToolBase::AToolBase()
 {
- 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = false;
 	
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	RootComponent = Mesh;
+	
+	// Force the default state of the tool to ALWAYS block the interaction laser
+	Mesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+	Mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 }
 
 // Called when the game starts or when spawned
@@ -76,4 +80,72 @@ void AToolBase::UpgradeStat(FName StatName)
 void AToolBase::MaterializeItem_Implementation()
 {
 	// Default empty, we will design the effect in Blueprint
+}
+
+void AToolBase::StartMaterialize()
+{
+	if (!MaterializeMaterial) return;
+	
+	if (Mesh)
+	{
+		Mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+	}
+
+	TArray<UMeshComponent*> MeshComponents;
+	GetComponents<UMeshComponent>(MeshComponents);
+
+	for (UMeshComponent* Comp : MeshComponents)
+	{
+		if (Comp)
+		{
+			FMaterialCache MatCache;
+			// Save every material slot on this specific mesh piece
+			for (int32 i = 0; i < Comp->GetNumMaterials(); ++i)
+			{
+				MatCache.Materials.Add(Comp->GetMaterial(i));
+				Comp->SetMaterial(i, MaterializeMaterial);
+			}
+			CachedMaterials.Add(Comp, MatCache);
+		}
+	}
+}
+
+void AToolBase::UpdateMaterialize(float Alpha)
+{
+	TArray<UMeshComponent*> MeshComponents;
+	GetComponents<UMeshComponent>(MeshComponents);
+	
+	for (UMeshComponent* Comp : MeshComponents)
+	{
+		if (Comp)
+		{
+			// Updates the "Disolve" parameter on all pieces simultaneously
+			Comp->SetScalarParameterValueOnMaterials(FName("Disolve"), Alpha);
+		}
+	}
+}
+
+void AToolBase::FinishMaterialize()
+{
+	for (auto& Pair : CachedMaterials)
+	{
+		UMeshComponent* Comp = Pair.Key;
+		FMaterialCache& MatCache = Pair.Value;
+
+		if (Comp)
+		{
+			// Restore every material slot to its exact original texture
+			for (int32 i = 0; i < MatCache.Materials.Num(); ++i)
+			{
+				Comp->SetMaterial(i, MatCache.Materials[i]);
+			}
+		}
+	}
+	// Clear the memory
+	CachedMaterials.Empty();
+	
+	if (Mesh)
+	{
+		Mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	}
 }

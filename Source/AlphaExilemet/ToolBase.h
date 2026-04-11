@@ -7,6 +7,16 @@
 #include "Interactable.h"
 #include "ToolBase.generated.h"
 
+// --- NEW STRUCT TO FIX UHT ERROR ---
+USTRUCT(BlueprintType)
+struct FMaterialCache
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<UMaterialInterface*> Materials;
+};
+
 UCLASS()
 class ALPHAEXILEMET_API AToolBase : public AActor, public IInteractable
 {
@@ -25,7 +35,7 @@ public:
 	virtual void Interact_Implementation(class AAlphaExilemetCharacter* Interactor) override;
 	
 	/* ----------------------------- */
-	/*            TOOL INFO          */
+	/* TOOL INFO          */
 	/* ----------------------------- */
 	
 	// Icon shown in GUI
@@ -44,7 +54,6 @@ public:
 	UStaticMeshComponent* Mesh;
 	
 	
-	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool|Animations")
 	UAnimMontage* EquipAnimation;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool|Animations")
@@ -55,7 +64,7 @@ public:
 	UAnimMontage* HolsterAnimation;
 	
 	/* ----------------------------- */
-	/*         TOOL EVENTS           */
+	/* TOOL EVENTS           */
 	/* ----------------------------- */
 
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category="Tool")
@@ -69,8 +78,25 @@ public:
 	void MaterializeItem();
 	virtual void MaterializeItem_Implementation();
 	
+	// The material to apply while spawning (e.g., M_Disolve)
+	UPROPERTY(EditDefaultsOnly, Category="Tool|Spawning")
+	UMaterialInterface* MaterializeMaterial;
+
+	// Internal cache to remember the original textures of every mesh piece
+	UPROPERTY()
+	TMap<UMeshComponent*, FMaterialCache> CachedMaterials;
+
+	UFUNCTION(BlueprintCallable, Category="Tool|Spawning")
+	void StartMaterialize();
+
+	UFUNCTION(BlueprintCallable, Category="Tool|Spawning")
+	void UpdateMaterialize(float Alpha);
+
+	UFUNCTION(BlueprintCallable, Category="Tool|Spawning")
+	void FinishMaterialize();
+	
 	/* ----------------------------- */
-	/*         TOOL INPUT            */
+	/* TOOL INPUT            */
 	/* ----------------------------- */
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tool|Equipment")

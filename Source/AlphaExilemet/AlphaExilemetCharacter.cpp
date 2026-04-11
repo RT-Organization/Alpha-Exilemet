@@ -258,6 +258,8 @@ void AAlphaExilemetCharacter::HolsterCurrentTool()
 		
 		CurrentTool = nullptr;
 		ActiveToolIndex = -1;
+		
+		OnToolWielded.Broadcast(ActiveToolIndex);
 	}
 }
 
