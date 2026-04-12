@@ -140,5 +140,11 @@ public:
 	/* TOOL INVENTORY        */
 	/* ----------------------------- */
 	virtual void ClearInventory(float RetainedFraction = 0.0f);
-	
+
+	/* ----------------------------- */
+	/* SAVE & LOAD                   */
+	/* ----------------------------- */
+	// Virtual so child tools can override and save their specific inventories
+	virtual void SaveToolData(class UAlphaExilemetSaveGame* SaveObject);
+	virtual void LoadToolData(class UAlphaExilemetSaveGame* SaveObject);
 };

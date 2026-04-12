@@ -25,20 +25,7 @@ protected:
 	
 public:
 	/* ----------------------------- */
-	/* STATS                         */
-	/* ----------------------------- */
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
-	int32 StrengthLevel = 0;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
-	int32 CapacityLevel = 0;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Pickaxe|Stats")
-	int32 LuckLevel = 0;
-
-	/* ----------------------------- */
-	/* PROGRESSION MATH			     */
+	/* PROGRESSION MATH              */
 	/* ----------------------------- */
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Pickaxe|Progression")
@@ -49,8 +36,6 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Pickaxe|Progression")
 	FStatProgression LuckProgression;
-	
-	virtual void UpgradeStat(FName StatName) override;
 	
 	/* ----------------------------- */
 	/* INVENTORY                     */
@@ -74,7 +59,7 @@ public:
 	FTimerHandle MiningTimer;
 
 	/* ----------------------------- */
-	/* COWORKER GAMEPLAY GETTERS     */
+	/* GAMEPLAY GETTERS              */
 	/* ----------------------------- */
 	
 	UFUNCTION(BlueprintPure, Category="Pickaxe|Stats")
@@ -88,9 +73,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Pickaxe|Inventory")
 	bool TryAddOre(const FDataTableRowHandle& ResourceID, int32 Quantity = 1);
 	
+	/* ----------------------------- */
+	/* SAVE & LOAD                   */
+	/* ----------------------------- */
+	virtual void SaveToolData(class UAlphaExilemetSaveGame* SaveObject) override;
+	virtual void LoadToolData(class UAlphaExilemetSaveGame* SaveObject) override;
+	
 protected:
 	/* ----------------------------- */
-	/* INTERNAL LOGIC				 */
+	/* INTERNAL LOGIC                */
 	/* ----------------------------- */
 	
 	UPROPERTY()

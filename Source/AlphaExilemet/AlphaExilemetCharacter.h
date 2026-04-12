@@ -259,6 +259,19 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Runtime")
 	void RespawnPlayer(FVector SpawnLocation, FRotator SpawnRotation);
+	
+	public:
+	// -------------------------------------------------------------------------
+	// SAVE & LOAD (DATA EXTRACTION)
+	// -------------------------------------------------------------------------
+
+	// Extracts the tool upgrades and inventories from the player's tools and pushes them to the Save Object
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
+	void SaveToolDataToSaveObject(class UAlphaExilemetSaveGame* SaveObject);
+
+	// Injects the tool upgrades and inventories from the Save Object back into the player's tools
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
+	void LoadToolDataFromSaveObject(class UAlphaExilemetSaveGame* SaveObject);
 
 private:
 	// Cached reference

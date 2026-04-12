@@ -5,6 +5,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "TimerManager.h"
+#include "AlphaExilemetSaveGame.h"
 
 AVacuumTool::AVacuumTool()
 {
@@ -177,27 +178,36 @@ void AVacuumTool::ClearInventory(float RetainedFraction)
 /* STATS                         */
 /* ----------------------------- */
 
-void AVacuumTool::UpgradeStat(FName StatName)
-{
-	Super::UpgradeStat(StatName);
-
-	if (StatName == "Vacuum_Speed") SpeedLevel++;
-	else if (StatName == "Vacuum_Capacity") CapacityLevel++;
-	else if (StatName == "Vacuum_Distance") RangeLevel++;
-}
-
 float AVacuumTool::GetAbsorptionInterval() const
 {
-	float Rate = SpeedProgression.GetValueAtLevel(SpeedLevel);
+	int32 Level = ToolUpgradeLevels.FindRef(FName("Vacuum_Speed"));
+	float Rate = SpeedProgression.GetValueAtLevel(Level);
 	return FMath::Max(0.01f, 1.0f / Rate);
 }
 
 float AVacuumTool::GetVacuumRange() const
 {
-	return RangeProgression.GetValueAtLevel(RangeLevel);
+	int32 Level = ToolUpgradeLevels.FindRef(FName("Vacuum_Distance"));
+	return RangeProgression.GetValueAtLevel(Level);
 }
 
 float AVacuumTool::GetMaxCapacity() const
 {
-	return CapacityProgression.GetValueAtLevel(CapacityLevel);
+	int32 Level = ToolUpgradeLevels.FindRef(FName("Vacuum_Capacity"));
+	return CapacityProgression.GetValueAtLevel(Level);
+}
+
+/* ----------------------------- */
+/* SAVE & LOAD                   */
+/* ----------------------------- */
+void AVacuumTool::SaveToolData(UAlphaExilemetSaveGame* SaveObject)
+{
+	Super::SaveToolData(SaveObject);
+	if (SaveObject) SaveObject->SavedHarvestedSlime = HarvestedSlime;
+}
+
+void AVacuumTool::LoadToolData(UAlphaExilemetSaveGame* SaveObject)
+{
+	Super::LoadToolData(SaveObject);
+	if (SaveObject) HarvestedSlime = SaveObject->SavedHarvestedSlime;
 }

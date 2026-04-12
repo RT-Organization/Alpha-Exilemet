@@ -1,4 +1,6 @@
 #include "AlphaExilemetCharacter.h"
+
+#include "AlphaExilemetSaveGame.h"
 #include "ToolBase.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -442,10 +444,10 @@ void AAlphaExilemetCharacter::Die()
 		}
 	}
 
-	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll")); //
-	GetMesh()->SetSimulatePhysics(true); //
+	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
+	GetMesh()->SetSimulatePhysics(true);
 
-	BP_OnPlayerDied(); //
+	BP_OnPlayerDied();
 }
 
 void AAlphaExilemetCharacter::RespawnPlayer(FVector SpawnLocation, FRotator SpawnRotation)
@@ -476,4 +478,71 @@ void AAlphaExilemetCharacter::RespawnPlayer(FVector SpawnLocation, FRotator Spaw
 	}
 	
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking); 
+}
+
+// -------------------------------------------------------------------------
+// SAVE & LOAD (DATA EXTRACTION)
+// -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+// SAVE & LOAD (DATA EXTRACTION)
+// -------------------------------------------------------------------------
+void AAlphaExilemetCharacter::SaveToolDataToSaveObject(UAlphaExilemetSaveGame* SaveObject)
+{
+	if (!SaveObject) return;
+	
+	// Clear old data
+	SaveObject->SavedToolUpgrades.Empty();
+	SaveObject->SavedOwnedToolClasses.Empty();
+	
+	// Save the currently equipped tool slot
+	SaveObject->SavedActiveToolIndex = ActiveToolIndex;
+
+	// Loop through tools: Save their Class, then tell them to save their specific data
+	for (AToolBase* Tool : OwnedTools)
+	{
+		if (Tool)
+		{
+			SaveObject->SavedOwnedToolClasses.Add(Tool->GetClass());
+			Tool->SaveToolData(SaveObject);
+		}
+	}
+}
+
+void AAlphaExilemetCharacter::LoadToolDataFromSaveObject(UAlphaExilemetSaveGame* SaveObject)
+{
+	if (!SaveObject) return;
+
+	// 1. Destroy current tools to prevent duplicates if the player loads a game twice
+	for (AToolBase* OldTool : OwnedTools)
+	{
+		if (OldTool) OldTool->Destroy();
+	}
+	OwnedTools.Empty();
+	CurrentTool = nullptr;
+	ActiveToolIndex = -1;
+
+	// 2. Re-spawn the saved tools and inject their data
+	for (TSubclassOf<AToolBase> ToolClass : SaveObject->SavedOwnedToolClasses)
+	{
+		if (ToolClass)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			
+			// Spawn the tool back into the world
+			if (AToolBase* SpawnedTool = GetWorld()->SpawnActor<AToolBase>(ToolClass, GetActorLocation(), GetActorRotation(), SpawnParams))
+			{
+				SpawnedTool->SetActorEnableCollision(false);
+				
+				AddToolToInventory(SpawnedTool);       // Put it in the player's pocket/mesh
+				SpawnedTool->LoadToolData(SaveObject); // Inject the saved upgrades and inventory!
+			}
+		}
+	}
+
+	// 3. Automatically equip the tool they were holding when they saved
+	if (SaveObject->SavedActiveToolIndex >= 0 && SaveObject->SavedActiveToolIndex < OwnedTools.Num())
+	{
+		WieldTool(SaveObject->SavedActiveToolIndex);
+	}
 }

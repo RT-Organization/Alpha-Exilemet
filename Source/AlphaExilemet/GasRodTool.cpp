@@ -1,4 +1,5 @@
 #include "GasRodTool.h"
+#include "AlphaExilemetSaveGame.h"
 
 AGasRodTool::AGasRodTool()
 {
@@ -32,37 +33,29 @@ void AGasRodTool::StopUsing_Implementation()
 }
 
 /* ----------------------------- */
-/* STAT UPGRADES         */
+/* STAT UPGRADES                 */
 /* ----------------------------- */
-
-void AGasRodTool::UpgradeStat(FName StatName)
-{
-	// 1. Call the parent function so ToolBase saves the level internally
-	Super::UpgradeStat(StatName);
-
-	// 2. Increment specific levels
-	if (StatName == "Rod_AbsSpeed") AbsSpeedLevel++;
-	else if (StatName == "Rod_Distance") RangeLevel++;
-	else if (StatName == "Rod_Quantity") CapacityLevel++;
-}
 
 float AGasRodTool::GetAbsorptionSpeed() const
 {
-	return AbsSpeedProgression.GetValueAtLevel(AbsSpeedLevel);
+	int32 Level = ToolUpgradeLevels.FindRef(FName("Rod_AbsSpeed"));
+	return AbsSpeedProgression.GetValueAtLevel(Level);
 }
 
 float AGasRodTool::GetRodRange() const
 {
-	return RangeProgression.GetValueAtLevel(RangeLevel);
+	int32 Level = ToolUpgradeLevels.FindRef(FName("Rod_Distance"));
+	return RangeProgression.GetValueAtLevel(Level);
 }
 
 float AGasRodTool::GetMaxCapacity() const
 {
-	return CapacityProgression.GetValueAtLevel(CapacityLevel);
+	int32 Level = ToolUpgradeLevels.FindRef(FName("Rod_Quantity"));
+	return CapacityProgression.GetValueAtLevel(Level);
 }
 
 /* ----------------------------- */
-/* INVENTORY			         */
+/* INVENTORY                     */
 /* ----------------------------- */
 void AGasRodTool::ClearInventory(float RetainedFraction)
 {
@@ -85,4 +78,19 @@ void AGasRodTool::ClearInventory(float RetainedFraction)
 			It.RemoveCurrent();
 		}
 	}
+}
+
+/* ----------------------------- */
+/* SAVE & LOAD                   */
+/* ----------------------------- */
+void AGasRodTool::SaveToolData(UAlphaExilemetSaveGame* SaveObject)
+{
+	Super::SaveToolData(SaveObject);
+	if (SaveObject) SaveObject->SavedHarvestedGas = HarvestedGas;
+}
+
+void AGasRodTool::LoadToolData(UAlphaExilemetSaveGame* SaveObject)
+{
+	Super::LoadToolData(SaveObject);
+	if (SaveObject) HarvestedGas = SaveObject->SavedHarvestedGas;
 }

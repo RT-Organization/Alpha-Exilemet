@@ -2,6 +2,7 @@
 
 
 #include "ToolBase.h"
+#include "AlphaExilemetSaveGame.h"
 #include "AlphaExilemetCharacter.h"
 
 // Sets default values
@@ -148,4 +149,19 @@ void AToolBase::FinishMaterialize()
 	{
 		Mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	}
+}
+
+/* ----------------------------- */
+/* SAVE & LOAD                   */
+/* ----------------------------- */
+void AToolBase::SaveToolData(UAlphaExilemetSaveGame* SaveObject)
+{
+	if (!SaveObject) return;
+	SaveObject->SavedToolUpgrades.Append(ToolUpgradeLevels);
+}
+
+void AToolBase::LoadToolData(UAlphaExilemetSaveGame* SaveObject)
+{
+	if (!SaveObject) return;
+	ToolUpgradeLevels = SaveObject->SavedToolUpgrades;
 }

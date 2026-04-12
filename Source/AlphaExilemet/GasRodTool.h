@@ -21,20 +21,7 @@ protected:
 
 public:
 	/* ----------------------------- */
-	/* STATS						 */
-	/* ----------------------------- */
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="GasRod|Stats")
-	int32 AbsSpeedLevel = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="GasRod|Stats")
-	int32 RangeLevel = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="GasRod|Stats")
-	int32 CapacityLevel = 0;
-
-	/* ----------------------------- */
-	/* PROGRESSION MATH				 */
+	/* PROGRESSION MATH              */
 	/* ----------------------------- */
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Progression")
@@ -45,11 +32,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Progression")
 	FStatProgression CapacityProgression;
-
-	virtual void UpgradeStat(FName StatName) override;
 	
 	/* ----------------------------- */
-	/* INVENTORY					 */
+	/* INVENTORY                     */
 	/* ----------------------------- */
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="GasRod|Inventory")
@@ -58,7 +43,7 @@ public:
 	virtual void ClearInventory(float RetainedFraction = 0.0f) override;
 	
 	/* ----------------------------- */
-	/* COWORKER GAMEPLAY GETTERS     */
+	/* GAMEPLAY GETTERS              */
 	/* ----------------------------- */
 
 	UFUNCTION(BlueprintPure, Category="GasRod|Stats")
@@ -68,4 +53,10 @@ public:
 	float GetRodRange() const;
 
 	virtual float GetMaxCapacity() const override;
+	
+	/* ----------------------------- */
+	/* SAVE & LOAD                   */
+	/* ----------------------------- */
+	virtual void SaveToolData(class UAlphaExilemetSaveGame* SaveObject) override;
+	virtual void LoadToolData(class UAlphaExilemetSaveGame* SaveObject) override;
 };

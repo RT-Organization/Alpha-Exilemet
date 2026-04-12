@@ -24,19 +24,6 @@ protected:
 
 public:
 	/* ----------------------------- */
-	/* STATS                         */
-	/* ----------------------------- */
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Vacuum|Stats")
-	int32 SpeedLevel = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Vacuum|Stats")
-	int32 RangeLevel = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Vacuum|Stats")
-	int32 CapacityLevel = 0;
-
-	/* ----------------------------- */
 	/* PROGRESSION                   */
 	/* ----------------------------- */
 
@@ -48,8 +35,6 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Vacuum|Progression")
 	FStatProgression CapacityProgression;
-
-	virtual void UpgradeStat(FName StatName) override;
 
 	/* ----------------------------- */
 	/* INVENTORY                     */
@@ -93,6 +78,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Vacuum|Inventory")
 	float GetFillPercent() const;
+	
+	/* ----------------------------- */
+	/* SAVE & LOAD                   */
+	/* ----------------------------- */
+	virtual void SaveToolData(class UAlphaExilemetSaveGame* SaveObject) override;
+	virtual void LoadToolData(class UAlphaExilemetSaveGame* SaveObject) override;
 
 protected:
 	/* ----------------------------- */

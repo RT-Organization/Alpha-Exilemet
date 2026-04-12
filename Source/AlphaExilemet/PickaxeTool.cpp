@@ -1,11 +1,12 @@
 #include "PickaxeTool.h"
 #include "ResourceBase.h"
-#include  "SolidResource.h"
+#include "SolidResource.h"
 
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "TimerManager.h"
+#include "AlphaExilemetSaveGame.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
@@ -30,7 +31,7 @@ void APickaxeTool::BeginPlay()
 }
 
 /* ----------------------------- */
-/* INPUT               */
+/* INPUT                         */
 /* ----------------------------- */
 
 void APickaxeTool::StartUsing_Implementation()
@@ -43,7 +44,7 @@ void APickaxeTool::StopUsing_Implementation()
 }
 
 /* ----------------------------- */
-/* MINING CONTROL         */
+/* MINING CONTROL                */
 /* ----------------------------- */
 
 void APickaxeTool::StartMiningTimer()
@@ -95,7 +96,7 @@ void APickaxeTool::PerformMiningTrace()
 }
 
 /* ----------------------------- */
-/* DAMAGE LOGIC          */
+/* DAMAGE LOGIC                  */
 /* ----------------------------- */
 
 void APickaxeTool::ApplyMiningDamage(AActor* Target)
@@ -135,36 +136,27 @@ bool APickaxeTool::TryAddOre(const FDataTableRowHandle& ResourceID, int32 Quanti
 }
 
 /* ----------------------------- */
-/* STAT UPGRADES         */
+/* STAT UPGRADES                 */
 /* ----------------------------- */
-
-void APickaxeTool::UpgradeStat(FName StatName)
-{
-	Super::UpgradeStat(StatName);
-
-	if (StatName == "Pickaxe_Strength") StrengthLevel++;
-	else if (StatName == "Pickaxe_Capacity") CapacityLevel++;
-	else if (StatName == "Pickaxe_Luck") LuckLevel++;
-}
 
 float APickaxeTool::GetMiningStrength() const
 {
-	return StrengthProgression.GetValueAtLevel(StrengthLevel);
+	int32 Level = ToolUpgradeLevels.FindRef(FName("Pickaxe_Strength"));
+	return StrengthProgression.GetValueAtLevel(Level);
 }
 
 float APickaxeTool::GetMiningLuck() const
 {
-	return LuckProgression.GetValueAtLevel(LuckLevel);
+	int32 Level = ToolUpgradeLevels.FindRef(FName("Pickaxe_Luck"));
+	return LuckProgression.GetValueAtLevel(Level);
 }
 
 float APickaxeTool::GetMaxCapacity() const
 {
-	return CapacityProgression.GetValueAtLevel(CapacityLevel);
+	int32 Level = ToolUpgradeLevels.FindRef(FName("Pickaxe_Capacity"));
+	return CapacityProgression.GetValueAtLevel(Level);
 }
 
-/* ----------------------------- */
-/* INVENTORY			         */
-/* ----------------------------- */
 /* ----------------------------- */
 /* INVENTORY                     */
 /* ----------------------------- */
@@ -189,4 +181,19 @@ void APickaxeTool::ClearInventory(float RetainedFraction)
 			It.RemoveCurrent();
 		}
 	}
+}
+
+/* ----------------------------- */
+/* SAVE & LOAD                   */
+/* ----------------------------- */
+void APickaxeTool::SaveToolData(UAlphaExilemetSaveGame* SaveObject)
+{
+	Super::SaveToolData(SaveObject);
+	if (SaveObject) SaveObject->SavedHarvestedOres = HarvestedOres;
+}
+
+void APickaxeTool::LoadToolData(UAlphaExilemetSaveGame* SaveObject)
+{
+	Super::LoadToolData(SaveObject);
+	if (SaveObject) HarvestedOres = SaveObject->SavedHarvestedOres;
 }
