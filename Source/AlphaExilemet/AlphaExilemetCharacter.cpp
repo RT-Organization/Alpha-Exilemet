@@ -405,11 +405,6 @@ void AAlphaExilemetCharacter::OnScannerOverlapEnd(UPrimitiveComponent* Overlappe
 void AAlphaExilemetCharacter::Die()
 {
 	bIsDead = true;
-
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	{
-		PC->DisableInput(PC);
-	}
 	
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->DisableMovement();        
@@ -480,9 +475,6 @@ void AAlphaExilemetCharacter::RespawnPlayer(FVector SpawnLocation, FRotator Spaw
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking); 
 }
 
-// -------------------------------------------------------------------------
-// SAVE & LOAD (DATA EXTRACTION)
-// -------------------------------------------------------------------------
 // -------------------------------------------------------------------------
 // SAVE & LOAD (DATA EXTRACTION)
 // -------------------------------------------------------------------------
