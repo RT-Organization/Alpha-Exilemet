@@ -122,6 +122,8 @@ void AHazardVolume::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 	if (Player && OtherComp == Player->GetCapsuleComponent())
 	{
 		OverlappingPlayer = Player;
+    
+		Player->SurfaceOverride = HazardSurfaceType;
 		
 		float DampenerMod = 1.0f;
 		if (BaseCampRef)
@@ -151,6 +153,8 @@ void AHazardVolume::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* Ot
 	
 	if (Player && OtherComp == Player->GetCapsuleComponent() && OtherActor == OverlappingPlayer)
 	{
+		OverlappingPlayer->SurfaceOverride = SurfaceType_Default;
+		
 		// Reset Speed Multiplier
 		OverlappingPlayer->HazardSpeedMultiplier = 1.0f;
 		

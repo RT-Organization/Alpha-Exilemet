@@ -92,4 +92,10 @@ protected:
 
 	UFUNCTION()
 	void OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+
+	// -------------------------------------------------------------------------
+	// HAZARD SETTINGS (AUDIO)
+	// -------------------------------------------------------------------------
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hazard|Settings")
+	TEnumAsByte<EPhysicalSurface> HazardSurfaceType;
 };

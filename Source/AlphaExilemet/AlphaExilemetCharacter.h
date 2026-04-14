@@ -273,6 +273,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void LoadToolDataFromSaveObject(class UAlphaExilemetSaveGame* SaveObject);
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Audio")
+	TEnumAsByte<EPhysicalSurface> SurfaceOverride = SurfaceType_Default;
 private:
 	// Cached reference
 	UPROPERTY()
