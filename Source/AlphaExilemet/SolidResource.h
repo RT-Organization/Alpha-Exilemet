@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "DroppedSolidResource.h"
+#include "PickaxeTool.h"
 #include "ResourceBase.h"
 #include "SolidResource.generated.h"
 
@@ -28,7 +29,12 @@ public:
 	// Sets default values for this actor's properties
 	ASolidResource();
 	
+	UFUNCTION(BlueprintCallable, Category="Solid|Mining")
+	void SetLastPickaxe(APickaxeTool* Tool);
 protected:
+	UPROPERTY()
+	class APickaxeTool* LastPickaxe;
+	
 	virtual void UpdateScale() override;
 	
 	virtual void DepleteResource() override;

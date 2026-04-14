@@ -76,7 +76,7 @@ void AResourceBase::UpdateScale()
 	
 	HealthRatio = FMath::Clamp(HealthRatio, 0.1f, 1.f);
 	
-	SetActorScale3D(FVector(HealthRatio));
+	SetActorScale3D(InitialScale * HealthRatio);
 }
 
 void AResourceBase::SetOutline(bool bEnable)

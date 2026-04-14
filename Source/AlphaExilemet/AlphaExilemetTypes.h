@@ -186,7 +186,16 @@ struct FResourceRow : public FTableRowBase
 	// How many credits this gives when clicked "Sell" in the Terminal
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
 	int32 SellValue = 0; 
-
+	
+	// -------------------------------------------------------------------------
+	// DROPS
+	// -------------------------------------------------------------------------
+	
+	// Max number of drops this resource can yield at Pickaxe_Luck = 0.
+	// Final max drops = MaxDrops + Pickaxe_Luck bonus
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Drops", meta=(EditCondition="ResourceType == EResourceType::Solid", EditConditionHides))
+	int32 MaxDrops = 1;
+	
 	// -------------------------------------------------------------------------
 	// VISUAL / COLOR SETTINGS
 	// -------------------------------------------------------------------------

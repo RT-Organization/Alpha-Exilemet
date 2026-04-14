@@ -108,6 +108,7 @@ void APickaxeTool::ApplyMiningDamage(AActor* Target)
 	
 	float Damage = GetMiningStrength(); 
 	
+	Solid->SetLastPickaxe(this);
 	bool wasDepleted = Solid->ApplyResourceDamage(Damage);
 }
 

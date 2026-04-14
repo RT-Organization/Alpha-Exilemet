@@ -3,6 +3,7 @@
 
 #include "SolidResource.h"
 
+#include "AlphaExilemetTypes.h"
 #include "DroppedSolidResource.h"
 
 ASolidResource::ASolidResource()
@@ -13,6 +14,11 @@ ASolidResource::ASolidResource()
 	OreMesh->SetCollisionProfileName(TEXT("BlockAll"));
 }
 
+void ASolidResource::SetLastPickaxe(APickaxeTool* Tool)
+{
+	LastPickaxe = Tool;
+}
+
 void ASolidResource::UpdateScale()
 {
 	float HealthRatio = Health / InitialHealth;
@@ -21,14 +27,30 @@ void ASolidResource::UpdateScale()
 	
 	float ScaledValue = FMath::Lerp(0.5f, 1.0f, HealthRatio);
 
-	SetActorScale3D(FVector(ScaledValue));
+	SetActorScale3D(ScaledValue * InitialScale);
 }
 
 void ASolidResource::DepleteResource()
 {
 	Super::DepleteResource();
 	
-	SpawnDroppedResource();
+	const FResourceRow* Row = ResourceID.GetRow<FResourceRow>(TEXT("SolidResource"));
+	if (!Row) return;
+	
+	int32 BaseMaxDrops = Row->MaxDrops;
+	int32 LuckBonus = 0;
+	if (LastPickaxe)
+	{
+		LuckBonus = FMath::FloorToInt(LastPickaxe->GetMiningLuck());
+	}
+	int32 MaxDropsWithLuck = BaseMaxDrops + LuckBonus;
+	int32 DropCount = FMath::RandRange(1, MaxDropsWithLuck);
+	for (int32 i = 0; i < DropCount; i++)
+	{
+		SpawnDroppedResource();
+	}
+	
+	SetLastPickaxe(nullptr);
 }
 
 void ASolidResource::SpawnDroppedResource()
