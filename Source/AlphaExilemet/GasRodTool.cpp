@@ -4,14 +4,19 @@
 AGasRodTool::AGasRodTool()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	
-	CapacityProgression.BaseValue = 3.0f;
+
+	// Capacity: slots for Gas spheres — keep low so costs in Gas can stay low too
+	CapacityProgression.BaseValue       = 1.0f;
 	CapacityProgression.AdditivePerLevel = 1.0f;
 
-	AbsSpeedProgression.BaseValue = 10.0f;
+	// Abs.Speed: damage per second dealt to the Gas resource while absorbing.
+	// Harvest time (s) = Resource.Health / DamagePerSecond
+	// GAS0 (50 HP) @ base: 50 / 10 = 5 s  — matches original design intent
+	AbsSpeedProgression.BaseValue       = 10.0f;
 	AbsSpeedProgression.AdditivePerLevel = 2.0f; 
 
-	RangeProgression.BaseValue = 1000.0f;
+	// Range: maximum distance to a Gas vent the rod can lock onto
+	RangeProgression.BaseValue       = 1000.0f;
 	RangeProgression.AdditivePerLevel = 200.0f;  
 }
 
@@ -23,19 +28,24 @@ void AGasRodTool::BeginPlay()
 void AGasRodTool::StartUsing_Implementation()
 {
 	Super::StartUsing_Implementation();
-	// TODO: Implement casting logic to capture Gas spheres
+	// TODO: Cast the rod toward the Gas sphere and begin the absorption loop.
+	//       On each 1-second tick call: GasSphere->ApplyResourceDamage(GetAbsorptionSpeed())
+	//       Stop the loop (and succeed) when ApplyResourceDamage returns true (depleted).
+	//       If the player moves out of range or releases input, abort and reset.
 }
 
 void AGasRodTool::StopUsing_Implementation()
 {
 	Super::StopUsing_Implementation();
-	// TODO: Implement reeling in logic
+	// TODO: Cancel any in-flight absorption timer / tween and reset the gas sphere.
 }
 
 /* ----------------------------- */
-/* STAT UPGRADES                 */
+/* STAT GETTERS                  */
 /* ----------------------------- */
 
+// Returns damage per second at the current upgrade level.
+// Harvest time (s) = Resource.Health / GetAbsorptionSpeed()
 float AGasRodTool::GetAbsorptionSpeed() const
 {
 	int32 Level = ToolUpgradeLevels.FindRef(FName("Rod_AbsSpeed"));
@@ -57,6 +67,7 @@ float AGasRodTool::GetMaxCapacity() const
 /* ----------------------------- */
 /* INVENTORY                     */
 /* ----------------------------- */
+
 void AGasRodTool::ClearInventory(float RetainedFraction)
 {
 	if (RetainedFraction <= 0.0f)
@@ -68,21 +79,15 @@ void AGasRodTool::ClearInventory(float RetainedFraction)
 	for (auto It = HarvestedGas.CreateIterator(); It; ++It)
 	{
 		int32 RetainedAmount = FMath::FloorToInt(It.Value() * RetainedFraction);
-		
-		if (RetainedAmount > 0)
-		{
-			It.Value() = RetainedAmount;
-		}
-		else
-		{
-			It.RemoveCurrent();
-		}
+		if (RetainedAmount > 0) It.Value() = RetainedAmount;
+		else                    It.RemoveCurrent();
 	}
 }
 
 /* ----------------------------- */
 /* SAVE & LOAD                   */
 /* ----------------------------- */
+
 void AGasRodTool::SaveToolData(UAlphaExilemetSaveGame* SaveObject)
 {
 	Super::SaveToolData(SaveObject);

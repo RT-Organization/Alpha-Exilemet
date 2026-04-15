@@ -23,13 +23,13 @@ public:
 	/* ----------------------------- */
 	/* PROGRESSION MATH              */
 	/* ----------------------------- */
-
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Progression")
 	FStatProgression AbsSpeedProgression;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Progression")
 	FStatProgression RangeProgression;
-
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Progression")
 	FStatProgression CapacityProgression;
 	
@@ -43,9 +43,9 @@ public:
 	virtual void ClearInventory(float RetainedFraction = 0.0f) override;
 	
 	/* ----------------------------- */
-	/* GAMEPLAY GETTERS              */
+	/* STAT GETTERS                  */
 	/* ----------------------------- */
-
+	
 	UFUNCTION(BlueprintPure, Category="GasRod|Stats")
 	float GetAbsorptionSpeed() const;
 

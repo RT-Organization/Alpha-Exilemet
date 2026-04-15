@@ -11,13 +11,17 @@ AVacuumTool::AVacuumTool()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	CapacityProgression.BaseValue = 100.0f;
+	// Capacity: how many total "volume units" the tank holds
+	CapacityProgression.BaseValue      = 100.0f;
 	CapacityProgression.AdditivePerLevel = 50.0f;
 
-	SpeedProgression.BaseValue = 15.0f;
-	SpeedProgression.AdditivePerLevel = 5.0f;
+	// Speed: damage dealt to the Liquid resource each tick
+	// Harvest time (s) = Resource.Health * TickInterval / DamagePerTick
+	SpeedProgression.BaseValue       = 5.0f;
+	SpeedProgression.AdditivePerLevel = 3.0f;
 
-	RangeProgression.BaseValue = 600.0f;
+	// Range: how far the vacuum ray reaches
+	RangeProgression.BaseValue       = 600.0f;
 	RangeProgression.AdditivePerLevel = 100.0f;
 }
 
@@ -48,6 +52,7 @@ void AVacuumTool::StopUsing_Implementation()
 
 void AVacuumTool::StartVacuumTimer()
 {
+	// The timer fires at the fixed TickInterval — only the damage per tick scales
 	GetWorldTimerManager().SetTimer(
 		VacuumTimer,
 		this,
@@ -70,7 +75,7 @@ void AVacuumTool::PerformVacuumTrace()
 {
 	if (GetCurrentStoredSlime() >= FMath::FloorToInt(GetMaxCapacity()))
 	{
-		// Optional: trigger "tank full" feedback
+		// Tank full — optional: trigger "tank full" feedback here
 		return;
 	}
 
@@ -86,9 +91,9 @@ void AVacuumTool::PerformVacuumTrace()
 	APlayerCameraManager* CameraManager = PC->PlayerCameraManager;
 	if (!CameraManager) return;
 
-	FVector Start = CameraManager->GetCameraLocation();
+	FVector Start   = CameraManager->GetCameraLocation();
 	FVector Forward = CameraManager->GetCameraRotation().Vector();
-	FVector End = Start + Forward * GetVacuumRange();
+	FVector End     = Start + Forward * GetVacuumRange();
 
 	FHitResult Hit;
 	FCollisionQueryParams Params;
@@ -103,7 +108,8 @@ void AVacuumTool::PerformVacuumTrace()
 	
 	OnLiquidHitting(Liquid);
 
-	float Extracted = Liquid->DrainLiquid(AbsorptionDamagePerTick);
+	// Deal damage based on current Speed upgrade level
+	float Extracted = Liquid->DrainLiquid(GetAbsorptionDamagePerTick());
 
 	AbsorbSlime(Liquid->GetLiquidType(), Extracted);
 }
@@ -117,13 +123,11 @@ void AVacuumTool::AbsorbSlime(FName SlimeType, float Amount)
 	if (Amount <= 0.f) return;
 
 	float MaxCapacity = GetMaxCapacity();
-	float Current = GetCurrentStoredSlime();
-
-	float Available = MaxCapacity - Current;
+	float Current     = GetCurrentStoredSlime();
+	float Available   = MaxCapacity - Current;
 	if (Available <= 0.f) return;
 
-	float Actual = FMath::Min(Amount, Available);
-
+	float Actual    = FMath::Min(Amount, Available);
 	int32 IntAmount = FMath::FloorToInt(Actual);
 	if (IntAmount <= 0) return;
 
@@ -137,13 +141,9 @@ void AVacuumTool::AbsorbSlime(FName SlimeType, float Amount)
 float AVacuumTool::GetCurrentStoredSlime() const
 {
 	int32 Total = 0;
-
 	for (const auto& Pair : HarvestedSlime)
-	{
 		Total += Pair.Value;
-	}
-
-	return (float)Total;
+	return static_cast<float>(Total);
 }
 
 float AVacuumTool::GetFillPercent() const
@@ -162,15 +162,8 @@ void AVacuumTool::ClearInventory(float RetainedFraction)
 	for (auto It = HarvestedSlime.CreateIterator(); It; ++It)
 	{
 		int32 RetainedAmount = FMath::FloorToInt(It.Value() * RetainedFraction);
-		
-		if (RetainedAmount > 0)
-		{
-			It.Value() = RetainedAmount;
-		}
-		else
-		{
-			It.RemoveCurrent();
-		}
+		if (RetainedAmount > 0) It.Value() = RetainedAmount;
+		else                    It.RemoveCurrent();
 	}
 }
 
@@ -180,9 +173,13 @@ void AVacuumTool::ClearInventory(float RetainedFraction)
 
 float AVacuumTool::GetAbsorptionInterval() const
 {
+	return FMath::Max(0.001f, TickInterval);
+}
+
+float AVacuumTool::GetAbsorptionDamagePerTick() const
+{
 	int32 Level = ToolUpgradeLevels.FindRef(FName("Vacuum_Speed"));
-	float Rate = SpeedProgression.GetValueAtLevel(Level);
-	return FMath::Max(0.01f, 1.0f / Rate);
+	return SpeedProgression.GetValueAtLevel(Level);
 }
 
 float AVacuumTool::GetVacuumRange() const

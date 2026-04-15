@@ -26,7 +26,6 @@ public:
 	/* ----------------------------- */
 	/* PROGRESSION                   */
 	/* ----------------------------- */
-
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Vacuum|Progression")
 	FStatProgression SpeedProgression;
 
@@ -35,6 +34,12 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Vacuum|Progression")
 	FStatProgression CapacityProgression;
+
+	/* ----------------------------- */
+	/* VACUUM CONSTANTS              */
+	/* ----------------------------- */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Vacuum|Constants")
+	float TickInterval = 0.1f;
 
 	/* ----------------------------- */
 	/* INVENTORY                     */
@@ -46,11 +51,8 @@ public:
 	virtual void ClearInventory(float RetainedFraction = 0.0f) override;
 
 	/* ----------------------------- */
-	/* VACUUM                        */
+	/* VACUUM INTERNALS              */
 	/* ----------------------------- */
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Vacuum|Vacuum")
-	float AbsorptionDamagePerTick = 5.f;
 
 	FTimerHandle VacuumTimer;
 	
@@ -62,11 +64,14 @@ public:
 	void OnLiquidHitting(ALiquidResource* Liquid);
 	
 	/* ----------------------------- */
-	/* GETTERS                       */
+	/* STAT GETTERS                  */
 	/* ----------------------------- */
-
+	
 	UFUNCTION(BlueprintPure, Category="Vacuum|Stats")
 	float GetAbsorptionInterval() const;
+	
+	UFUNCTION(BlueprintPure, Category="Vacuum|Stats")
+	float GetAbsorptionDamagePerTick() const;
 
 	UFUNCTION(BlueprintPure, Category="Vacuum|Stats")
 	float GetVacuumRange() const;

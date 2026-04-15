@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "ResourceBase.h"
+#include "AlphaExilemetTypes.h"
 #include "TimerManager.h"
 
 AResourceBase::AResourceBase()
@@ -15,9 +16,41 @@ void AResourceBase::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	// Save initial values
+	// Load stats from DT_Resources
+	if (ResourceID.DataTable && !ResourceID.RowName.IsNone())
+	{
+		const FResourceRow* Row = ResourceID.DataTable->FindRow<FResourceRow>(
+			ResourceID.RowName,
+			TEXT("AResourceBase::BeginPlay — loading resource stats from DataTable")
+		);
+
+		if (Row)
+		{
+			// Override whatever the Blueprint default says
+			Health= Row->Health;
+			CurrencyValuePerUnit = static_cast<float>(Row->SellValue);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("AResourceBase [%s]: Row '%s' not found in DataTable '%s'. Using Blueprint defaults."),
+				*GetName(),
+				*ResourceID.RowName.ToString(),
+				*ResourceID.DataTable->GetName()
+			);
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("AResourceBase [%s]: ResourceID is not set. Using Blueprint defaults for Health / SellValue."),
+			*GetName()
+		);
+	}
+
+	// Cache initial values AFTER loading from the DataTable
 	InitialHealth = Health;
-	InitialScale = GetActorScale3D();
+	InitialScale  = GetActorScale3D();
 }
 
 bool AResourceBase::ApplyResourceDamage(float DamageAmount)
@@ -62,8 +95,6 @@ void AResourceBase::RegenerateResource()
 
 void AResourceBase::DepleteResource()
 {
-	// Health = 0 // doesn't matter
-	
 	bIsDepleted = true;
 		
 	SetActorHiddenInGame(true);

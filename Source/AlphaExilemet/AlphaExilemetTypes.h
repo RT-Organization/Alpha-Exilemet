@@ -87,7 +87,6 @@ UENUM(BlueprintType)
 enum class ESpecialItem : uint8
 {
 	TeleportBeacon
-	// You can add more here later!
 };
 
 // Defines the physical state of a resource to know WHICH tool can harvest it
@@ -102,7 +101,6 @@ enum class EResourceType : uint8
 // -------------------------------------------------------------------------
 // BASE COST STRUCT
 // -------------------------------------------------------------------------
-// This defines the cost for ONE level of an upgrade.
 USTRUCT(BlueprintType)
 struct FUpgradeCost
 {
@@ -111,8 +109,8 @@ struct FUpgradeCost
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Upgrade Cost")
 	int32 CurrencyCost = 0;
 
-	// The Name is the Row Name from your Resource Table (e.g., "MAT00", "SL01")
-	// The int32 is the amount of that resource required.
+	// Key = Row Name from your Resource Table (e.g. "MAT00", "SL01")
+	// Value = amount of that resource required
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Upgrade Cost")
 	TMap<FName, int32> RequiredMaterials;
 };
@@ -139,7 +137,7 @@ struct FCharacterUpgradeRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Upgrade")
 	UTexture2D* Icon = nullptr;
 
-	// Array of costs. Index 0 = Cost to reach Level 1. Index 4 = Cost to reach Level 5.
+	// Index 0 = Cost to reach Level 1, Index 4 = Cost to reach Level 5
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Upgrade")
 	TArray<FUpgradeCost> CostPerLevel;
 };
@@ -153,20 +151,19 @@ struct FToolUpgradeRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Upgrade")
 	EToolType ToolToUpgrade = EToolType::Pickaxe;
 
-	// Identifies the specific stat internally (e.g., "Force", "Speed")
+	// Internal stat identifier (e.g. "Pickaxe_Strength", "Vacuum_Speed")
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Upgrade")
 	FName StatID; 
 
-	// The visual name for the stat (e.g., "Absorption Speed")
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Upgrade")
 	FText DisplayName;
 
-	// Array of costs. Index 0 = Level 1, Index 4 = Level 5.
+	// Index 0 = Level 1, Index 4 = Level 5
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Upgrade")
 	TArray<FUpgradeCost> CostPerLevel;
 };
 
-// 3. RESOURCES TABLE (For the Sell Terminal & General Info)
+// 3. RESOURCES TABLE
 USTRUCT(BlueprintType)
 struct FResourceRow : public FTableRowBase
 {
@@ -176,42 +173,58 @@ struct FResourceRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
 	EResourceType ResourceType = EResourceType::Solid;
 
-	// Popup text that tells the player where to find this resource in the world
+	// -------------------------------------------------------------------------
+	// HEALTH
+	// -------------------------------------------------------------------------
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
+	float Health = 100.f;
+
+	// -------------------------------------------------------------------------
+	// ECONOMY
+	// -------------------------------------------------------------------------
+
+	// How many credits this gives when sold at the Terminal.
+	// Also loaded into ResourceBase::CurrencyValuePerUnit at runtime.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
+	int32 SellValue = 0;
+
+	// -------------------------------------------------------------------------
+	// PRESENTATION
+	// -------------------------------------------------------------------------
+
+	// Popup text shown to the player (where to find this resource)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data", meta=(MultiLine="true"))
 	FText Description;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
 	UTexture2D* Icon = nullptr;
 
-	// How many credits this gives when clicked "Sell" in the Terminal
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
-	int32 SellValue = 0; 
-	
 	// -------------------------------------------------------------------------
-	// DROPS
+	// DROPS (Solid / Pickaxe only)
 	// -------------------------------------------------------------------------
-	
-	// Max number of drops this resource can yield at Pickaxe_Luck = 0.
-	// Final max drops = MaxDrops + Pickaxe_Luck bonus
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Drops", meta=(EditCondition="ResourceType == EResourceType::Solid", EditConditionHides))
+
+	// Max number of drops at Pickaxe_Luck = 0.
+	// Final max = MaxDrops + Pickaxe_Luck bonus.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Drops",
+		meta=(EditCondition="ResourceType == EResourceType::Solid", EditConditionHides))
 	int32 MaxDrops = 1;
 	
 	// -------------------------------------------------------------------------
 	// VISUAL / COLOR SETTINGS
 	// -------------------------------------------------------------------------
 
-	// The primary color used for Solids, Gases, and the starting gradient for Slimes.
-	// Notice: No EditCondition here, so it shows up for ALL resource types.
+	// Primary color for Solids and Gases; starting gradient color for Slimes.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Visuals")
 	FLinearColor PrimaryColor = FLinearColor::White;
 
-	// The secondary/ending color for the gradient. 
-	// Notice: EditCondition ensures this ONLY shows up for Liquid/Slime.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Visuals", meta=(EditCondition="ResourceType == EResourceType::Liquid", EditConditionHides))
+	// Secondary/ending gradient color. Only shown for Liquid/Slime resources.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Visuals",
+		meta=(EditCondition="ResourceType == EResourceType::Liquid", EditConditionHides))
 	FLinearColor SecondaryColor = FLinearColor::Green;
 };
 
-// 4. SHIP REPAIR TABLE (For the Ship Terminal)
+// 4. SHIP REPAIR TABLE
 USTRUCT(BlueprintType)
 struct FShipRepairRow : public FTableRowBase
 {
@@ -229,31 +242,30 @@ struct FShipRepairRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ship Repair")
 	UTexture2D* Icon = nullptr;
 
-	// The length of this array determines the Max Level (e.g., 3 for Hull, 6 for Thrusters)
+	// Array length = max level (e.g. 5 entries = upgradeable to Level 5)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ship Repair")
 	TArray<FUpgradeCost> CostPerLevel;
 };
 
-//5. SHOP TABLE
+// 5. SHOP TABLE
 USTRUCT(BlueprintType)
 struct FShopItemRow : public FTableRowBase
 {
 	GENERATED_BODY()
 
-	// Tells the UI if this goes in the top row (Tools) or bottom list (Special)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data")
 	EShopItemCategory Category = EShopItemCategory::Tool;
 
-	// If Category is 'Tool', the UI will read this ID
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data", meta=(EditCondition="Category == EShopItemCategory::Tool", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data",
+		meta=(EditCondition="Category == EShopItemCategory::Tool", EditConditionHides))
 	EToolType ToolID = EToolType::Pickaxe;
 
-	// ADD THIS: The actual Blueprint class to spawn when the player buys this tool
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data", meta=(EditCondition="Category == EShopItemCategory::Tool", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data",
+		meta=(EditCondition="Category == EShopItemCategory::Tool", EditConditionHides))
 	TSubclassOf<class AToolBase> ToolClass;
 
-	// If Category is 'SpecialItem', the UI will read this ID
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data", meta=(EditCondition="Category == EShopItemCategory::SpecialItem", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data",
+		meta=(EditCondition="Category == EShopItemCategory::SpecialItem", EditConditionHides))
 	ESpecialItem SpecialItemID = ESpecialItem::TeleportBeacon;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data")
@@ -265,8 +277,6 @@ struct FShopItemRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data")
 	UTexture2D* Icon = nullptr;
 
-	// Notice: Just an int32! No materials needed for the shop.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shop Data")
 	int32 CurrencyCost = 0; 
 };
-
