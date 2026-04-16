@@ -37,6 +37,18 @@
 		{
 			"Name": "PCG",
 			"Enabled": true
+		},
+		{
+			"Name": "NaniteAssemblyEditorUtils",
+			"Enabled": true
+		},
+		{
+			"Name": "PCGNaniteAssembliesInterop",
+			"Enabled": true
+		},
+		{
+			"Name": "ProceduralVegetationEditor",
+			"Enabled": true
 		}
 	]
 }
