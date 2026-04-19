@@ -137,9 +137,17 @@ public:
 	virtual void UpgradeStat(FName StatName);
 
 	/* ----------------------------- */
-	/* TOOL INVENTORY        */
+	/* TOOL INVENTORY                */
 	/* ----------------------------- */
 	virtual void ClearInventory(float RetainedFraction = 0.0f);
+
+	// NEW: Removes a specific amount of a resource and returns how much was actually removed.
+	UFUNCTION(BlueprintCallable, Category="Tool|Inventory")
+	virtual int32 RemoveResource(FName InResourceID, int32 Amount);
+
+	// NEW: Gets the current amount of a specific resource.
+	UFUNCTION(BlueprintPure, Category="Tool|Inventory")
+	virtual int32 GetResourceAmount(FName InResourceID) const;
 
 	/* ----------------------------- */
 	/* SAVE & LOAD                   */

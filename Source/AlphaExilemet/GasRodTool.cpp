@@ -84,6 +84,52 @@ void AGasRodTool::ClearInventory(float RetainedFraction)
 	}
 }
 
+bool AGasRodTool::TryAddGas(const FDataTableRowHandle& ResourceID, int32 Quantity)
+{
+	if (Quantity <= 0) return false;
+	
+	FName Key = ResourceID.RowName;
+	
+	if (HarvestedGas.Contains(Key))
+	{
+		HarvestedGas[Key] += Quantity;
+		return true;
+	}
+	
+	int32 MaxSlots = FMath::FloorToInt(GetMaxCapacity());
+	int32 CurrentSlots = HarvestedGas.Num();
+	
+	if (CurrentSlots >= MaxSlots)
+	{
+		return false; // Inventory full
+	}
+	
+	HarvestedGas.Add(Key, Quantity);
+	return true;
+}
+
+int32 AGasRodTool::RemoveResource(FName InResourceID, int32 Amount)
+{
+	if (Amount <= 0 || !HarvestedGas.Contains(InResourceID)) return 0;
+
+	int32 CurrentAmount = HarvestedGas[InResourceID];
+	int32 AmountToRemove = FMath::Min(CurrentAmount, Amount);
+
+	HarvestedGas[InResourceID] -= AmountToRemove;
+
+	if (HarvestedGas[InResourceID] <= 0)
+	{
+		HarvestedGas.Remove(InResourceID);
+	}
+
+	return AmountToRemove;
+}
+
+int32 AGasRodTool::GetResourceAmount(FName InResourceID) const
+{
+	return HarvestedGas.Contains(InResourceID) ? HarvestedGas[InResourceID] : 0;
+}
+
 /* ----------------------------- */
 /* SAVE & LOAD                   */
 /* ----------------------------- */

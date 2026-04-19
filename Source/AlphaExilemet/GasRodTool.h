@@ -42,6 +42,12 @@ public:
 	
 	virtual void ClearInventory(float RetainedFraction = 0.0f) override;
 	
+	UFUNCTION(BlueprintCallable, Category="GasRod|Inventory")
+	bool TryAddGas(const FDataTableRowHandle& ResourceID, int32 Quantity = 1);
+
+	virtual int32 RemoveResource(FName InResourceID, int32 Amount) override;
+	virtual int32 GetResourceAmount(FName InResourceID) const override;
+	
 	/* ----------------------------- */
 	/* STAT GETTERS                  */
 	/* ----------------------------- */

@@ -184,6 +184,29 @@ void APickaxeTool::ClearInventory(float RetainedFraction)
 	}
 }
 
+int32 APickaxeTool::RemoveResource(FName InResourceID, int32 Amount)
+{
+	if (Amount <= 0 || !HarvestedOres.Contains(InResourceID)) return 0;
+
+	int32 CurrentAmount = HarvestedOres[InResourceID];
+	int32 AmountToRemove = FMath::Min(CurrentAmount, Amount);
+
+	HarvestedOres[InResourceID] -= AmountToRemove;
+
+	// Clean up the map if we hit 0
+	if (HarvestedOres[InResourceID] <= 0)
+	{
+		HarvestedOres.Remove(InResourceID);
+	}
+
+	return AmountToRemove;
+}
+
+int32 APickaxeTool::GetResourceAmount(FName InResourceID) const
+{
+	return HarvestedOres.Contains(InResourceID) ? HarvestedOres[InResourceID] : 0;
+}
+
 /* ----------------------------- */
 /* SAVE & LOAD                   */
 /* ----------------------------- */

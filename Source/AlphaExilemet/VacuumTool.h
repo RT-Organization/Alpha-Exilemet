@@ -50,6 +50,9 @@ public:
 	
 	virtual void ClearInventory(float RetainedFraction = 0.0f) override;
 
+	virtual int32 RemoveResource(FName InResourceID, int32 Amount) override;
+	virtual int32 GetResourceAmount(FName InResourceID) const override;
+	
 	/* ----------------------------- */
 	/* VACUUM INTERNALS              */
 	/* ----------------------------- */

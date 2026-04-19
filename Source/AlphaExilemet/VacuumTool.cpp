@@ -167,6 +167,28 @@ void AVacuumTool::ClearInventory(float RetainedFraction)
 	}
 }
 
+int32 AVacuumTool::RemoveResource(FName InResourceID, int32 Amount)
+{
+	if (Amount <= 0 || !HarvestedSlime.Contains(InResourceID)) return 0;
+
+	int32 CurrentAmount = HarvestedSlime[InResourceID];
+	int32 AmountToRemove = FMath::Min(CurrentAmount, Amount);
+
+	HarvestedSlime[InResourceID] -= AmountToRemove;
+
+	if (HarvestedSlime[InResourceID] <= 0)
+	{
+		HarvestedSlime.Remove(InResourceID);
+	}
+
+	return AmountToRemove;
+}
+
+int32 AVacuumTool::GetResourceAmount(FName InResourceID) const
+{
+	return HarvestedSlime.Contains(InResourceID) ? HarvestedSlime[InResourceID] : 0;
+}
+
 /* ----------------------------- */
 /* STATS                         */
 /* ----------------------------- */

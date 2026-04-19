@@ -51,6 +51,16 @@ void AToolBase::ClearInventory(float RetainedFraction)
 	// Default empty
 }
 
+int32 AToolBase::RemoveResource(FName InResourceID, int32 Amount)
+{
+	return 0; // Default empty
+}
+
+int32 AToolBase::GetResourceAmount(FName InResourceID) const
+{
+	return 0; // Default empty
+}
+
 int32 AToolBase::GetToolStatLevel(FName StatName)
 {
 	if (ToolUpgradeLevels.Contains(StatName))
