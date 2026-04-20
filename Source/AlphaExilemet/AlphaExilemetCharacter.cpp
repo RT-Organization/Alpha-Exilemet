@@ -240,9 +240,9 @@ void AAlphaExilemetCharacter::WieldTool(int32 Index)
 
 	ActiveToolIndex = Index;
 	CurrentTool = OwnedTools[Index];
-
-	// TEMP finchè non vengono aggiunti eventi di Notify
-	SnapCurrentToolToHand(); 
+	
+	PlayAnimMontage(CurrentTool->EquipAnimation);
+	// SnapCurrentToolToHand(); fatto da ABP Notify 
 	
 	CurrentTool->OnEquip(); 
 	OnToolEquipped.Broadcast(CurrentTool); 
@@ -255,8 +255,8 @@ void AAlphaExilemetCharacter::HolsterCurrentTool()
 	{
 		CurrentTool->OnUnequip();
 		
-		// TEMP finchè non vengono aggiunti eventi di Notify
-		SnapCurrentToolToHolster();
+		PlayAnimMontage(CurrentTool->HolsterAnimation);
+		// SnapCurrentToolToHolster(); fatto da ABP Notify
 		
 		CurrentTool = nullptr;
 		ActiveToolIndex = -1;
