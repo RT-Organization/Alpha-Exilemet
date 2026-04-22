@@ -58,7 +58,7 @@ protected:
 	/* ----------------------------- */
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Resource")
-	float VeinRegenerationTime = 10.f;
+	float VeinRegenerationTime = 120.f;
 	
 	bool bIsDepleted = false;
 	

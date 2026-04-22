@@ -189,6 +189,11 @@ struct FResourceRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data")
 	int32 SellValue = 0;
 
+	// Seconds before this vein respawns after being fully depleted.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data",
+		meta=(ClampMin="1.0", UIMin="1.0"))
+	float RegenTime = 120.f;
+
 	// -------------------------------------------------------------------------
 	// PRESENTATION
 	// -------------------------------------------------------------------------
