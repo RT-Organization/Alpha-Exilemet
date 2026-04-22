@@ -27,8 +27,9 @@ void AResourceBase::BeginPlay()
 		if (Row)
 		{
 			// Override whatever the Blueprint default says
-			Health= Row->Health;
+			Health = Row->Health;
 			CurrencyValuePerUnit = static_cast<float>(Row->SellValue);
+			VeinRegenerationTime = Row->RegenTime;
 		}
 		else
 		{
