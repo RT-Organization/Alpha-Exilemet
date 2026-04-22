@@ -231,45 +231,51 @@ void AAlphaExilemetCharacter::AddToolToInventory(AToolBase* NewTool)
 	}
 }
 
-void AAlphaExilemetCharacter::WieldTool(int32 Index)
+void AAlphaExilemetCharacter::StartWieldTool(int32 Index)
 {
+	//StartWieldTool
 	if (!OwnedTools.IsValidIndex(Index)) return;
 	if (Index == ActiveToolIndex) return; 
 
 	HolsterCurrentTool();
+	
+	PendingToolIndex = Index;
+	
+	WieldPendingTool();
+}
 
-	ActiveToolIndex = Index;
-	CurrentTool = OwnedTools[Index];
-	
-	PlayAnimMontage(CurrentTool->EquipAnimation);
-	// SnapCurrentToolToHand(); fatto da ABP Notify 
-	
-	CurrentTool->OnEquip(); 
-	OnToolEquipped.Broadcast(CurrentTool); 
-	OnToolWielded.Broadcast(ActiveToolIndex); 
+void AAlphaExilemetCharacter::WieldPendingTool()
+{
+	if (!CurrentTool && OwnedTools.IsValidIndex(PendingToolIndex) && PendingToolIndex != ActiveToolIndex)
+	{
+		PlayAnimMontage(OwnedTools[PendingToolIndex]->EquipAnimation);
+		// SnapCurrentToolToHand(); fatto da ABP Notify
+	}
 }
 
 void AAlphaExilemetCharacter::HolsterCurrentTool()
 {
 	if (CurrentTool)
 	{
-		CurrentTool->OnUnequip();
-		
 		PlayAnimMontage(CurrentTool->HolsterAnimation);
 		// SnapCurrentToolToHolster(); fatto da ABP Notify
-		
-		CurrentTool = nullptr;
-		ActiveToolIndex = -1;
-		
-		OnToolWielded.Broadcast(ActiveToolIndex);
 	}
 }
 
-void AAlphaExilemetCharacter::SnapCurrentToolToHand()
+void AAlphaExilemetCharacter::SnapPendingToolToHand()
 {
-	if (CurrentTool)
+	if (!CurrentTool && OwnedTools.IsValidIndex(PendingToolIndex) && PendingToolIndex != ActiveToolIndex)
 	{
+		ActiveToolIndex = PendingToolIndex;
+		CurrentTool = OwnedTools[PendingToolIndex];
+		
+		CurrentTool->OnEquip();
+		OnToolEquipped.Broadcast(CurrentTool);
+		
 		CurrentTool->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("weapon_r"));
+		OnToolWielded.Broadcast(ActiveToolIndex); 
+		
+		PendingToolIndex = -1;
 	}
 }
 
@@ -277,7 +283,14 @@ void AAlphaExilemetCharacter::SnapCurrentToolToHolster()
 {
 	if (CurrentTool)
 	{
+		CurrentTool->OnUnequip();
+		
 		CurrentTool->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, CurrentTool->HolsterSocketName);
+		
+		CurrentTool = nullptr;
+		ActiveToolIndex = -1;
+		
+		OnToolWielded.Broadcast(ActiveToolIndex);
 	}
 }
 
@@ -535,6 +548,6 @@ void AAlphaExilemetCharacter::LoadToolDataFromSaveObject(UAlphaExilemetSaveGame*
 	// 3. Automatically equip the tool they were holding when they saved
 	if (SaveObject->SavedActiveToolIndex >= 0 && SaveObject->SavedActiveToolIndex < OwnedTools.Num())
 	{
-		WieldTool(SaveObject->SavedActiveToolIndex);
+		StartWieldTool(SaveObject->SavedActiveToolIndex);
 	}
 }

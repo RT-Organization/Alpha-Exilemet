@@ -181,6 +181,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Inventory")
 	int32 ActiveToolIndex = -1;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Inventory")
+	int32 PendingToolIndex = -1;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AlphaExilemet|Inventory")
 	int32 MaxInventorySize = 3;
@@ -197,14 +200,17 @@ public:
 	void AddToolToInventory(AToolBase* NewTool);
 
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
-	void WieldTool(int32 Index);
+	void StartWieldTool(int32 Index); // use this
+	
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
+	void WieldPendingTool();
 
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
 	void HolsterCurrentTool();
 
 	// --- Animation Helper Functions ---
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
-	void SnapCurrentToolToHand();
+	void SnapPendingToolToHand();
 
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
 	void SnapCurrentToolToHolster();
