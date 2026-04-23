@@ -59,7 +59,7 @@ void ABaseCamp::BeginPlay()
 	{
 		if (AAlphaExilemetCharacter* Character = Cast<AAlphaExilemetCharacter>(Actor))
 		{
-			Character->bIsInSafeZone = true;
+			Character->EnterSafeZone();
 		}
 	}
 }
@@ -172,7 +172,7 @@ void ABaseCamp::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Othe
 	{
 		if (OtherComp == Character->GetCapsuleComponent())
 		{
-			Character->bIsInSafeZone = true;
+			Character->EnterSafeZone();
 		}
 	}
 }
@@ -183,7 +183,7 @@ void ABaseCamp::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherA
 	{
 		if (OtherComp == Character->GetCapsuleComponent())
 		{
-			Character->bIsInSafeZone = false;
+			Character->ExitSafeZone();
 		}
 	}
 }

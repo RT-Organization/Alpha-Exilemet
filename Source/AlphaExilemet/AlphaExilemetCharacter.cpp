@@ -11,6 +11,8 @@
 #include "Interactable.h"
 #include "TimerManager.h"
 #include "ResourceBase.h"
+#include "Components/AudioComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "BaseCamp.h"
 
 // -------------------------------------------------------------------------
@@ -94,6 +96,11 @@ AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 	InteractionDistance = 300.0f;
 	OxygenDrainRate = OxygenDrainProgression.BaseValue;
 	CurrentSprintMultiplier = SprintMultiplierProgression.BaseValue;
+	
+	// --- AUDIO SETUP ---
+	BreathingAudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("BreathingAudioComponent"));
+	BreathingAudioComponent->SetupAttachment(RootComponent);
+	BreathingAudioComponent->bAutoActivate = false; // We only want it to play when we tell it to
 }
 
 // -------------------------------------------------------------------------
@@ -145,6 +152,24 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 				}
 			}
 		}
+	}
+	
+	// --- VIGNETTE OXYGEN EFFECT ---
+	// If oxygen drops below our threshold (e.g., 30%), start fading the vision
+	if (Oxygen < (MaxOxygen * OxygenVignetteThreshold))
+	{
+		FirstPersonCameraComponent->PostProcessSettings.bOverride_VignetteIntensity = true;
+		
+		// Map the remaining oxygen (0 to Threshold) to a 0-1 scale
+		float Alpha = 1.0f - (Oxygen / (MaxOxygen * OxygenVignetteThreshold));
+		
+		// Interpolate between normal intensity (usually 0.5) and the max intensity
+		FirstPersonCameraComponent->PostProcessSettings.VignetteIntensity = FMath::Lerp(0.5f, MaxVignetteIntensity, Alpha);
+	}
+	else
+	{
+		// Turn off the override to return control to the global Post Process Volume
+		FirstPersonCameraComponent->PostProcessSettings.bOverride_VignetteIntensity = false;
 	}
 	
 	// --- 2. INTERACTION PROMPT LOGIC ---
@@ -440,22 +465,37 @@ void AAlphaExilemetCharacter::Die()
 		// Convert to a normalized decimal (e.g., 25.0 becomes 0.25f)
 		RetainedFraction = FMath::Clamp(RetainedPercentage / 100.0f, 0.0f, 1.0f);
 	}
+	
+	// --- RAGDOLL & DEATH EFFECTS ---
+	
+	// Play the death sound
+	if (DeathSound)
+	{
+		UGameplayStatics::PlaySound2D(this, DeathSound);
+	}
+
+	// 1. Disable the capsule collision so the body falls freely
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// 2. Fully enable physics collision on the mesh
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
+	
+	GetMesh()->SetAllBodiesSimulatePhysics(true); 
+	GetMesh()->WakeAllRigidBodies();
+	
+	GetMesh()->SetSimulatePhysics(true);
+
+	BP_OnPlayerDied();
 
 	// --- 2. APPLY TO TOOLS ---
 	for (AToolBase* Tool : OwnedTools)
 	{
 		if (Tool) 
 		{
-			// Note: You must update AToolBase to accept this float! 
-			// Inside the tool, drop (1.0f - RetainedFraction) amount of the stored inventory.
 			Tool->ClearInventory(RetainedFraction); 
 		}
 	}
-
-	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
-	GetMesh()->SetSimulatePhysics(true);
-
-	BP_OnPlayerDied();
 }
 
 void AAlphaExilemetCharacter::RespawnPlayer(FVector SpawnLocation, FRotator SpawnRotation)
@@ -464,13 +504,17 @@ void AAlphaExilemetCharacter::RespawnPlayer(FVector SpawnLocation, FRotator Spaw
 	Oxygen = MaxOxygen;
 	bIsDead = false;
 
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+
 	OnHealthChanged.Broadcast(Health, MaxHealth);
 	OnOxygenChanged.Broadcast(Oxygen, MaxOxygen);
 	
 	DeathCameraComponent->SetActive(false);
 	FirstPersonCameraComponent->SetActive(true);
-
+	
+	GetMesh()->SetAllBodiesSimulatePhysics(false);
 	GetMesh()->SetSimulatePhysics(false);
+	
 	GetMesh()->SetCollisionProfileName(TEXT("CharacterMesh"));
 	GetMesh()->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 	GetMesh()->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -90.f), FRotator(0.f, -90.f, 0.f)); 
@@ -549,5 +593,45 @@ void AAlphaExilemetCharacter::LoadToolDataFromSaveObject(UAlphaExilemetSaveGame*
 	if (SaveObject->SavedActiveToolIndex >= 0 && SaveObject->SavedActiveToolIndex < OwnedTools.Num())
 	{
 		StartWieldTool(SaveObject->SavedActiveToolIndex);
+	}
+}
+
+// -------------------------------------------------------------------------
+// SAFE ZONE AUDIO & LOGIC
+// -------------------------------------------------------------------------
+void AAlphaExilemetCharacter::EnterSafeZone()
+{
+	bIsInSafeZone = true;
+
+	// Check if Oxygen is below 50% and that we have a sound assigned
+	if (Oxygen < (MaxOxygen * 0.5f) && RecoveryBreathingSound)
+	{
+		BreathingAudioComponent->SetSound(RecoveryBreathingSound);
+		BreathingAudioComponent->Play();
+
+		// The sound is 5 seconds long. We trigger the fade-out at 4.0 seconds.
+		// The fade will take 1 second to complete, ending smoothly at 5 seconds.
+		GetWorldTimerManager().SetTimer(BreathingFadeTimerHandle, this, &AAlphaExilemetCharacter::FadeOutBreathingSound, 4.0f, false);
+	}
+}
+
+void AAlphaExilemetCharacter::ExitSafeZone()
+{
+	bIsInSafeZone = false;
+
+	// Stop immediately if the player leaves the sphere
+	if (BreathingAudioComponent->IsPlaying())
+	{
+		BreathingAudioComponent->Stop();
+		GetWorldTimerManager().ClearTimer(BreathingFadeTimerHandle); // Cancel the fade out timer
+	}
+}
+
+void AAlphaExilemetCharacter::FadeOutBreathingSound()
+{
+	if (BreathingAudioComponent->IsPlaying())
+	{
+		// Fade out over 1.0 second down to 0.0 volume
+		BreathingAudioComponent->FadeOut(1.0f, 0.0f);
 	}
 }

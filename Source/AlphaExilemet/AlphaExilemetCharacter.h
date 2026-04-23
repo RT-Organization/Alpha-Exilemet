@@ -9,6 +9,7 @@ class AToolBase;
 class UCameraComponent;
 class USpringArmComponent;
 class USphereComponent;
+class UAudioComponent;
 class ABaseCamp;
 
 // -------------------------------------------------------------------------
@@ -281,6 +282,37 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Audio")
 	TEnumAsByte<EPhysicalSurface> SurfaceOverride = SurfaceType_Default;
+	
+	// -------------------------------------------------------------------------
+	// AUDIO & SURVIVAL EFFECTS
+	// -------------------------------------------------------------------------
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Components")
+	UAudioComponent* BreathingAudioComponent;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Audio")
+	USoundBase* RecoveryBreathingSound;
+
+	FTimerHandle BreathingFadeTimerHandle;
+
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Survival")
+	void EnterSafeZone();
+
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Survival")
+	void ExitSafeZone();
+
+	void FadeOutBreathingSound();
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Audio")
+	USoundBase* DeathSound;
+
+	// The percentage of oxygen (0.0 to 1.0) where vision starts to fade
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Survival|Vignette")
+	float OxygenVignetteThreshold = 0.3f; 
+
+	// The maximum intensity of the vignette just before death
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Survival|Vignette")
+	float MaxVignetteIntensity = 2.0f;
+	
 private:
 	// Cached reference
 	UPROPERTY()
