@@ -100,7 +100,7 @@ AAlphaExilemetCharacter::AAlphaExilemetCharacter()
 	// --- AUDIO SETUP ---
 	BreathingAudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("BreathingAudioComponent"));
 	BreathingAudioComponent->SetupAttachment(RootComponent);
-	BreathingAudioComponent->bAutoActivate = false; // We only want it to play when we tell it to
+	BreathingAudioComponent->bAutoActivate = false;
 }
 
 // -------------------------------------------------------------------------
@@ -112,7 +112,6 @@ void AAlphaExilemetCharacter::BeginPlay()
 	
 	RecalculateStats();
 
-	// Cache standard physics to return to when leaving hazard ice
 	DefaultGroundFriction = GetCharacterMovement()->GroundFriction;
 	DefaultBrakingDeceleration = GetCharacterMovement()->BrakingDecelerationWalking;
 
@@ -155,20 +154,15 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 	}
 	
 	// --- VIGNETTE OXYGEN EFFECT ---
-	// If oxygen drops below our threshold (e.g., 30%), start fading the vision
 	if (Oxygen < (MaxOxygen * OxygenVignetteThreshold))
 	{
 		FirstPersonCameraComponent->PostProcessSettings.bOverride_VignetteIntensity = true;
 		
-		// Map the remaining oxygen (0 to Threshold) to a 0-1 scale
 		float Alpha = 1.0f - (Oxygen / (MaxOxygen * OxygenVignetteThreshold));
-		
-		// Interpolate between normal intensity (usually 0.5) and the max intensity
 		FirstPersonCameraComponent->PostProcessSettings.VignetteIntensity = FMath::Lerp(0.5f, MaxVignetteIntensity, Alpha);
 	}
 	else
 	{
-		// Turn off the override to return control to the global Post Process Volume
 		FirstPersonCameraComponent->PostProcessSettings.bOverride_VignetteIntensity = false;
 	}
 	
@@ -227,7 +221,6 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 		}
 	}
 
-	// Apply final combined movement speed
 	float SprintMod = bIsSprinting ? CurrentSprintMultiplier : 1.0f;
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * SprintMod * CurrentBaseBoostMultiplier * HazardSpeedMultiplier;
 }
@@ -249,7 +242,6 @@ void AAlphaExilemetCharacter::AddToolToInventory(AToolBase* NewTool)
 		OwnedTools.Add(NewTool);
 		NewTool->SetOwner(this);
 
-		// Immediately attach to the specific Holster socket on the player mesh
 		NewTool->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, NewTool->HolsterSocketName);
 
 		OnInventoryUpdated.Broadcast();
@@ -258,7 +250,6 @@ void AAlphaExilemetCharacter::AddToolToInventory(AToolBase* NewTool)
 
 void AAlphaExilemetCharacter::StartWieldTool(int32 Index)
 {
-	//StartWieldTool
 	if (!OwnedTools.IsValidIndex(Index)) return;
 	if (Index == ActiveToolIndex) return; 
 
@@ -274,7 +265,6 @@ void AAlphaExilemetCharacter::WieldPendingTool()
 	if (!CurrentTool && OwnedTools.IsValidIndex(PendingToolIndex) && PendingToolIndex != ActiveToolIndex)
 	{
 		PlayAnimMontage(OwnedTools[PendingToolIndex]->EquipAnimation);
-		// SnapCurrentToolToHand(); fatto da ABP Notify
 	}
 }
 
@@ -283,7 +273,6 @@ void AAlphaExilemetCharacter::HolsterCurrentTool()
 	if (CurrentTool)
 	{
 		PlayAnimMontage(CurrentTool->HolsterAnimation);
-		// SnapCurrentToolToHolster(); fatto da ABP Notify
 	}
 }
 
@@ -329,22 +318,91 @@ int32 AAlphaExilemetCharacter::GetRefinedSellValue(int32 BaseTotalValue)
 
 	if (BaseCampRef)
 	{
-		// 1. Get the current upgrade level
 		int32 RefinerLevel = BaseCampRef->GetShipSystemLevel(EShipSystem::MolecularRefiner);
-		
-		// 2. Get the multiplier (e.g., Level 0 = 1.0x, Level 2 = 1.2x)
 		RefinerMultiplier = BaseCampRef->RefinerProgression.GetValueAtLevel(RefinerLevel);
 	}
 
-	// 3. Multiply and round down to keep currency as a clean integer
 	return FMath::FloorToInt(BaseTotalValue * RefinerMultiplier);
 }
 
 void AAlphaExilemetCharacter::ProcessSale(int32 BaseTotalValue)
 {
-	// Automatically calculate the bonus and add it to the wallet
 	int32 FinalPayout = GetRefinedSellValue(BaseTotalValue);
 	Currency += FinalPayout;
+}
+
+// -------------------------------------------------------------------------
+// RESOURCE HELPERS (for Upgrade Cost System)
+// -------------------------------------------------------------------------
+
+int32 AAlphaExilemetCharacter::GetTotalResourceAmount(FName ResourceID) const
+{
+	int32 Total = 0;
+	for (AToolBase* Tool : OwnedTools)
+	{
+		if (Tool)
+		{
+			Total += Tool->GetResourceAmount(ResourceID);
+		}
+	}
+	return Total;
+}
+
+void AAlphaExilemetCharacter::DeductResourceFromTools(FName ResourceID, int32 Amount)
+{
+	int32 Remaining = Amount;
+	for (AToolBase* Tool : OwnedTools)
+	{
+		if (Tool && Remaining > 0)
+		{
+			int32 Removed = Tool->RemoveResource(ResourceID, Remaining);
+			Remaining -= Removed;
+		}
+	}
+}
+
+TMap<FName, int32> AAlphaExilemetCharacter::GetAllResourcesFromTools() const
+{
+	TMap<FName, int32> AllResources;
+	for (AToolBase* Tool : OwnedTools)
+	{
+		if (Tool)
+		{
+			TMap<FName, int32> ToolResources = Tool->GetAllResources();
+			for (const auto& Pair : ToolResources)
+			{
+				AllResources.FindOrAdd(Pair.Key) += Pair.Value;
+			}
+		}
+	}
+	return AllResources;
+}
+
+// -------------------------------------------------------------------------
+// INSPECT INVENTORY SYSTEM
+// -------------------------------------------------------------------------
+
+void AAlphaExilemetCharacter::StartInspectCurrentTool()
+{
+	// Guard: must have a tool and not already be inspecting
+	if (!CurrentTool || bIsInspecting)
+	{
+		return;
+	}
+
+	bIsInspecting = true;
+	BP_OnInspectToolStarted(CurrentTool, CurrentTool->InventoryWidgetClass);
+}
+
+void AAlphaExilemetCharacter::StopInspectCurrentTool()
+{
+	if (!bIsInspecting)
+	{
+		return;
+	}
+
+	bIsInspecting = false;
+	BP_OnInspectToolStopped();
 }
 
 // -------------------------------------------------------------------------
@@ -382,15 +440,16 @@ int32 AAlphaExilemetCharacter::GetSystemStatLevel(EPlayerStat StatName)
 
 void AAlphaExilemetCharacter::RecalculateStats()
 {
-	int32 CurrentHealthLevel = GetSystemStatLevel(EPlayerStat::Health);
-	int32 CurrentOxygenLevel = GetSystemStatLevel(EPlayerStat::Oxygen);
+	int32 CurrentHealthLevel  = GetSystemStatLevel(EPlayerStat::Health);
+	int32 CurrentOxygenLevel  = GetSystemStatLevel(EPlayerStat::Oxygen);
 	int32 CurrentAgilityLevel = GetSystemStatLevel(EPlayerStat::Agility);
 
 	MaxHealth = HealthProgression.GetValueAtLevel(CurrentHealthLevel);
 	Health = FMath::Clamp(Health, 0.0f, MaxHealth); 
 
 	OxygenDrainRate = OxygenDrainProgression.GetValueAtLevel(CurrentOxygenLevel);
-	
+
+	// One Agility level drives all movement parameters simultaneously
 	BaseWalkSpeed = AgilityProgression.GetValueAtLevel(CurrentAgilityLevel);
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
 	GetCharacterMovement()->JumpZVelocity = JumpProgression.GetValueAtLevel(CurrentAgilityLevel);
@@ -451,44 +510,31 @@ void AAlphaExilemetCharacter::Die()
 	DeathCameraComponent->SetActive(true);
 	DeathCameraBoom->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepWorldTransform);
 
-	// --- 1. EMERGENCY MATTER RETRIEVER LOGIC ---
+	// --- EMERGENCY MATTER RETRIEVER LOGIC ---
 	float RetainedFraction = 0.0f;
 	
 	if (BaseCampRef)
 	{
-		// Fetch the current upgrade level for the Retriever
 		int32 RetrieverLevel = BaseCampRef->GetShipSystemLevel(EShipSystem::MatterRetriever);
-		
-		// This returns values like 0.0, 5.0, 10.0 based on your Progression setup
 		float RetainedPercentage = BaseCampRef->RetrieverProgression.GetValueAtLevel(RetrieverLevel);
-		
-		// Convert to a normalized decimal (e.g., 25.0 becomes 0.25f)
 		RetainedFraction = FMath::Clamp(RetainedPercentage / 100.0f, 0.0f, 1.0f);
 	}
 	
-	// --- RAGDOLL & DEATH EFFECTS ---
-	
-	// Play the death sound
 	if (DeathSound)
 	{
 		UGameplayStatics::PlaySound2D(this, DeathSound);
 	}
 
-	// 1. Disable the capsule collision so the body falls freely
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// 2. Fully enable physics collision on the mesh
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
-	
 	GetMesh()->SetAllBodiesSimulatePhysics(true); 
 	GetMesh()->WakeAllRigidBodies();
-	
 	GetMesh()->SetSimulatePhysics(true);
 
 	BP_OnPlayerDied();
 
-	// --- 2. APPLY TO TOOLS ---
 	for (AToolBase* Tool : OwnedTools)
 	{
 		if (Tool) 
@@ -539,14 +585,11 @@ void AAlphaExilemetCharacter::SaveToolDataToSaveObject(UAlphaExilemetSaveGame* S
 {
 	if (!SaveObject) return;
 	
-	// Clear old data
 	SaveObject->SavedToolUpgrades.Empty();
 	SaveObject->SavedOwnedToolClasses.Empty();
 	
-	// Save the currently equipped tool slot
 	SaveObject->SavedActiveToolIndex = ActiveToolIndex;
 
-	// Loop through tools: Save their Class, then tell them to save their specific data
 	for (AToolBase* Tool : OwnedTools)
 	{
 		if (Tool)
@@ -561,7 +604,6 @@ void AAlphaExilemetCharacter::LoadToolDataFromSaveObject(UAlphaExilemetSaveGame*
 {
 	if (!SaveObject) return;
 
-	// 1. Destroy current tools to prevent duplicates if the player loads a game twice
 	for (AToolBase* OldTool : OwnedTools)
 	{
 		if (OldTool) OldTool->Destroy();
@@ -570,7 +612,6 @@ void AAlphaExilemetCharacter::LoadToolDataFromSaveObject(UAlphaExilemetSaveGame*
 	CurrentTool = nullptr;
 	ActiveToolIndex = -1;
 
-	// 2. Re-spawn the saved tools and inject their data
 	for (TSubclassOf<AToolBase> ToolClass : SaveObject->SavedOwnedToolClasses)
 	{
 		if (ToolClass)
@@ -578,18 +619,15 @@ void AAlphaExilemetCharacter::LoadToolDataFromSaveObject(UAlphaExilemetSaveGame*
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 			
-			// Spawn the tool back into the world
 			if (AToolBase* SpawnedTool = GetWorld()->SpawnActor<AToolBase>(ToolClass, GetActorLocation(), GetActorRotation(), SpawnParams))
 			{
 				SpawnedTool->SetActorEnableCollision(false);
-				
-				AddToolToInventory(SpawnedTool);       // Put it in the player's pocket/mesh
-				SpawnedTool->LoadToolData(SaveObject); // Inject the saved upgrades and inventory!
+				AddToolToInventory(SpawnedTool);
+				SpawnedTool->LoadToolData(SaveObject);
 			}
 		}
 	}
 
-	// 3. Automatically equip the tool they were holding when they saved
 	if (SaveObject->SavedActiveToolIndex >= 0 && SaveObject->SavedActiveToolIndex < OwnedTools.Num())
 	{
 		StartWieldTool(SaveObject->SavedActiveToolIndex);
@@ -603,14 +641,11 @@ void AAlphaExilemetCharacter::EnterSafeZone()
 {
 	bIsInSafeZone = true;
 
-	// Check if Oxygen is below 50% and that we have a sound assigned
 	if (Oxygen < (MaxOxygen * 0.5f) && RecoveryBreathingSound)
 	{
 		BreathingAudioComponent->SetSound(RecoveryBreathingSound);
 		BreathingAudioComponent->Play();
 
-		// The sound is 5 seconds long. We trigger the fade-out at 4.0 seconds.
-		// The fade will take 1 second to complete, ending smoothly at 5 seconds.
 		GetWorldTimerManager().SetTimer(BreathingFadeTimerHandle, this, &AAlphaExilemetCharacter::FadeOutBreathingSound, 4.0f, false);
 	}
 }
@@ -619,11 +654,10 @@ void AAlphaExilemetCharacter::ExitSafeZone()
 {
 	bIsInSafeZone = false;
 
-	// Stop immediately if the player leaves the sphere
 	if (BreathingAudioComponent->IsPlaying())
 	{
 		BreathingAudioComponent->Stop();
-		GetWorldTimerManager().ClearTimer(BreathingFadeTimerHandle); // Cancel the fade out timer
+		GetWorldTimerManager().ClearTimer(BreathingFadeTimerHandle);
 	}
 }
 
@@ -631,7 +665,6 @@ void AAlphaExilemetCharacter::FadeOutBreathingSound()
 {
 	if (BreathingAudioComponent->IsPlaying())
 	{
-		// Fade out over 1.0 second down to 0.0 volume
 		BreathingAudioComponent->FadeOut(1.0f, 0.0f);
 	}
 }

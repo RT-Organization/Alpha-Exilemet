@@ -47,6 +47,9 @@ public:
 
 	virtual int32 RemoveResource(FName InResourceID, int32 Amount) override;
 	virtual int32 GetResourceAmount(FName InResourceID) const override;
+
+	// Returns the full gas inventory. Used by the upgrade cost check and the inspect widget.
+	virtual TMap<FName, int32> GetAllResources() const override;
 	
 	/* ----------------------------- */
 	/* STAT GETTERS                  */

@@ -11,16 +11,12 @@ AVacuumTool::AVacuumTool()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	// Capacity: how many total "volume units" the tank holds
-	CapacityProgression.BaseValue      = 100.0f;
+	CapacityProgression.BaseValue       = 100.0f;
 	CapacityProgression.AdditivePerLevel = 50.0f;
 
-	// Speed: damage dealt to the Liquid resource each tick
-	// Harvest time (s) = Resource.Health * TickInterval / DamagePerTick
 	SpeedProgression.BaseValue       = 5.0f;
 	SpeedProgression.AdditivePerLevel = 3.0f;
 
-	// Range: how far the vacuum ray reaches
 	RangeProgression.BaseValue       = 600.0f;
 	RangeProgression.AdditivePerLevel = 100.0f;
 }
@@ -52,7 +48,6 @@ void AVacuumTool::StopUsing_Implementation()
 
 void AVacuumTool::StartVacuumTimer()
 {
-	// The timer fires at the fixed TickInterval — only the damage per tick scales
 	GetWorldTimerManager().SetTimer(
 		VacuumTimer,
 		this,
@@ -75,7 +70,6 @@ void AVacuumTool::PerformVacuumTrace()
 {
 	if (GetCurrentStoredSlime() >= FMath::FloorToInt(GetMaxCapacity()))
 	{
-		// Tank full — optional: trigger "tank full" feedback here
 		return;
 	}
 
@@ -108,7 +102,6 @@ void AVacuumTool::PerformVacuumTrace()
 	
 	OnLiquidHitting(Liquid);
 
-	// Deal damage based on current Speed upgrade level
 	float Extracted = Liquid->DrainLiquid(GetAbsorptionDamagePerTick());
 
 	AbsorbSlime(Liquid->GetLiquidType(), Extracted);
@@ -165,6 +158,11 @@ void AVacuumTool::ClearInventory(float RetainedFraction)
 		if (RetainedAmount > 0) It.Value() = RetainedAmount;
 		else                    It.RemoveCurrent();
 	}
+}
+
+TMap<FName, int32> AVacuumTool::GetAllResources() const
+{
+	return HarvestedSlime;
 }
 
 int32 AVacuumTool::RemoveResource(FName InResourceID, int32 Amount)

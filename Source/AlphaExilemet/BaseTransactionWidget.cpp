@@ -3,33 +3,30 @@
 
 bool UBaseTransactionWidget::CanAfford(FUpgradeCost CostInfo, AAlphaExilemetCharacter* Player)
 {
-	// Always check if the player pointer is valid first to prevent crashes!
 	if (!Player) return false;
 
-	// 1. Check Currency
+	// 1. Check currency first (fast bail-out)
 	if (Player->Currency < CostInfo.CurrencyCost)
 	{
-		return false; // Not enough money!
+		return false;
 	}
 
-	// 2. Check Materials (Waiting on your coworker's Inventory system!)
-	/* TODO: Once your coworker finishes the Inventory, you will loop through 
-	   CostInfo.RequiredMaterials and check if the player has enough. 
-	   It will look something like this:
+	// 2. Check every required material across all owned tools.
+	//    GetTotalResourceAmount loops through OwnedTools and sums GetResourceAmount,
+	//    which is overridden by Pickaxe (HarvestedOres), Vacuum (HarvestedSlime),
+	//    and GasRod (HarvestedGas) — so the right tool is always checked automatically.
+	for (const auto& MaterialPair : CostInfo.RequiredMaterials)
+	{
+		FName MaterialName   = MaterialPair.Key;
+		int32 AmountNeeded   = MaterialPair.Value;
 
-	   for (const auto& MaterialPair : CostInfo.RequiredMaterials)
-	   {
-			FName MaterialName = MaterialPair.Key;
-			int32 AmountNeeded = MaterialPair.Value;
+		int32 TotalHeld = Player->GetTotalResourceAmount(MaterialName);
+		if (TotalHeld < AmountNeeded)
+		{
+			return false;
+		}
+	}
 
-			if (!Player->InventoryComponent->HasEnoughMaterial(MaterialName, AmountNeeded))
-			{
-				return false; // Not enough of this specific material!
-			}
-	   }
-	*/
-
-	// If we pass all checks, the player can afford it!
 	return true;
 }
 
@@ -37,9 +34,13 @@ void UBaseTransactionWidget::DeductCost(FUpgradeCost CostInfo, AAlphaExilemetCha
 {
 	if (!Player) return;
 
-	// Deduct the money
+	// Deduct currency
 	Player->Currency -= CostInfo.CurrencyCost;
 
-	// TODO: Call your coworker's function to deduct the materials from the inventory
-	// Example: Player->InventoryComponent->RemoveMaterials(CostInfo.RequiredMaterials);
+	// Deduct materials — DeductResourceFromTools spreads the removal across tools
+	// in OwnedTools order (e.g. takes ore from Pickaxe, slime from Vacuum, etc.)
+	for (const auto& MaterialPair : CostInfo.RequiredMaterials)
+	{
+		Player->DeductResourceFromTools(MaterialPair.Key, MaterialPair.Value);
+	}
 }

@@ -1,32 +1,25 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "ToolBase.h"
 #include "AlphaExilemetSaveGame.h"
 #include "AlphaExilemetCharacter.h"
 
-// Sets default values
 AToolBase::AToolBase()
 {
-	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = false;
 	
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	RootComponent = Mesh;
 	
-	// Force the default state of the tool to ALWAYS block the interaction laser
 	Mesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
 	Mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 }
 
-// Called when the game starts or when spawned
 void AToolBase::BeginPlay()
 {
 	Super::BeginPlay();
-	
 }
 
-// In ToolBase.cpp
 void AToolBase::Interact_Implementation(AAlphaExilemetCharacter* Interactor)
 {
 	if (Interactor)
@@ -53,12 +46,18 @@ void AToolBase::ClearInventory(float RetainedFraction)
 
 int32 AToolBase::RemoveResource(FName InResourceID, int32 Amount)
 {
-	return 0; // Default empty
+	return 0;
 }
 
 int32 AToolBase::GetResourceAmount(FName InResourceID) const
 {
-	return 0; // Default empty
+	return 0;
+}
+
+TMap<FName, int32> AToolBase::GetAllResources() const
+{
+	// Base implementation — child classes override this to return their specific inventory map.
+	return TMap<FName, int32>();
 }
 
 int32 AToolBase::GetToolStatLevel(FName StatName)
@@ -67,7 +66,7 @@ int32 AToolBase::GetToolStatLevel(FName StatName)
 	{
 		return ToolUpgradeLevels[StatName];
 	}
-	return 0; // If not found, it is Level 0
+	return 0;
 }
 
 float AToolBase::GetMaxCapacity() const
@@ -77,7 +76,6 @@ float AToolBase::GetMaxCapacity() const
 
 void AToolBase::UpgradeStat(FName StatName)
 {
-	// Add 1 to the level if it exists, otherwise initialize it at Level 1
 	if (ToolUpgradeLevels.Contains(StatName))
 	{
 		ToolUpgradeLevels[StatName]++;
@@ -90,7 +88,7 @@ void AToolBase::UpgradeStat(FName StatName)
 
 void AToolBase::MaterializeItem_Implementation()
 {
-	// Default empty, we will design the effect in Blueprint
+	// Default empty, designed in Blueprint
 }
 
 void AToolBase::StartMaterialize()
@@ -110,7 +108,6 @@ void AToolBase::StartMaterialize()
 		if (Comp)
 		{
 			FMaterialCache MatCache;
-			// Save every material slot on this specific mesh piece
 			for (int32 i = 0; i < Comp->GetNumMaterials(); ++i)
 			{
 				MatCache.Materials.Add(Comp->GetMaterial(i));
@@ -130,7 +127,6 @@ void AToolBase::UpdateMaterialize(float Alpha)
 	{
 		if (Comp)
 		{
-			// Updates the "Disolve" parameter on all pieces simultaneously
 			Comp->SetScalarParameterValueOnMaterials(FName("Disolve"), Alpha);
 		}
 	}
@@ -145,14 +141,12 @@ void AToolBase::FinishMaterialize()
 
 		if (Comp)
 		{
-			// Restore every material slot to its exact original texture
 			for (int32 i = 0; i < MatCache.Materials.Num(); ++i)
 			{
 				Comp->SetMaterial(i, MatCache.Materials[i]);
 			}
 		}
 	}
-	// Clear the memory
 	CachedMaterials.Empty();
 	
 	if (Mesh)

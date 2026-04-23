@@ -11,6 +11,7 @@ class USpringArmComponent;
 class USphereComponent;
 class UAudioComponent;
 class ABaseCamp;
+class UUserWidget;
 
 // -------------------------------------------------------------------------
 // DELEGATES
@@ -65,7 +66,6 @@ public:
 	// -------------------------------------------------------------------------
 	// PROGRESSION & STATS CONFIGURATION
 	// -------------------------------------------------------------------------
-	// Maps the Stat (e.g., Health, Oxygen) to its current level (0-5)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Progression|Levels")
 	TMap<EPlayerStat, int32> SystemUpgradeLevels;
 
@@ -162,7 +162,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Movement|Hazards")
 	float HazardSpeedMultiplier = 1.0f;
 
-	// Cached physics values to restore when leaving ice
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Movement|Hazards")
 	float DefaultGroundFriction;
 
@@ -172,8 +171,6 @@ public:
 	// -------------------------------------------------------------------------
 	// EQUIPMENT & INVENTORY
 	// -------------------------------------------------------------------------
-
-	// --- Variables ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Equipment")
 	AToolBase* CurrentTool;
 	
@@ -189,19 +186,17 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AlphaExilemet|Inventory")
 	int32 MaxInventorySize = 3;
 
-	// --- Special Items ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
 	bool bHasSpecialItem = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Inventory")
 	ESpecialItem EquippedSpecialItem;
 
-	// --- Core Inventory Functions ---
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
 	void AddToolToInventory(AToolBase* NewTool);
 
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
-	void StartWieldTool(int32 Index); // use this
+	void StartWieldTool(int32 Index);
 	
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
 	void WieldPendingTool();
@@ -209,14 +204,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
 	void HolsterCurrentTool();
 
-	// --- Animation Helper Functions ---
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
 	void SnapPendingToolToHand();
 
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Equipment")
 	void SnapCurrentToolToHolster();
 
-	// --- Delegates/Events ---
 	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Events")
 	FOnInventoryUpdatedSignature OnInventoryUpdated;
 
@@ -227,11 +220,23 @@ public:
 	// ECONOMY & SELLING
 	// -------------------------------------------------------------------------
 
-	// Calculates the final payout with the Molecular Refiner multiplier applied
+	// Returns the total amount of a resource across ALL owned tools.
+	// Used by CanAfford / DeductCost in the upgrade system.
+	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Economy")
+	int32 GetTotalResourceAmount(FName ResourceID) const;
+
+	// Removes the requested amount of a resource, spreading across tools if needed.
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Economy")
+	void DeductResourceFromTools(FName ResourceID, int32 Amount);
+
+	// Returns a merged map of every resource currently held across all tools.
+	// Use this in the Inspect Inventory widget to display a combined overview.
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Economy")
+	TMap<FName, int32> GetAllResourcesFromTools() const;
+
 	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Economy")
 	int32 GetRefinedSellValue(int32 BaseTotalValue);
 
-	// Adds the refined currency to the player's wallet
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Economy")
 	void ProcessSale(int32 BaseTotalValue);
 	
@@ -266,17 +271,40 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Runtime")
 	void RespawnPlayer(FVector SpawnLocation, FRotator SpawnRotation);
-	
-	public:
+
+	// -------------------------------------------------------------------------
+	// INSPECT INVENTORY SYSTEM
+	// -------------------------------------------------------------------------
+
+	// Whether the player is currently in inspect mode (used to gate input / animations in BP).
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Inspection")
+	bool bIsInspecting = false;
+
+	// Call from your Input Binding (or BP) to start inspecting the currently held tool.
+	// Fires BP_OnInspectToolStarted with the tool and its assigned InventoryWidgetClass.
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Inspection")
+	void StartInspectCurrentTool();
+
+	// Call from your Input Binding or from the widget's close button to stop inspecting.
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Inspection")
+	void StopInspectCurrentTool();
+
+	// Implement in Blueprint: play the inspect animation and create the widget.
+	// WidgetClass is the one assigned in the tool's Blueprint CDO (InventoryWidgetClass).
+	UFUNCTION(BlueprintImplementableEvent, Category = "AlphaExilemet|Events")
+	void BP_OnInspectToolStarted(AToolBase* ToolToInspect, TSubclassOf<UUserWidget> WidgetClass);
+
+	// Implement in Blueprint: play the close animation and destroy the widget.
+	UFUNCTION(BlueprintImplementableEvent, Category = "AlphaExilemet|Events")
+	void BP_OnInspectToolStopped();
+
+public:
 	// -------------------------------------------------------------------------
 	// SAVE & LOAD (DATA EXTRACTION)
 	// -------------------------------------------------------------------------
-
-	// Extracts the tool upgrades and inventories from the player's tools and pushes them to the Save Object
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void SaveToolDataToSaveObject(class UAlphaExilemetSaveGame* SaveObject);
 
-	// Injects the tool upgrades and inventories from the Save Object back into the player's tools
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void LoadToolDataFromSaveObject(class UAlphaExilemetSaveGame* SaveObject);
 
@@ -305,16 +333,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Audio")
 	USoundBase* DeathSound;
 
-	// The percentage of oxygen (0.0 to 1.0) where vision starts to fade
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Survival|Vignette")
 	float OxygenVignetteThreshold = 0.3f; 
 
-	// The maximum intensity of the vignette just before death
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "AlphaExilemet|Survival|Vignette")
 	float MaxVignetteIntensity = 2.0f;
 	
 private:
-	// Cached reference
 	UPROPERTY()
 	ABaseCamp* BaseCampRef;
 };

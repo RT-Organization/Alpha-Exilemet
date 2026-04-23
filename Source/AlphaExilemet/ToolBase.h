@@ -7,6 +7,8 @@
 #include "Interactable.h"
 #include "ToolBase.generated.h"
 
+class UUserWidget;
+
 // --- NEW STRUCT TO FIX UHT ERROR ---
 USTRUCT(BlueprintType)
 struct FMaterialCache
@@ -30,29 +32,25 @@ protected:
 
 public:
 	/* ----------------------------- */
-	/* INTERACTION           */
+	/* INTERACTION                   */
 	/* ----------------------------- */
 	virtual void Interact_Implementation(class AAlphaExilemetCharacter* Interactor) override;
 	
 	/* ----------------------------- */
-	/* TOOL INFO          */
+	/* TOOL INFO                     */
 	/* ----------------------------- */
 	
-	// Icon shown in GUI
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tool|UI")
 	UTexture2D* Icon;
 	
-	// Tool display name
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tool|UI")
 	FText DisplayName;
 	
-	// Tool description for the Workbench UI
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tool|UI", meta=(MultiLine="true"))
 	FText Description;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Tool")
 	UStaticMeshComponent* Mesh;
-	
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool|Animations")
 	UAnimMontage* EquipAnimation;
@@ -64,7 +62,7 @@ public:
 	UAnimMontage* HolsterAnimation;
 	
 	/* ----------------------------- */
-	/* TOOL EVENTS           */
+	/* TOOL EVENTS                   */
 	/* ----------------------------- */
 
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category="Tool")
@@ -73,16 +71,13 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category="Tool")
 	void OnUnequip();
 	
-	// Called when the item is spawned from the shop
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Tool|Spawning")
 	void MaterializeItem();
 	virtual void MaterializeItem_Implementation();
 	
-	// The material to apply while spawning (e.g., M_Disolve)
 	UPROPERTY(EditDefaultsOnly, Category="Tool|Spawning")
 	UMaterialInterface* MaterializeMaterial;
 
-	// Internal cache to remember the original textures of every mesh piece
 	UPROPERTY()
 	TMap<UMeshComponent*, FMaterialCache> CachedMaterials;
 
@@ -96,43 +91,36 @@ public:
 	void FinishMaterialize();
 	
 	/* ----------------------------- */
-	/* TOOL INPUT            */
+	/* TOOL INPUT                    */
 	/* ----------------------------- */
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tool|Equipment")
 	FName HolsterSocketName = "spine_03";
 	
-	// Press input
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Tool")
 	void StartUsing();
 	virtual void StartUsing_Implementation();
 	
-	// Release input
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Tool")
 	void StopUsing();
 	virtual void StopUsing_Implementation();
 	
 	/* ----------------------------- */
-	/* TOOL PROGRESSION      */
+	/* TOOL PROGRESSION              */
 	/* ----------------------------- */
 	
-	// The names of the Data Table rows this specific tool uses (e.g., "Pickaxe_Force")
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool|Progression")
 	TArray<FName> UpgradeStatNames;
 	
-	// Maps the specific Stat (e.g., "Pickaxe_Force")
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Progression")
 	TMap<FName, int32> ToolUpgradeLevels;
 
-	// Helper function to get this tool's stat level
 	UFUNCTION(BlueprintPure, Category = "Tool|Progression")
 	int32 GetToolStatLevel(FName StatName);
 	
-	// Returns the true Max Capacity based on the tool's current upgrades
 	UFUNCTION(BlueprintPure, Category="Tool|Stats")
 	virtual float GetMaxCapacity() const;
 
-	// Called when the Terminal upgrades a stat
 	UFUNCTION(BlueprintCallable, Category = "Tool|Progression")
 	virtual void UpgradeStat(FName StatName);
 
@@ -141,18 +129,30 @@ public:
 	/* ----------------------------- */
 	virtual void ClearInventory(float RetainedFraction = 0.0f);
 
-	// NEW: Removes a specific amount of a resource and returns how much was actually removed.
 	UFUNCTION(BlueprintCallable, Category="Tool|Inventory")
 	virtual int32 RemoveResource(FName InResourceID, int32 Amount);
 
-	// NEW: Gets the current amount of a specific resource.
 	UFUNCTION(BlueprintPure, Category="Tool|Inventory")
 	virtual int32 GetResourceAmount(FName InResourceID) const;
+
+	// Returns the full inventory map — override in each tool subclass.
+	// Used by the character to total resources for upgrade cost checks,
+	// and by the Inspect Inventory widget to populate its display.
+	UFUNCTION(BlueprintCallable, Category="Tool|Inventory")
+	virtual TMap<FName, int32> GetAllResources() const;
+
+	/* ----------------------------- */
+	/* INSPECTION SYSTEM             */
+	/* ----------------------------- */
+
+	// Assign the specific inventory widget for this tool in each tool's Blueprint CDO.
+	// The character's StartInspectCurrentTool() will read this and pass it to BP.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tool|Inspection")
+	TSubclassOf<UUserWidget> InventoryWidgetClass;
 
 	/* ----------------------------- */
 	/* SAVE & LOAD                   */
 	/* ----------------------------- */
-	// Virtual so child tools can override and save their specific inventories
 	virtual void SaveToolData(class UAlphaExilemetSaveGame* SaveObject);
 	virtual void LoadToolData(class UAlphaExilemetSaveGame* SaveObject);
 };

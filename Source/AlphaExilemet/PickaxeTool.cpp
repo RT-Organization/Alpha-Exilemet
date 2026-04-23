@@ -129,7 +129,7 @@ bool APickaxeTool::TryAddOre(const FDataTableRowHandle& ResourceID, int32 Quanti
 	
 	if (CurrentSlots >= MaxSlots)
 	{
-		return false; // inventario pieno di tipi
+		return false;
 	}
 	
 	HarvestedOres.Add(Key, Quantity);
@@ -161,6 +161,7 @@ float APickaxeTool::GetMaxCapacity() const
 /* ----------------------------- */
 /* INVENTORY                     */
 /* ----------------------------- */
+
 void APickaxeTool::ClearInventory(float RetainedFraction)
 {
 	if (RetainedFraction <= 0.0f)
@@ -184,6 +185,11 @@ void APickaxeTool::ClearInventory(float RetainedFraction)
 	}
 }
 
+TMap<FName, int32> APickaxeTool::GetAllResources() const
+{
+	return HarvestedOres;
+}
+
 int32 APickaxeTool::RemoveResource(FName InResourceID, int32 Amount)
 {
 	if (Amount <= 0 || !HarvestedOres.Contains(InResourceID)) return 0;
@@ -193,7 +199,6 @@ int32 APickaxeTool::RemoveResource(FName InResourceID, int32 Amount)
 
 	HarvestedOres[InResourceID] -= AmountToRemove;
 
-	// Clean up the map if we hit 0
 	if (HarvestedOres[InResourceID] <= 0)
 	{
 		HarvestedOres.Remove(InResourceID);

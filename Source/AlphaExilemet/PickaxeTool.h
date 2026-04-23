@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -45,6 +43,9 @@ public:
 	TMap<FName, int32> HarvestedOres;
 	
 	virtual void ClearInventory(float RetainedFraction = 0.0f) override;
+
+	// Returns the full ore inventory. Used by the upgrade cost check and the inspect widget.
+	virtual TMap<FName, int32> GetAllResources() const override;
 	
 	/* ----------------------------- */
 	/* MINING                        */
