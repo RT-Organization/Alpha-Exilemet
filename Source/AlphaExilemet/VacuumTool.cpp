@@ -14,8 +14,9 @@ AVacuumTool::AVacuumTool()
 	CapacityProgression.BaseValue       = 100.0f;
 	CapacityProgression.AdditivePerLevel = 50.0f;
 
-	SpeedProgression.BaseValue       = 5.0f;
-	SpeedProgression.AdditivePerLevel = 3.0f;
+	SpeedProgression.BaseValue       = 0.1f;
+	SpeedProgression.AdditivePerLevel = 0;
+	SpeedProgression.MultiplierPerLevel = 0.5f;
 
 	RangeProgression.BaseValue       = 600.0f;
 	RangeProgression.AdditivePerLevel = 100.0f;
@@ -193,13 +194,13 @@ int32 AVacuumTool::GetResourceAmount(FName InResourceID) const
 
 float AVacuumTool::GetAbsorptionInterval() const
 {
-	return FMath::Max(0.001f, TickInterval);
+	int32 Level = ToolUpgradeLevels.FindRef(FName("Vacuum_Speed"));
+	return FMath::Max(0.001f, SpeedProgression.GetValueAtLevel(Level));
 }
 
 float AVacuumTool::GetAbsorptionDamagePerTick() const
 {
-	int32 Level = ToolUpgradeLevels.FindRef(FName("Vacuum_Speed"));
-	return SpeedProgression.GetValueAtLevel(Level);
+	return TickDamage;
 }
 
 float AVacuumTool::GetVacuumRange() const

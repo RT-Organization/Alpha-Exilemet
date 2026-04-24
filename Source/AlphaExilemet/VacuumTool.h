@@ -39,7 +39,7 @@ public:
 	/* VACUUM CONSTANTS              */
 	/* ----------------------------- */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Vacuum|Constants")
-	float TickInterval = 0.1f;
+	float TickDamage = 1;
 
 	/* ----------------------------- */
 	/* INVENTORY                     */
