@@ -1,12 +1,12 @@
 #include "PickaxeTool.h"
-#include "ResourceBase.h"
-#include "SolidResource.h"
+#include "AlphaExilemet/Resources/ResourceBase.h"
+#include "AlphaExilemet/Resources/SolidResource.h"
 
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "TimerManager.h"
-#include "AlphaExilemetSaveGame.h"
+#include "AlphaExilemet/Core/AlphaExilemetSaveGame.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"

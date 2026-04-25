@@ -3,8 +3,8 @@
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
 #include "AlphaExilemetSaveGame.h"
-#include "AlphaExilemetCharacter.h"
-#include "BaseCamp.h" // Assuming this is your base camp header
+#include "AlphaExilemet/AlphaExilemetCharacter.h"
+#include "AlphaExilemet/BaseCamp.h"
 #include "AlphaExilemetGameInstance.generated.h"
 
 UCLASS()

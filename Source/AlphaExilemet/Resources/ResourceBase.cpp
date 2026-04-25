@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "ResourceBase.h"
-#include "AlphaExilemetTypes.h"
+#include "AlphaExilemet/Data/AlphaExilemetTypes.h"
 #include "TimerManager.h"
 
 AResourceBase::AResourceBase()

@@ -3,7 +3,7 @@
 
 #include "SolidResource.h"
 
-#include "AlphaExilemetTypes.h"
+#include "AlphaExilemet/Data/AlphaExilemetTypes.h"
 #include "DroppedSolidResource.h"
 
 ASolidResource::ASolidResource()

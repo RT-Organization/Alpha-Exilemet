@@ -1,8 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "ToolBase.h"
-#include "AlphaExilemetSaveGame.h"
-#include "AlphaExilemetCharacter.h"
+#include "AlphaExilemet/Core/AlphaExilemetSaveGame.h"
+#include "AlphaExilemet/AlphaExilemetCharacter.h"
 
 AToolBase::AToolBase()
 {

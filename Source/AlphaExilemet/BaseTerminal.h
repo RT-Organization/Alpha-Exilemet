@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "Interactable.h"
+#include "AlphaExilemet/Interfaces/Interactable.h"
 #include "BaseTerminal.generated.h"
 
 class UBoxComponent;

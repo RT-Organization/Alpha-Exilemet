@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "ToolBase.h"
-#include "AlphaExilemetTypes.h"
+#include "AlphaExilemet/Data/AlphaExilemetTypes.h"
 #include "GasRodTool.generated.h"
 
 UCLASS()

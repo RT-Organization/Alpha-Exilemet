@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "AlphaExilemetTypes.h"
+#include "AlphaExilemet/Data/AlphaExilemetTypes.h"
 #include "BaseCamp.generated.h"
 
 class USphereComponent;

@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/SaveGame.h"
-#include "AlphaExilemetTypes.h" // Ensures we have EPlayerStat and EShipSystem
+#include "AlphaExilemet/Data/AlphaExilemetTypes.h"
 #include "AlphaExilemetSaveGame.generated.h"
 
 UCLASS()

@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "ToolBase.h"
+#include "AlphaExilemet/Tools/ToolBase.h"
 #include "SellTerminalWidget.generated.h"
 
 // Struct to hold the data of a checked item

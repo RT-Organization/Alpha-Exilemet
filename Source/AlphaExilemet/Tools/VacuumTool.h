@@ -2,8 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "ToolBase.h"
-#include "AlphaExilemetTypes.h"
-#include "LiquidResource.h"
+#include "AlphaExilemet/Data/AlphaExilemetTypes.h"
+#include "AlphaExilemet/Resources/LiquidResource.h"
 #include "VacuumTool.generated.h"
 
 class ACharacter;

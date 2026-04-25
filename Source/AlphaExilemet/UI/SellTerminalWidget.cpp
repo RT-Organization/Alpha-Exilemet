@@ -1,5 +1,5 @@
 #include "SellTerminalWidget.h"
-#include "AlphaExilemetCharacter.h"
+#include "AlphaExilemet/AlphaExilemetCharacter.h"
 
 void USellTerminalWidget::ToggleSaleItem(AToolBase* Tool, FName ResourceID, int32 Amount, int32 CreditValue, bool bIsSelected)
 {

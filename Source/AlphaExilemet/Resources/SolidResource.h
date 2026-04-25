@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "DroppedSolidResource.h"
-#include "PickaxeTool.h"
+#include "AlphaExilemet/Tools/PickaxeTool.h"
 #include "ResourceBase.h"
 #include "SolidResource.generated.h"
 

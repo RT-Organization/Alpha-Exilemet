@@ -1,6 +1,6 @@
 #include "DroppedSolidResource.h"
-#include "PickaxeTool.h"
-#include "AlphaExilemetCharacter.h"
+#include "AlphaExilemet/Tools/PickaxeTool.h"
+#include "AlphaExilemet/AlphaExilemetCharacter.h"
 
 ADroppedSolidResource::ADroppedSolidResource()
 {

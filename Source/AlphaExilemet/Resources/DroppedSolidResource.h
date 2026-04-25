@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Engine/DataTable.h"
-#include "Interactable.h"
+#include "AlphaExilemet/Interfaces/Interactable.h"
 #include "DroppedSolidResource.generated.h"
 
 class AAlphaExilemetCharacter;

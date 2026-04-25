@@ -1,11 +1,11 @@
 #include "VacuumTool.h"
-#include "LiquidResource.h"
+#include "AlphaExilemet/Resources/LiquidResource.h"
 
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "TimerManager.h"
-#include "AlphaExilemetSaveGame.h"
+#include "AlphaExilemet/Core/AlphaExilemetSaveGame.h"
 
 AVacuumTool::AVacuumTool()
 {

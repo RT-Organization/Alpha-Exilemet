@@ -1,5 +1,5 @@
 #include "BaseTransactionWidget.h"
-#include "AlphaExilemetCharacter.h"
+#include "AlphaExilemet/AlphaExilemetCharacter.h"
 
 bool UBaseTransactionWidget::CanAfford(FUpgradeCost CostInfo, AAlphaExilemetCharacter* Player)
 {
