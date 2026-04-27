@@ -220,12 +220,13 @@ public:
 	// ECONOMY & SELLING
 	// -------------------------------------------------------------------------
 
-	// Returns the total amount of a resource across ALL owned tools.
-	// Used by CanAfford / DeductCost in the upgrade system.
+	// Returns the total amount of a resource held across ALL tools.
+	// Used by BaseTransactionWidget::CanAfford to check material requirements.
 	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Economy")
 	int32 GetTotalResourceAmount(FName ResourceID) const;
 
-	// Removes the requested amount of a resource, spreading across tools if needed.
+	// Deducts a resource from OwnedTools in order until the required amount is met.
+	// Used by BaseTransactionWidget::DeductCost to consume upgrade materials.
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Economy")
 	void DeductResourceFromTools(FName ResourceID, int32 Amount);
 
