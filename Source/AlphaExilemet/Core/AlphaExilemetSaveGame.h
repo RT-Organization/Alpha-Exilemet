@@ -37,20 +37,17 @@ public:
 	/* ----------------------------- */
 	/* UPGRADES                      */
 	/* ----------------------------- */
-	// Matches your "Character Upgrades" category
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Upgrades")
 	TMap<EPlayerStat, int32> SavedUpgradeLevels;
 
-	// Matches your "Ship Upgrades" category
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Upgrades")
 	TMap<EShipSystem, int32> SavedShipRepairLevels;
 
 	/* ----------------------------- */
-	/* NEW: TOOL UPGRADES & INVENTORY*/
+	/* TOOL UPGRADES & INVENTORY     */
 	/* ----------------------------- */
-	// Stores all tool progression levels centrally
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
-	TMap<FName, int32> SavedToolUpgrades; 
+	TMap<FName, int32> SavedToolUpgrades;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
 	TMap<FName, int32> SavedHarvestedOres;
@@ -60,10 +57,27 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
 	TMap<FName, int32> SavedHarvestedGas;
-	
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
 	TArray<TSubclassOf<class AToolBase>> SavedOwnedToolClasses;
-	
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
 	int32 SavedActiveToolIndex = -1;
+
+	/* ----------------------------- */
+	/* PARTIAL UPGRADE PAYMENTS      */
+	/* ----------------------------- */
+	/**
+	 * Stores the REMAINING cost of every upgrade that has been partially paid.
+	 * Key   = DataTable row name (same FName used as UpgradeKey in widgets).
+	 * Value = How much is still owed (currency + materials).
+	 *
+	 * Fully-paid upgrades are NOT stored here — once an upgrade is complete
+	 * UUpgradeProgressionManager seeds the next level's cost from the DataTable.
+	 *
+	 * Upgrades that have never been touched are also NOT stored here — they
+	 * are re-seeded fresh from the DataTable on each game load.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Progression")
+	TMap<FName, FUpgradeCost> SavedRemainingCosts;
 };

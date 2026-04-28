@@ -44,6 +44,12 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category="GasRod|Inventory")
 	bool TryAddGas(const FDataTableRowHandle& ResourceID, int32 Quantity = 1);
+	
+	UFUNCTION(BlueprintPure, Category="GasRod|Inventory")
+	int32 GetCurrentTotalSpheres() const;
+
+	UFUNCTION(BlueprintPure, Category="GasRod|Inventory")
+	float GetFillPercent() const;
 
 	virtual int32 RemoveResource(FName InResourceID, int32 Amount) override;
 	virtual int32 GetResourceAmount(FName InResourceID) const override;

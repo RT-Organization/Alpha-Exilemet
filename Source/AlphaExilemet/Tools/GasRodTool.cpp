@@ -5,8 +5,8 @@ AGasRodTool::AGasRodTool()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	CapacityProgression.BaseValue        = 1.0f;
-	CapacityProgression.AdditivePerLevel  = 1.0f;
+	CapacityProgression.BaseValue        = 4.0f;  // Updated: now 4 total spheres at base
+	CapacityProgression.AdditivePerLevel  = 2.0f; // Updated: +2 spheres per upgrade level
 
 	AbsSpeedProgression.BaseValue        = 10.0f;
 	AbsSpeedProgression.AdditivePerLevel  = 2.0f;
@@ -77,25 +77,32 @@ void AGasRodTool::ClearInventory(float RetainedFraction)
 bool AGasRodTool::TryAddGas(const FDataTableRowHandle& ResourceID, int32 Quantity)
 {
 	if (Quantity <= 0) return false;
-	
+
 	FName Key = ResourceID.RowName;
-	
-	if (HarvestedGas.Contains(Key))
-	{
-		HarvestedGas[Key] += Quantity;
-		return true;
-	}
-	
-	int32 MaxSlots   = FMath::FloorToInt(GetMaxCapacity());
-	int32 CurrentSlots = HarvestedGas.Num();
-	
-	if (CurrentSlots >= MaxSlots)
-	{
-		return false;
-	}
-	
-	HarvestedGas.Add(Key, Quantity);
-	return true;
+
+	int32 MaxSpheres   = FMath::FloorToInt(GetMaxCapacity()); // total sphere slots
+	int32 TotalStored  = 0;
+	for (const auto& Pair : HarvestedGas) TotalStored += Pair.Value;
+
+	int32 CanAdd = FMath::Min(Quantity, MaxSpheres - TotalStored);
+	if (CanAdd <= 0) return false;
+
+	HarvestedGas.FindOrAdd(Key) += CanAdd;
+	return true; // returns true even for partial adds (Quantity > CanAdd)
+}
+
+int32 AGasRodTool::GetCurrentTotalSpheres() const
+{
+	int32 Total = 0;
+	for (const auto& Pair : HarvestedGas) Total += Pair.Value;
+	return Total;
+}
+
+float AGasRodTool::GetFillPercent() const
+{
+	float Max = GetMaxCapacity();
+	if (Max <= 0.f) return 0.f;
+	return static_cast<float>(GetCurrentTotalSpheres()) / Max;
 }
 
 TMap<FName, int32> AGasRodTool::GetAllResources() const
