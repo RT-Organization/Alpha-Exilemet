@@ -58,6 +58,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
 	TMap<FName, int32> SavedHarvestedGas;
 
+	/**
+	 * How many empty (unfired) spheres the gas rod was holding at save time.
+	 * Full spheres are stored in SavedHarvestedGas (gas type → count).
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
+	int32 SavedEmptySphereCount = 0;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
 	TArray<TSubclassOf<class AToolBase>> SavedOwnedToolClasses;
 
@@ -68,15 +75,12 @@ public:
 	/* PARTIAL UPGRADE PAYMENTS      */
 	/* ----------------------------- */
 	/**
-	 * Stores the REMAINING cost of every upgrade that has been partially paid.
-	 * Key   = DataTable row name (same FName used as UpgradeKey in widgets).
+	 * Remaining cost for upgrades that have been partially paid.
+	 * Key   = DataTable row name (the UpgradeKey used in widgets).
 	 * Value = How much is still owed (currency + materials).
 	 *
-	 * Fully-paid upgrades are NOT stored here — once an upgrade is complete
-	 * UUpgradeProgressionManager seeds the next level's cost from the DataTable.
-	 *
-	 * Upgrades that have never been touched are also NOT stored here — they
-	 * are re-seeded fresh from the DataTable on each game load.
+	 * Untouched upgrades → NOT stored here (re-seeded from DataTable on load).
+	 * Fully-paid upgrades → NOT stored here (manager seeds the next level).
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Progression")
 	TMap<FName, FUpgradeCost> SavedRemainingCosts;
