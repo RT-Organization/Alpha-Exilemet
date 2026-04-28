@@ -74,6 +74,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Pickaxe|Inventory")
 	bool TryAddOre(const FDataTableRowHandle& ResourceID, int32 Quantity = 1);
 	
+	UFUNCTION(BlueprintImplementableEvent, Category="Tool|Harvest")
+	void InventoryChanged();
+	
 	virtual int32 RemoveResource(FName InResourceID, int32 Amount) override;
 	virtual int32 GetResourceAmount(FName InResourceID) const override;
 	

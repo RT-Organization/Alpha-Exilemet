@@ -133,6 +133,9 @@ bool APickaxeTool::TryAddOre(const FDataTableRowHandle& ResourceID, int32 Quanti
 	}
 	
 	HarvestedOres.Add(Key, Quantity);
+	
+	InventoryChanged();
+	
 	return true;
 }
 
@@ -183,6 +186,8 @@ void APickaxeTool::ClearInventory(float RetainedFraction)
 			It.RemoveCurrent();
 		}
 	}
+	
+	InventoryChanged();
 }
 
 TMap<FName, int32> APickaxeTool::GetAllResources() const
