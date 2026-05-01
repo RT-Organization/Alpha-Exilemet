@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "AlphaExilemet/Data/AlphaExilemetTypes.h"
 #include "AlphaExilemet/Interfaces/Interactable.h"
 #include "ToolBase.generated.h"
 
@@ -39,6 +40,9 @@ public:
 	/* ----------------------------- */
 	/* TOOL INFO                     */
 	/* ----------------------------- */
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tool")
+	EToolType Type;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Tool|UI")
 	UTexture2D* Icon;
