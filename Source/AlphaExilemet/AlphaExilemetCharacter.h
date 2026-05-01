@@ -20,6 +20,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStatChangedSignature, float, Cur
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToolEquippedSignature, AToolBase*, NewTool);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryUpdatedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnToolWieldedSignature, int32, ActiveSlotIndex);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCurrencyUpdatedSignature, float, NewAmount);
 
 UCLASS()
 class ALPHAEXILEMET_API AAlphaExilemetCharacter : public ACharacter
@@ -47,6 +48,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Events")
 	FOnToolEquippedSignature OnToolEquipped;
+	
+	UPROPERTY(BlueprintAssignable, Category = "Economy")
+	FOnCurrencyUpdatedSignature OnCurrencyUpdated;
 
 	// -------------------------------------------------------------------------
 	// COMPONENTS
