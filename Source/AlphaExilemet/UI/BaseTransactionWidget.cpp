@@ -5,49 +5,6 @@
 #include "Kismet/GameplayStatics.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
-// KEY CONVERSION
-//
-// UEnum::GetValueAsName() returns the full enum entry name, e.g.:
-//   EPlayerStat::Health  →  "Health"
-//   EShipSystem::AtmosphericScrubber  →  "AtmosphericScrubber"
-//
-// YOUR DATATABLE ROW NAMES MUST MATCH THESE STRINGS EXACTLY (case-sensitive).
-// Check your DT row names in the DataTable editor left column.
-// If you named a row "CHAR_Health" instead of "Health", either rename the DT
-// row OR override the conversion here to return FName("CHAR_Health").
-// ─────────────────────────────────────────────────────────────────────────────
-
-FName UBaseTransactionWidget::StatToUpgradeKey(EPlayerStat StatID)
-{
-	// GetValueAsName returns the bare enum name without the prefix,
-	// e.g. EPlayerStat::Health → "Health"
-	const UEnum* Enum = StaticEnum<EPlayerStat>();
-	if (!Enum) return NAME_None;
-	// GetNameByValue returns "EPlayerStat::Health"; we want just "Health"
-	FString FullName = Enum->GetNameByValue(static_cast<int64>(StatID)).ToString();
-	// Strip the "EPlayerStat::" prefix
-	int32 ColonIndex;
-	if (FullName.FindLastChar(':', ColonIndex))
-	{
-		return FName(*FullName.RightChop(ColonIndex + 1));
-	}
-	return FName(*FullName);
-}
-
-FName UBaseTransactionWidget::ShipSystemToUpgradeKey(EShipSystem SystemID)
-{
-	const UEnum* Enum = StaticEnum<EShipSystem>();
-	if (!Enum) return NAME_None;
-	FString FullName = Enum->GetNameByValue(static_cast<int64>(SystemID)).ToString();
-	int32 ColonIndex;
-	if (FullName.FindLastChar(':', ColonIndex))
-	{
-		return FName(*FullName.RightChop(ColonIndex + 1));
-	}
-	return FName(*FullName);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // PRIVATE HELPER
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -59,7 +16,7 @@ UUpgradeProgressionManager* UBaseTransactionWidget::GetProgressionManager() cons
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LEGACY API
+// LEGACY API (Sell Terminal)
 // ─────────────────────────────────────────────────────────────────────────────
 
 bool UBaseTransactionWidget::CanAfford(FUpgradeCost CostInfo, AAlphaExilemetCharacter* Player)
@@ -82,83 +39,7 @@ void UBaseTransactionWidget::DeductCost(FUpgradeCost CostInfo, AAlphaExilemetCha
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLAYERSTAT OVERLOADS  (WBP_SystemUpgradeRow)
-// ─────────────────────────────────────────────────────────────────────────────
-
-FUpgradeCost UBaseTransactionWidget::GetRemainingCost_Stat(EPlayerStat StatID) const
-{
-	if (UUpgradeProgressionManager* M = GetProgressionManager())
-		return M->GetCurrentCost(StatToUpgradeKey(StatID));
-	return FUpgradeCost();
-}
-
-bool UBaseTransactionWidget::CanAffordFullNow_Stat(EPlayerStat StatID, AAlphaExilemetCharacter* Player) const
-{
-	if (UUpgradeProgressionManager* M = GetProgressionManager())
-		return M->CanAffordFull(StatToUpgradeKey(StatID), Player);
-	return false;
-}
-
-bool UBaseTransactionWidget::IsUpgradeAvailable_Stat(EPlayerStat StatID) const
-{
-	if (UUpgradeProgressionManager* M = GetProgressionManager())
-		return M->HasUpgradeAvailable(StatToUpgradeKey(StatID));
-	return false;
-}
-
-bool UBaseTransactionWidget::PayAndCheckComplete_Stat(EPlayerStat StatID, AAlphaExilemetCharacter* Player)
-{
-	if (UUpgradeProgressionManager* M = GetProgressionManager())
-		return M->PayTowardsUpgrade(StatToUpgradeKey(StatID), Player);
-	return false;
-}
-
-void UBaseTransactionWidget::NotifyUpgradeComplete_Stat(EPlayerStat StatID, int32 LevelJustReached)
-{
-	if (UUpgradeProgressionManager* M = GetProgressionManager())
-		M->AdvanceToNextLevelCost(StatToUpgradeKey(StatID), LevelJustReached);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SHIPSYSTEM OVERLOADS  (WBP_ShipRepairRow)
-// ─────────────────────────────────────────────────────────────────────────────
-
-FUpgradeCost UBaseTransactionWidget::GetRemainingCost_Ship(EShipSystem SystemID) const
-{
-	if (UUpgradeProgressionManager* M = GetProgressionManager())
-		return M->GetCurrentCost(ShipSystemToUpgradeKey(SystemID));
-	return FUpgradeCost();
-}
-
-bool UBaseTransactionWidget::CanAffordFullNow_Ship(EShipSystem SystemID, AAlphaExilemetCharacter* Player) const
-{
-	if (UUpgradeProgressionManager* M = GetProgressionManager())
-		return M->CanAffordFull(ShipSystemToUpgradeKey(SystemID), Player);
-	return false;
-}
-
-bool UBaseTransactionWidget::IsUpgradeAvailable_Ship(EShipSystem SystemID) const
-{
-	if (UUpgradeProgressionManager* M = GetProgressionManager())
-		return M->HasUpgradeAvailable(ShipSystemToUpgradeKey(SystemID));
-	return false;
-}
-
-bool UBaseTransactionWidget::PayAndCheckComplete_Ship(EShipSystem SystemID, AAlphaExilemetCharacter* Player)
-{
-	if (UUpgradeProgressionManager* M = GetProgressionManager())
-		return M->PayTowardsUpgrade(ShipSystemToUpgradeKey(SystemID), Player);
-	return false;
-}
-
-void UBaseTransactionWidget::NotifyUpgradeComplete_Ship(EShipSystem SystemID, int32 LevelJustReached)
-{
-	if (UUpgradeProgressionManager* M = GetProgressionManager())
-		M->AdvanceToNextLevelCost(ShipSystemToUpgradeKey(SystemID), LevelJustReached);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FNAME OVERLOADS  (WBP_ToolStatBlock — Cached Stat ID is already FName)
+// UPGRADE API (all three row widgets)
 // ─────────────────────────────────────────────────────────────────────────────
 
 FUpgradeCost UBaseTransactionWidget::GetRemainingCost(FName UpgradeKey) const
@@ -168,10 +49,10 @@ FUpgradeCost UBaseTransactionWidget::GetRemainingCost(FName UpgradeKey) const
 	return FUpgradeCost();
 }
 
-bool UBaseTransactionWidget::CanAffordFullNow(FName UpgradeKey, AAlphaExilemetCharacter* Player) const
+bool UBaseTransactionWidget::CanPayAnything(FName UpgradeKey, AAlphaExilemetCharacter* Player) const
 {
 	if (UUpgradeProgressionManager* M = GetProgressionManager())
-		return M->CanAffordFull(UpgradeKey, Player);
+		return M->CanPayAnything(UpgradeKey, Player);
 	return false;
 }
 

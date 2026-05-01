@@ -11,30 +11,46 @@ class UUpgradeProgressionManager;
 /**
  * UBaseTransactionWidget
  *
- * Base class for all upgrade / sell widgets.
+ * Base class for ALL upgrade row widgets and sell widgets.
  *
- * HOW THE KEY SYSTEM WORKS
- * ─────────────────────────
- * The UpgradeProgressionManager stores costs keyed by DataTable ROW NAME (FName).
- * In your DataTable the row names are:  "Health", "Oxygen", "Agility"  (character)
- *                                       "SHIP_Scrubber", ...            (ship)
- *                                       "Pickaxe_Strength", ...         (tools)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * HOW THE KEY SYSTEM WORKS — READ THIS ONCE
+ * ─────────────────────────────────────────────────────────────────────────────
  *
- * Widgets do NOT pass FName directly.  Instead they pass the typed enum/id that
- * is already on their RowData struct, and this class converts it to the right key:
+ * The ProgressionManager stores every upgrade cost indexed by the DataTable
+ * ROW NAME (an FName), e.g. "Health", "AtmosphericScrubber", "Pickaxe_Strength".
  *
- *   WBP_SystemUpgradeRow  → Row Data Stat ID  (EPlayerStat enum)
- *                           → use the PlayerStat overloads below
+ * The TERMINALS already loop over DataTable row names using GetDataTableRowNames.
+ * They pass that row name (FName) into the row widget's Initialize function.
+ * The row widget stores it as UpgradeKey and uses it for every subsequent call.
  *
- *   WBP_ShipRepairRow     → Row Data System ID (EShipSystem enum)
- *                           → use the ShipSystem overloads below
+ * Result: zero enum conversions, one set of functions, identical logic in all
+ * three row widgets (WBP_SystemUpgradeRow, WBP_ShipRepairRow, WBP_ToolStatBlock).
  *
- *   WBP_ToolStatBlock     → Cached Stat ID     (FName — already the row name)
- *                           → use the FName overloads directly
+ * ─────────────────────────────────────────────────────────────────────────────
+ * UPGRADE WIDGET CALL PATTERN (same for all three widgets)
+ * ─────────────────────────────────────────────────────────────────────────────
  *
- * The conversion is: UEnum::GetValueAsName() which returns e.g. "Health" for
- * EPlayerStat::Health and "AtmosphericScrubber" for EShipSystem::AtmosphericScrubber.
- * Make sure your DataTable row names match EXACTLY (case-sensitive).
+ *   [Init / CacheVariables]
+ *     UpgradeKey (FName) is received from the terminal and stored as a variable.
+ *
+ *   [UpdateCostDisplay]
+ *     GetRemainingCost(UpgradeKey) → Break FUpgradeCost → display currency + materials
+ *
+ *   [Button IsEnabled / colour]
+ *     CanAffordFullNow(UpgradeKey, PlayerRef) → SetIsEnabled
+ *
+ *   [On Button Clicked]
+ *     PayAndCheckComplete(UpgradeKey, PlayerRef)
+ *       TRUE  → apply upgrade (UpgradeStat / UpgradeShipSystem / UpgradeStat on tool)
+ *             → NotifyUpgradeComplete(UpgradeKey, NewLevel)
+ *             → RefreshUI
+ *       FALSE → RefreshUI (partial payment — cost reduced)
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * SELL TERMINAL
+ * ─────────────────────────────────────────────────────────────────────────────
+ *   Still uses the legacy CanAfford / DeductCost below. Do not change it.
  */
 UCLASS()
 class ALPHAEXILEMET_API UBaseTransactionWidget : public UUserWidget
@@ -42,9 +58,11 @@ class ALPHAEXILEMET_API UBaseTransactionWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+
 	// =========================================================================
-	// LEGACY API — keep for SellTerminal. NOT for upgrade widgets.
+	// LEGACY API — Sell terminal only. Do NOT use in upgrade widgets.
 	// =========================================================================
+
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Transaction")
 	bool CanAfford(FUpgradeCost CostInfo, AAlphaExilemetCharacter* Player);
 
@@ -52,93 +70,60 @@ public:
 	void DeductCost(FUpgradeCost CostInfo, AAlphaExilemetCharacter* Player);
 
 	// =========================================================================
-	// UPGRADE API — EPlayerStat overloads (WBP_SystemUpgradeRow)
-	//
-	// Pass "Row Data Stat ID" (the EPlayerStat pin from Break Character Upgrade Row)
-	// directly into these nodes. No FName conversion needed in Blueprint.
+	// UPGRADE API — All three row widgets use these identical functions.
+	// UpgradeKey = the DataTable Row Name passed in from the terminal.
 	// =========================================================================
-
-	/** Cost display. Pass Row Data Stat ID. Replaces CostPerLevel[CurrentLevel]. */
-	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Character")
-	FUpgradeCost GetRemainingCost_Stat(EPlayerStat StatID) const;
-
-	/** Button colour / enable state. True = player can cover 100% of remaining cost. */
-	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Character")
-	bool CanAffordFullNow_Stat(EPlayerStat StatID, AAlphaExilemetCharacter* Player) const;
-
-	/** True if this upgrade has not been maxed. */
-	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Character")
-	bool IsUpgradeAvailable_Stat(EPlayerStat StatID) const;
 
 	/**
-	 * Main purchase. Deducts as much as the player has.
-	 * TRUE  = fully paid → call UpgradeStat then NotifyComplete_Stat.
-	 * FALSE = partial payment → just refresh cost display.
+	 * Returns the current (possibly partially-paid) cost for this upgrade.
+	 * Use this in UpdateCostDisplay instead of reading CostPerLevel from DataTable.
+	 * Returns an empty FUpgradeCost (zeros) if the upgrade is maxed or key not found.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Transaction|Character")
-	bool PayAndCheckComplete_Stat(EPlayerStat StatID, AAlphaExilemetCharacter* Player);
-
-	/**
-	 * Call after a fully-paid character upgrade has been applied.
-	 * LevelJustReached = old level + 1.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Transaction|Character")
-	void NotifyUpgradeComplete_Stat(EPlayerStat StatID, int32 LevelJustReached);
-
-	// =========================================================================
-	// UPGRADE API — EShipSystem overloads (WBP_ShipRepairRow)
-	//
-	// Pass "Row Data System ID" (the EShipSystem pin from Break Ship Repair Row)
-	// directly into these nodes.
-	// =========================================================================
-
-	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Ship")
-	FUpgradeCost GetRemainingCost_Ship(EShipSystem SystemID) const;
-
-	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Ship")
-	bool CanAffordFullNow_Ship(EShipSystem SystemID, AAlphaExilemetCharacter* Player) const;
-
-	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Ship")
-	bool IsUpgradeAvailable_Ship(EShipSystem SystemID) const;
-
-	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Transaction|Ship")
-	bool PayAndCheckComplete_Ship(EShipSystem SystemID, AAlphaExilemetCharacter* Player);
-
-	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Transaction|Ship")
-	void NotifyUpgradeComplete_Ship(EShipSystem SystemID, int32 LevelJustReached);
-
-	// =========================================================================
-	// UPGRADE API — FName overloads (WBP_ToolStatBlock)
-	//
-	// Cached Stat ID is already an FName row name — pass it directly.
-	// =========================================================================
-
-	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Tool")
+	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Upgrades")
 	FUpgradeCost GetRemainingCost(FName UpgradeKey) const;
 
-	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Tool")
-	bool CanAffordFullNow(FName UpgradeKey, AAlphaExilemetCharacter* Player) const;
+	/**
+	 * True if the player can cover 100% of the remaining cost right now.
+	 * Use this to set button enabled state and colour.
+	 * Note: PayAndCheckComplete always accepts partial amounts regardless.
+	 */
+	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Upgrades")
+	bool CanPayAnything(FName UpgradeKey, AAlphaExilemetCharacter* Player) const;
 
-	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Tool")
+	/**
+	 * True if this upgrade key still exists in the manager (upgrade not maxed).
+	 * Use this to hide or disable the entire row when max level is reached.
+	 */
+	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Upgrades")
 	bool IsUpgradeAvailable(FName UpgradeKey) const;
 
-	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Transaction|Tool")
+	/**
+	 * THE MAIN PURCHASE FUNCTION. Call this on upgrade button click.
+	 *
+	 * Deducts as much of the remaining cost as the player currently has.
+	 * Works for ALL resource types: currency, ore (Pickaxe), slime (Vacuum),
+	 * gas spheres (GasRod). No special casing needed per widget.
+	 *
+	 * Returns TRUE  = upgrade fully paid.
+	 *   → Apply the upgrade effect (UpgradeStat / UpgradeShipSystem / etc.)
+	 *   → Call NotifyUpgradeComplete(UpgradeKey, NewLevel)
+	 *   → Refresh the UI
+	 *
+	 * Returns FALSE = partial payment only. Just refresh the UI to show
+	 *   the reduced remaining cost. No upgrade effect applied.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Transaction|Upgrades")
 	bool PayAndCheckComplete(FName UpgradeKey, AAlphaExilemetCharacter* Player);
 
-	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Transaction|Tool")
+	/**
+	 * Call AFTER a fully-paid upgrade has been applied.
+	 * Seeds the next level's cost in the ProgressionManager.
+	 * If the upgrade was already at max the key is removed automatically.
+	 *
+	 * LevelJustReached = the level the player just moved TO (old level + 1).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Transaction|Upgrades")
 	void NotifyUpgradeComplete(FName UpgradeKey, int32 LevelJustReached);
-
-	// =========================================================================
-	// KEY CONVERSION UTILITIES (exposed to BP for debugging if needed)
-	// =========================================================================
-
-	/** Converts EPlayerStat to the DataTable row name FName used as UpgradeKey. */
-	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Utilities")
-	static FName StatToUpgradeKey(EPlayerStat StatID);
-
-	/** Converts EShipSystem to the DataTable row name FName used as UpgradeKey. */
-	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Transaction|Utilities")
-	static FName ShipSystemToUpgradeKey(EShipSystem SystemID);
 
 private:
 	UUpgradeProgressionManager* GetProgressionManager() const;
