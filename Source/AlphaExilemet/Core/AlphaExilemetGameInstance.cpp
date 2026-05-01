@@ -1,12 +1,35 @@
 #include "AlphaExilemetGameInstance.h"
 
 #include "AlphaExilemet/Tools/ToolBase.h"
+#include "AlphaExilemet/BaseCamp.h"
 #include "Kismet/GameplayStatics.h"
 #include "Camera/CameraComponent.h"
 
 // -------------------------------------------------------------------------
 // EXISTING: SAVE / LOAD
 // -------------------------------------------------------------------------
+
+bool UAlphaExilemetGameInstance::DoesSaveExist(FString SlotName)
+{
+	return UGameplayStatics::DoesSaveGameExist(SlotName, 0);
+}
+
+void UAlphaExilemetGameInstance::CreateNewGame(FString SlotName)
+{
+	CurrentSaveSlot = SlotName;
+
+	// Create a brand new save object using your custom class
+	LocalSaveRef = Cast<UAlphaExilemetSaveGame>(UGameplayStatics::CreateSaveGameObject(UAlphaExilemetSaveGame::StaticClass()));
+	
+	if (LocalSaveRef)
+	{
+		// Force the starting level so the system knows where to drop the player
+		LocalSaveRef->CurrentLevelName = FName("Tutorial");
+		
+		// Save it to disk immediately so it registers as an existing game
+		UGameplayStatics::SaveGameToSlot(LocalSaveRef, CurrentSaveSlot, 0);
+	}
+}
 
 void UAlphaExilemetGameInstance::SavePlayerData()
 {

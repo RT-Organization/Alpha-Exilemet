@@ -12,6 +12,13 @@ class ALPHAEXILEMET_API UAlphaExilemetSaveGame : public USaveGame
 
 public:
 	UAlphaExilemetSaveGame();
+	
+	/* ----------------------------- */
+	/* LEVEL                         */
+	/* ----------------------------- */
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Level")
+	FName CurrentLevelName;
 
 	/* ----------------------------- */
 	/* STATUS                        */
@@ -34,6 +41,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Pos&Rot")
 	FTransform PlayerCamera;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Level")
+	FTransform PrePortalTransform;
+	
 	/* ----------------------------- */
 	/* UPGRADES                      */
 	/* ----------------------------- */
