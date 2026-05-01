@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Engine/DataTable.h"
 #include "AlphaExilemet/Interfaces/Interactable.h"
+#include "NiagaraSystem.h"
 #include "DroppedSolidResource.generated.h"
 
 class AAlphaExilemetCharacter;
@@ -22,7 +23,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Resource")
 	FDataTableRowHandle ResourceID;
-
+	
+	UPROPERTY()
+	UNiagaraSystem* ObtainEffect;
 public:
 	void InitDroppedResource(UStaticMesh* InMesh, FDataTableRowHandle InID);
 
