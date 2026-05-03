@@ -1,13 +1,13 @@
 #include "GasRodTool.h"
+#include "GasSphere.h"
 #include "AlphaExilemet/Core/AlphaExilemetSaveGame.h"
 
 AGasRodTool::AGasRodTool()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	// Total sphere slots. Base = 4 slots, +2 per upgrade level.
-	CapacityProgression.BaseValue        = 4.0f;
-	CapacityProgression.AdditivePerLevel = 2.0f;
+	CapacityProgression.BaseValue        = 1.0f;
+	CapacityProgression.AdditivePerLevel = 1.0f;
 
 	AbsSpeedProgression.BaseValue        = 10.0f;
 	AbsSpeedProgression.AdditivePerLevel = 2.0f;
@@ -24,8 +24,42 @@ void AGasRodTool::BeginPlay()
 void AGasRodTool::StartUsing_Implementation()
 {
 	Super::StartUsing_Implementation();
-	// TODO: Fire an empty sphere toward the aimed gas cloud.
-	// Call TakeEmptySphere() here, then spawn the projectile BP.
+
+	if (!CanFireSphere() || !SphereClass) return;
+	if (!TakeEmptySphere()) return;
+
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	if (!OwnerPawn) return;
+
+	FVector SpawnLocation = GetActorLocation();
+	FRotator SpawnRotation = OwnerPawn->GetControlRotation();
+
+	FActorSpawnParameters Params;
+	Params.Owner = this;
+	Params.Instigator = OwnerPawn;
+
+	AGasSphere* Sphere = GetWorld()->SpawnActor<AGasSphere>(
+		SphereClass,
+		SpawnLocation,
+		SpawnRotation,
+		Params
+	);
+
+	if (!Sphere) return;
+
+	// AbsSpeed = DPS
+	Sphere->InitSphere(this, GetAbsorptionSpeed());
+
+	ActiveSpheres.Add(Sphere);
+
+	UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(Sphere->GetRootComponent());
+	if (Root && Root->IsSimulatingPhysics())
+	{
+		FVector Dir = SpawnRotation.Vector();
+		float Force = GetRodRange();
+
+		Root->AddImpulse(Dir * Force, NAME_None, true);
+	}
 }
 
 void AGasRodTool::StopUsing_Implementation()
@@ -34,7 +68,7 @@ void AGasRodTool::StopUsing_Implementation()
 }
 
 // =========================================================================
-// STAT GETTERS
+// STATS
 // =========================================================================
 
 float AGasRodTool::GetAbsorptionSpeed() const
@@ -56,7 +90,7 @@ float AGasRodTool::GetMaxCapacity() const
 }
 
 // =========================================================================
-// SPHERE OPERATIONS
+// INVENTORY OPERATIONS
 // =========================================================================
 
 int32 AGasRodTool::AddEmptySpheresToRod(int32 Quantity)
@@ -64,7 +98,7 @@ int32 AGasRodTool::AddEmptySpheresToRod(int32 Quantity)
 	if (Quantity <= 0) return 0;
 
 	int32 MaxSlots   = FMath::FloorToInt(GetMaxCapacity());
-	int32 TotalInRod = GetTotalSpheresInRod(); // empty + full
+	int32 TotalInRod = GetTotalSpheresInRod();
 	int32 FreeSlots  = FMath::Max(0, MaxSlots - TotalInRod);
 	int32 ToAdd      = FMath::Min(Quantity, FreeSlots);
 
@@ -81,9 +115,24 @@ bool AGasRodTool::TakeEmptySphere()
 
 bool AGasRodTool::ReturnFullSphere(FName GasType)
 {
+	if (GasType.IsNone()) return false;
 	if (IsRodFull()) return false;
+
 	HarvestedGas.FindOrAdd(GasType)++;
 	return true;
+}
+
+void AGasRodTool::RecallAllSpheres()
+{
+	for (auto& SpherePtr : ActiveSpheres)
+	{
+		if (SpherePtr.IsValid())
+		{
+			SpherePtr->Destroy(); // recall = remove sphere
+		}
+	}
+
+	ActiveSpheres.Empty();
 }
 
 // =========================================================================
@@ -92,9 +141,12 @@ bool AGasRodTool::ReturnFullSphere(FName GasType)
 
 int32 AGasRodTool::GetTotalSpheresInRod() const
 {
-	int32 FullSpheres = 0;
-	for (const auto& Pair : HarvestedGas) FullSpheres += Pair.Value;
-	return EmptySphereCount + FullSpheres;
+	int32 Full = 0;
+	for (const auto& Pair : HarvestedGas)
+	{
+		Full += Pair.Value;
+	}
+	return EmptySphereCount + Full;
 }
 
 bool AGasRodTool::CanFireSphere() const
@@ -108,12 +160,12 @@ bool AGasRodTool::IsRodFull() const
 }
 
 // =========================================================================
-// INVENTORY — used by the upgrade cost system & inspect widget
+// INVENTORY SYSTEM
 // =========================================================================
 
 void AGasRodTool::ClearInventory(float RetainedFraction)
 {
-	EmptySphereCount = 0; // Lost on death — empty spheres are physical items
+	EmptySphereCount = 0;
 
 	if (RetainedFraction <= 0.0f)
 	{
@@ -131,7 +183,6 @@ void AGasRodTool::ClearInventory(float RetainedFraction)
 
 TMap<FName, int32> AGasRodTool::GetAllResources() const
 {
-	// Returns FULL spheres only. Empty spheres are not a "resource" for upgrade costs.
 	return HarvestedGas;
 }
 
@@ -145,10 +196,11 @@ int32 AGasRodTool::RemoveResource(FName InResourceID, int32 Amount)
 	HarvestedGas[InResourceID] -= ToRemove;
 
 	if (HarvestedGas[InResourceID] <= 0)
+	{
 		HarvestedGas.Remove(InResourceID);
+	}
 
-	// Each removed full sphere becomes an empty sphere again
-	// (the gas was consumed but the physical sphere remains in the rod)
+	// consumed gas → empty spheres restored
 	EmptySphereCount += ToRemove;
 
 	return ToRemove;
@@ -156,11 +208,13 @@ int32 AGasRodTool::RemoveResource(FName InResourceID, int32 Amount)
 
 int32 AGasRodTool::GetResourceAmount(FName InResourceID) const
 {
-	return HarvestedGas.Contains(InResourceID) ? HarvestedGas[InResourceID] : 0;
+	return HarvestedGas.Contains(InResourceID)
+		? HarvestedGas[InResourceID]
+		: 0;
 }
 
 // =========================================================================
-// SAVE & LOAD
+// SAVE / LOAD
 // =========================================================================
 
 void AGasRodTool::SaveToolData(UAlphaExilemetSaveGame* SaveObject)
@@ -168,8 +222,8 @@ void AGasRodTool::SaveToolData(UAlphaExilemetSaveGame* SaveObject)
 	Super::SaveToolData(SaveObject);
 	if (!SaveObject) return;
 
-	SaveObject->SavedHarvestedGas       = HarvestedGas;
-	SaveObject->SavedEmptySphereCount   = EmptySphereCount;
+	SaveObject->SavedHarvestedGas     = HarvestedGas;
+	SaveObject->SavedEmptySphereCount = EmptySphereCount;
 }
 
 void AGasRodTool::LoadToolData(UAlphaExilemetSaveGame* SaveObject)
