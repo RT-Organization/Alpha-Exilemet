@@ -6,6 +6,7 @@
 
 class UNiagaraComponent;
 class USphereComponent;
+class AGasSphere;
 
 UCLASS()
 class ALPHAEXILEMET_API AGasResource : public AResourceBase
@@ -13,13 +14,46 @@ class ALPHAEXILEMET_API AGasResource : public AResourceBase
 	GENERATED_BODY()
 	
 public:	
-	// The invisible hitbox so the Gas Rod knows what to grab!
+	AGasResource();
+
+	UFUNCTION(BlueprintPure, Category="Gas")
+	FName GetGasType() const;
+
+	virtual void Tick(float DeltaTime) override;
+
+	// =========================================================================
+	// COMPONENTS
+	// =========================================================================
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gas")
 	USphereComponent* GasHitbox;
 
-	// The visual gas cloud effect
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gas")
 	UNiagaraComponent* GasVFX;
-	
-	AGasResource();
+
+	// =========================================================================
+	// RESERVATION SYSTEM
+	// =========================================================================
+
+protected:
+
+	UPROPERTY()
+	AGasSphere* CurrentSphere = nullptr;
+
+public:
+
+	bool TryReserve(AGasSphere* Sphere);
+	void ReleaseReservation();
+
+protected:
+
+	// =========================================================================
+	// SCALE TWEEN
+	// =========================================================================
+
+	FVector TargetScale;
+	float ScaleInterpSpeed = 3.0f;
+
+	virtual void UpdateScale() override;
+	virtual void DepleteResource() override;
 };

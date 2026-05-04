@@ -5,6 +5,8 @@
 #include "AlphaExilemet/Data/AlphaExilemetTypes.h"
 #include "GasRodTool.generated.h"
 
+class AGasSphere;
+
 /**
  * AGasRodTool
  *
@@ -19,9 +21,15 @@
  *   EmptySphereCount   → how many un-launched empty spheres the rod currently holds
  *   HarvestedGas       → TMap<FName, int32>  = full spheres (gas type → sphere count)
  *
- * UPGRADE COST SYSTEM:
- *   GetTotalResourceAmount("RedGas") on the character will call GetResourceAmount()
- *   which reads from HarvestedGas — so the cost system works without changes.
+ * RULES:
+ *   - Only one sphere can harvest a gas at a time
+ *   - A sphere is full ONLY if it kills the gas
+ *   - Full spheres drop physically and must be picked up
+ *
+ * PROGRESSION:
+ *   AbsSpeed → increases DPS (damage per second)
+ *   Range    → increases throw force
+ *   Capacity → increases total sphere slots
  */
 UCLASS()
 class ALPHAEXILEMET_API AGasRodTool : public AToolBase
@@ -39,7 +47,7 @@ protected:
 
 public:
 	// =========================================================================
-	// PROGRESSION MATH
+	// PROGRESSION
 	// =========================================================================
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Progression")
@@ -48,7 +56,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Progression")
 	FStatProgression RangeProgression;
 	
-	/** Controls the total number of sphere slots (empty + full combined). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Progression")
 	FStatProgression CapacityProgression;
 
@@ -56,67 +63,50 @@ public:
 	// INVENTORY
 	// =========================================================================
 
-	/**
-	 * Full spheres currently stored in the rod.
-	 * Key = gas resource row name (e.g. "RedGas").
-	 * Value = number of full spheres of that gas type.
-	 * Used by GetTotalResourceAmount for upgrade cost checks.
-	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="GasRod|Inventory")
 	TMap<FName, int32> HarvestedGas;
 
-	/**
-	 * Number of empty (unfired) spheres currently inside the rod.
-	 * These are available to be launched at a gas cloud.
-	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category="GasRod|Inventory")
 	int32 EmptySphereCount = 0;
 
-	// -------------------------------------------------------------------------
-	// SPHERE OPERATIONS (prepare for gas harvesting mechanic)
-	// -------------------------------------------------------------------------
+	// =========================================================================
+	// SPHERES
+	// =========================================================================
 
-	/**
-	 * Add empty spheres to the rod (e.g. player buys new spheres at the shop,
-	 * or starting inventory). Respects MaxCapacity.
-	 * Returns how many were actually added (may be less if rod is near full).
-	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Sphere")
+	TSubclassOf<AGasSphere> SphereClass;
+
+	UPROPERTY()
+	TArray<TWeakObjectPtr<AGasSphere>> ActiveSpheres;
+
+	UFUNCTION(BlueprintCallable)
+	void RecallAllSpheres();
+
+	// =========================================================================
+	// INVENTORY OPERATIONS
+	// =========================================================================
+
 	UFUNCTION(BlueprintCallable, Category="GasRod|Inventory")
 	int32 AddEmptySpheresToRod(int32 Quantity = 1);
 
-	/**
-	 * Remove one empty sphere from the rod to fire it.
-	 * Returns true if a sphere was available and removed, false if rod has no empty spheres.
-	 */
 	UFUNCTION(BlueprintCallable, Category="GasRod|Inventory")
 	bool TakeEmptySphere();
 
-	/**
-	 * Call when the player picks up a sphere that finished harvesting a gas cloud
-	 * and inserts it back into the rod.
-	 *
-	 * @param GasType  Row name of the harvested gas resource (e.g. "RedGas")
-	 * @return true if the sphere was accepted (rod not full), false otherwise.
-	 */
 	UFUNCTION(BlueprintCallable, Category="GasRod|Inventory")
 	bool ReturnFullSphere(FName GasType);
 
-	// -------------------------------------------------------------------------
+	// =========================================================================
 	// INVENTORY QUERIES
-	// -------------------------------------------------------------------------
+	// =========================================================================
 
-	/** Total sphere slots available in this rod (at current upgrade level). */
 	virtual float GetMaxCapacity() const override;
 
-	/** Total spheres currently held (empty + full). */
 	UFUNCTION(BlueprintPure, Category="GasRod|Inventory")
 	int32 GetTotalSpheresInRod() const;
 
-	/** True if at least one empty sphere is available to fire. */
 	UFUNCTION(BlueprintPure, Category="GasRod|Inventory")
 	bool CanFireSphere() const;
 
-	/** True if the rod is at maximum sphere capacity. */
 	UFUNCTION(BlueprintPure, Category="GasRod|Inventory")
 	bool IsRodFull() const;
 
@@ -126,7 +116,7 @@ public:
 	virtual TMap<FName, int32> GetAllResources() const override;
 
 	// =========================================================================
-	// STAT GETTERS
+	// STATS
 	// =========================================================================
 	
 	UFUNCTION(BlueprintPure, Category="GasRod|Stats")
