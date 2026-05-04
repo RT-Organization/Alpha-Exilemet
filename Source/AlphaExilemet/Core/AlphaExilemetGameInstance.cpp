@@ -1,12 +1,41 @@
 #include "AlphaExilemetGameInstance.h"
 
 #include "AlphaExilemet/Tools/ToolBase.h"
+#include "AlphaExilemet/BaseCamp.h"
 #include "Kismet/GameplayStatics.h"
 #include "Camera/CameraComponent.h"
 
 // -------------------------------------------------------------------------
 // EXISTING: SAVE / LOAD
 // -------------------------------------------------------------------------
+
+bool UAlphaExilemetGameInstance::DoesSaveExist(FString SlotName)
+{
+	return UGameplayStatics::DoesSaveGameExist(SlotName, 0);
+}
+
+void UAlphaExilemetGameInstance::CreateNewGame(FString SlotName)
+{
+	CurrentSaveSlot = SlotName;
+
+	// Create a brand new save object using your custom class
+	LocalSaveRef = Cast<UAlphaExilemetSaveGame>(
+		UGameplayStatics::CreateSaveGameObject(UAlphaExilemetSaveGame::StaticClass()));
+	
+	if (LocalSaveRef)
+	{
+		// Force the starting level so the system knows where to drop the player
+		LocalSaveRef->CurrentLevelName = FName("Tutorial");
+
+		// TASK A1: bHasValidTransform starts false on a fresh game.
+		// SetupPlayerData() will skip the teleport call entirely.
+		// It will be set true the first time SavePlayerData() runs.
+		LocalSaveRef->bHasValidTransform = false;
+		
+		// Save it to disk immediately so it registers as an existing game
+		UGameplayStatics::SaveGameToSlot(LocalSaveRef, CurrentSaveSlot, 0);
+	}
+}
 
 void UAlphaExilemetGameInstance::SavePlayerData()
 {
@@ -25,6 +54,10 @@ void UAlphaExilemetGameInstance::SavePlayerData()
 	}
 
 	PlayerRef->SaveToolDataToSaveObject(LocalSaveRef);
+
+	// TASK A1: Mark that we have a real position now.
+	// From this point on, SetupPlayerData() will apply the saved transform.
+	LocalSaveRef->bHasValidTransform = true;
 }
 
 void UAlphaExilemetGameInstance::SetupPlayerData()
@@ -32,16 +65,22 @@ void UAlphaExilemetGameInstance::SetupPlayerData()
 	PlayerRef = Cast<AAlphaExilemetCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
 	if (!PlayerRef || !LocalSaveRef) return;
 
-	PlayerRef->SetActorTransform(LocalSaveRef->PlayerLocation, false, nullptr, ETeleportType::TeleportPhysics);
-	if (APlayerController* PC = Cast<APlayerController>(PlayerRef->GetController()))
+	// TASK A1: Only teleport if a real saved position exists.
+	// On a fresh new game bHasValidTransform = false, so we skip this block
+	// and let the GameMode spawn the player at PlayerStart instead.
+	if (LocalSaveRef->bHasValidTransform)
 	{
-		PC->SetControlRotation(LocalSaveRef->PlayerCamera.Rotator());
+		PlayerRef->SetActorTransform(LocalSaveRef->PlayerLocation, false, nullptr, ETeleportType::TeleportPhysics);
+		if (APlayerController* PC = Cast<APlayerController>(PlayerRef->GetController()))
+		{
+			PC->SetControlRotation(LocalSaveRef->PlayerCamera.Rotator());
+		}
 	}
 
-	PlayerRef->Health                = LocalSaveRef->SavedHealth;
-	PlayerRef->Oxygen                = LocalSaveRef->SavedOxygen;
-	PlayerRef->Currency              = LocalSaveRef->SavedCurrency;
-	PlayerRef->SystemUpgradeLevels   = LocalSaveRef->SavedUpgradeLevels;
+	PlayerRef->Health              = LocalSaveRef->SavedHealth;
+	PlayerRef->Oxygen              = LocalSaveRef->SavedOxygen;
+	PlayerRef->Currency            = LocalSaveRef->SavedCurrency;
+	PlayerRef->SystemUpgradeLevels = LocalSaveRef->SavedUpgradeLevels;
 
 	PlayerRef->RecalculateStats();
 	PlayerRef->LoadToolDataFromSaveObject(LocalSaveRef);
@@ -70,14 +109,11 @@ void UAlphaExilemetGameInstance::SetupShipData()
 
 void UAlphaExilemetGameInstance::InitProgressionManager()
 {
-	// Create the manager if it doesn't exist yet
 	if (!ProgressionManager)
 	{
 		ProgressionManager = NewObject<UUpgradeProgressionManager>(this);
 	}
 
-	// Gather current levels from the already-loaded player and ship references.
-	// This works both for fresh games (all levels = 0) and loaded games.
 	TMap<EPlayerStat, int32> CharacterLevels;
 	TMap<FName, int32>       ToolStatLevels;
 	TMap<EShipSystem, int32> ShipLevels;
@@ -86,14 +122,10 @@ void UAlphaExilemetGameInstance::InitProgressionManager()
 	{
 		CharacterLevels = PlayerRef->SystemUpgradeLevels;
 
-		// Merge tool upgrade levels from all owned tools.
-		// This correctly picks up Pickaxe_Strength, Vacuum_Speed, Rod_AbsSpeed, etc.
 		for (AToolBase* Tool : PlayerRef->OwnedTools)
 		{
 			if (Tool)
 			{
-				// TMap::Append keeps existing keys if they collide — safe because
-				// each StatID should only appear on one tool type.
 				ToolStatLevels.Append(Tool->ToolUpgradeLevels);
 			}
 		}

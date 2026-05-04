@@ -4,7 +4,6 @@
 #include "Engine/GameInstance.h"
 #include "AlphaExilemetSaveGame.h"
 #include "AlphaExilemet/AlphaExilemetCharacter.h"
-#include "AlphaExilemet/BaseCamp.h"
 #include "UpgradeProgressionManager.h"
 #include "AlphaExilemetGameInstance.generated.h"
 
@@ -58,6 +57,13 @@ public:
 	// -------------------------------------------------------------------------
 	// CORE SAVE / LOAD FUNCTIONS (existing)
 	// -------------------------------------------------------------------------
+	
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
+	bool DoesSaveExist(FString SlotName);
+
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
+	void CreateNewGame(FString SlotName);
+	
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void SavePlayerData();
 
