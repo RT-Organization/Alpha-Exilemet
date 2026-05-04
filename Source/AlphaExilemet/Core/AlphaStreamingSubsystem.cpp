@@ -2,72 +2,152 @@
 #include "Kismet/GameplayStatics.h"
 #include "AlphaExilemetGameInstance.h"
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GENERIC STREAM
+// ─────────────────────────────────────────────────────────────────────────────
+
 void UAlphaStreamingSubsystem::StreamLevel(FName LevelToLoad, FName LevelToUnload)
 {
 	UWorld* World = GetWorld();
 	if (!World) return;
 
+	// Build latent info so LoadStreamLevel fires OnStreamLevelLoaded on completion.
 	FLatentActionInfo LatentInfo;
-	LatentInfo.CallbackTarget = this;
+	LatentInfo.CallbackTarget    = this;
 	LatentInfo.ExecutionFunction = FName("OnStreamLevelLoaded");
-	LatentInfo.Linkage = 0;
-	LatentInfo.UUID = 123; // Unique ID
+	LatentInfo.Linkage           = 0;
+	LatentInfo.UUID              = ++LatentUUID; // Unique per call
 
-	// Load the new level
 	UGameplayStatics::LoadStreamLevel(World, LevelToLoad, true, true, LatentInfo);
-	
-	// Unload the old level
-	FLatentActionInfo UnloadLatentInfo;
-	UGameplayStatics::UnloadStreamLevel(World, LevelToUnload, UnloadLatentInfo, false);
+
+	// Unload only if a target was specified (pass NAME_None to skip).
+	if (!LevelToUnload.IsNone())
+	{
+		FLatentActionInfo UnloadInfo;
+		UnloadInfo.CallbackTarget    = this;
+		UnloadInfo.ExecutionFunction = FName("OnStreamLevelLoaded"); // Not used for unload
+		UnloadInfo.Linkage           = 0;
+		UnloadInfo.UUID              = ++LatentUUID;
+		UGameplayStatics::UnloadStreamLevel(World, LevelToUnload, UnloadInfo, false);
+	}
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TUTORIAL → MAIN TRANSITION
+// ─────────────────────────────────────────────────────────────────────────────
 
 void UAlphaStreamingSubsystem::HandleTutorialCompletion()
 {
-	// Get the Game Instance to update the save state
-	UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance());
-	if (GI && GI->LocalSaveRef)
+	// Save before swapping levels so data is not lost.
+	if (UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance()))
 	{
-		GI->LocalSaveRef->CurrentLevelName = FName("Main");
+		if (GI->LocalSaveRef)
+		{
+			GI->LocalSaveRef->CurrentLevelName = FName("Main");
+		}
 		GI->SavePlayerData();
 	}
 
-	// Swap the levels
+	// Flag this as the tutorial-to-main transition so OnStreamLevelLoaded
+	// knows to broadcast OnTutorialToMainComplete when Main finishes loading.
+	bTutorialTransition = true;
+
+	// Load Main, unload Tutorial.
 	StreamLevel(FName("Main"), FName("Tutorial"));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PORTAL — ENTER
+// ─────────────────────────────────────────────────────────────────────────────
 
 void UAlphaStreamingSubsystem::EnterPortal(FName PortalLevelName, FTransform PlayerEntryTransform)
 {
 	UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance());
 	if (GI && GI->LocalSaveRef)
 	{
-		// Save where we were standing before entering the portal
+		// Remember where the player was standing before entering.
 		GI->LocalSaveRef->PrePortalTransform = PlayerEntryTransform;
-		GI->LocalSaveRef->CurrentLevelName = PortalLevelName;
+		GI->LocalSaveRef->CurrentLevelName   = PortalLevelName;
 		GI->SavePlayerData();
 	}
 
-	StreamLevel(PortalLevelName, FName("Main"));
+	// Store the active portal name so ExitPortal() knows what to unload.
+	ActivePortalName = PortalLevelName;
+
+	// DESIGN DECISION: Main is NEVER unloaded while inside a portal.
+	// Pass NAME_None so StreamLevel does NOT unload anything.
+	StreamLevel(PortalLevelName, NAME_None);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PORTAL — EXIT
+// ─────────────────────────────────────────────────────────────────────────────
 
 void UAlphaStreamingSubsystem::ExitPortal()
 {
 	UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance());
-	FName CurrentPortal = FName("Main"); // Fallback
+	FTransform ReturnTransform;
+	bool bHasReturnTransform = false;
 
 	if (GI && GI->LocalSaveRef)
 	{
-		CurrentPortal = GI->LocalSaveRef->CurrentLevelName;
-		// Reset the save state back to main
+		ReturnTransform     = GI->LocalSaveRef->PrePortalTransform;
+		bHasReturnTransform = true;
+
+		// Reset save state back to Main.
 		GI->LocalSaveRef->CurrentLevelName = FName("Main");
 		GI->SavePlayerData();
 	}
 
-	StreamLevel(FName("Main"), CurrentPortal);
+	// Restore player to pre-portal position.
+	if (bHasReturnTransform)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			if (AAlphaExilemetCharacter* Player = Cast<AAlphaExilemetCharacter>(
+				World->GetFirstPlayerController() ? World->GetFirstPlayerController()->GetPawn() : nullptr))
+			{
+				Player->SetActorTransform(ReturnTransform, false, nullptr, ETeleportType::TeleportPhysics);
+			}
+		}
+	}
+
+	// DESIGN DECISION: Main was never unloaded; we only need to unload the portal.
+	// No load call needed — Main is already resident.
+	FName PortalToUnload = ActivePortalName;
+	ActivePortalName     = NAME_None;
+
+	if (!PortalToUnload.IsNone())
+	{
+		UWorld* World = GetWorld();
+		if (!World) return;
+
+		FLatentActionInfo UnloadInfo;
+		UnloadInfo.CallbackTarget    = this;
+		UnloadInfo.ExecutionFunction = FName("OnStreamLevelLoaded");
+		UnloadInfo.Linkage           = 0;
+		UnloadInfo.UUID              = ++LatentUUID;
+		UGameplayStatics::UnloadStreamLevel(World, PortalToUnload, UnloadInfo, false);
+	}
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LATENT CALLBACK
+// ─────────────────────────────────────────────────────────────────────────────
 
 void UAlphaStreamingSubsystem::OnStreamLevelLoaded()
 {
-	// This fires when a streaming level finishes loading.
-	// You can hook this up to fade the screen back from black later!
-	UE_LOG(LogTemp, Warning, TEXT("Level Stream Complete!"));
+	// Always broadcast the generic "something finished loading" event.
+	OnStreamComplete.Broadcast();
+
+	// If this was the Tutorial→Main transition, fire the specific delegate
+	// that WB_TutorialBlackout is bound to, then reset the flag.
+	if (bTutorialTransition)
+	{
+		bTutorialTransition = false;
+		OnTutorialToMainComplete.Broadcast();
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("UAlphaStreamingSubsystem: Level stream complete. TutorialTransition was %s."),
+		bTutorialTransition ? TEXT("true") : TEXT("false"));
 }

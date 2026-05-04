@@ -35,6 +35,15 @@ public:
 	/* ----------------------------- */
 	/* POS & ROT                     */
 	/* ----------------------------- */
+
+	/**
+	 * Guards SetupPlayerData() from teleporting to a zero FTransform on fresh saves.
+	 * Set to true ONLY in SavePlayerData() after a real save has occurred.
+	 * Default false so a brand-new game never teleports to world origin.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Pos&Rot")
+	bool bHasValidTransform;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Pos&Rot")
 	FTransform PlayerLocation;
 
@@ -70,7 +79,7 @@ public:
 
 	/**
 	 * How many empty (unfired) spheres the gas rod was holding at save time.
-	 * Full spheres are stored in SavedHarvestedGas (gas type → count).
+	 * Full spheres are stored in SavedHarvestedGas (gas type -> count).
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
 	int32 SavedEmptySphereCount = 0;
@@ -89,8 +98,8 @@ public:
 	 * Key   = DataTable row name (the UpgradeKey used in widgets).
 	 * Value = How much is still owed (currency + materials).
 	 *
-	 * Untouched upgrades → NOT stored here (re-seeded from DataTable on load).
-	 * Fully-paid upgrades → NOT stored here (manager seeds the next level).
+	 * Untouched upgrades  -> NOT stored here (re-seeded from DataTable on load).
+	 * Fully-paid upgrades -> NOT stored here (manager seeds the next level).
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Progression")
 	TMap<FName, FUpgradeCost> SavedRemainingCosts;
