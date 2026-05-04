@@ -16,6 +16,13 @@ AGasResource::AGasResource()
 	GasVFX->SetupAttachment(GasHitbox);
 }
 
+void AGasResource::BeginPlay()
+{
+	Super::BeginPlay();
+	
+	UpdateScale();
+}
+
 FName AGasResource::GetGasType() const
 {
 	return ResourceID.RowName;
@@ -65,14 +72,22 @@ void AGasResource::Tick(float DeltaTime)
 	SetActorScale3D(NewScale);
 }
 
-// =========================================================================
-// DEPLETION
-// =========================================================================
+void AGasResource::RegenerateResource()
+{
+	Super::RegenerateResource();
+	
+	if (GasVFX)
+	{
+		GasVFX->Activate();
+	}
+}
 
 void AGasResource::DepleteResource()
 {
 	Super::DepleteResource();
-
+	
+	SetActorHiddenInGame(false);
+	
 	ReleaseReservation();
 
 	if (GasVFX)

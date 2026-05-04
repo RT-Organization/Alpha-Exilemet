@@ -91,7 +91,7 @@ void AResourceBase::RegenerateResource()
 	SetActorHiddenInGame(false);
 	SetActorEnableCollision(true);
 	
-	SetActorScale3D(FVector(1.f));
+	UpdateScale();
 }
 
 void AResourceBase::DepleteResource()

@@ -70,7 +70,7 @@ protected:
 	/*        INTERNAL METHODS       */
 	/* ----------------------------- */
 	
-	void RegenerateResource();
+	virtual void RegenerateResource();
 	virtual void DepleteResource();
 	
 	virtual void UpdateScale();

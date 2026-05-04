@@ -7,17 +7,32 @@
 AGasSphere::AGasSphere()
 {
 	PrimaryActorTick.bCanEverTick = true;
-
+	
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>("Mesh");
 	SetRootComponent(Mesh);
-
+	
 	Mesh->SetSimulatePhysics(true);
 	Mesh->SetCollisionProfileName(TEXT("PhysicsActor"));
+	Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 }
 
 void AGasSphere::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+void AGasSphere::NotifyActorBeginOverlap(AActor* OtherActor)
+{
+	Super::NotifyActorBeginOverlap(OtherActor);
+	
+	if (bIsAttached || bIsFull) return;
+	
+	if (!OtherActor) return;
+	
+	AGasResource* Gas = Cast<AGasResource>(OtherActor);
+	if (!Gas) return;
+	
+	TryAttachToGas(Gas);
 }
 
 void AGasSphere::InitSphere(AGasRodTool* InOwnerTool, float InDamagePerSecond)
@@ -30,12 +45,12 @@ void AGasSphere::TryAttachToGas(AGasResource* Gas)
 {
 	if (!Gas || bIsAttached || bIsFull) return;
 	if (!Gas->TryReserve(this)) return;
-
+	
 	TargetGas = Gas;
 	GasType = Gas->GetGasType();
-
+	
 	bIsAttached = true;
-
+	
 	Mesh->SetSimulatePhysics(false);
 	SetActorLocation(Gas->GetActorLocation());
 }
@@ -43,11 +58,11 @@ void AGasSphere::TryAttachToGas(AGasResource* Gas)
 void AGasSphere::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
+	
 	if (!bIsAttached || bIsFull || !TargetGas) return;
-
+	
 	bool bKilled = TargetGas->ApplyResourceDamage(DamagePerSecond * DeltaTime);
-
+	
 	if (bKilled)
 	{
 		bIsFull = true;
@@ -67,12 +82,12 @@ void AGasSphere::Tick(float DeltaTime)
 void AGasSphere::Interact_Implementation(AAlphaExilemetCharacter* Interactor)
 {
 	if (!bIsFull || !Interactor || !Interactor->CurrentTool) return;
-
+	
 	AGasRodTool* Rod = Cast<AGasRodTool>(Interactor->CurrentTool);
 	if (!Rod) return;
-
+	
 	bool bAdded = Rod->ReturnFullSphere(GasType);
-
+	
 	if (bAdded)
 	{
 		Destroy();

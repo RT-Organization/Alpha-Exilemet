@@ -5,20 +5,25 @@
 AGasRodTool::AGasRodTool()
 {
 	PrimaryActorTick.bCanEverTick = true;
-
+	
 	CapacityProgression.BaseValue        = 1.0f;
 	CapacityProgression.AdditivePerLevel = 1.0f;
-
+	
 	AbsSpeedProgression.BaseValue        = 10.0f;
 	AbsSpeedProgression.AdditivePerLevel = 2.0f;
-
+	
 	RangeProgression.BaseValue           = 1000.0f;
 	RangeProgression.AdditivePerLevel    = 200.0f;
+	
+	SphereSpawnOffset = CreateDefaultSubobject<USceneComponent>(TEXT("SphereSpawnOffset"));
+	SphereSpawnOffset->SetupAttachment(RootComponent);
 }
 
 void AGasRodTool::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	AddEmptySpheresToRod(GetMaxCapacity());
 }
 
 void AGasRodTool::StartUsing_Implementation()
@@ -31,9 +36,11 @@ void AGasRodTool::StartUsing_Implementation()
 	APawn* OwnerPawn = Cast<APawn>(GetOwner());
 	if (!OwnerPawn) return;
 
-	FVector SpawnLocation = GetActorLocation();
+	FVector SpawnLocation = SphereSpawnOffset
+		? SphereSpawnOffset->GetComponentLocation()
+		: GetActorLocation();
 	FRotator SpawnRotation = OwnerPawn->GetControlRotation();
-
+	
 	FActorSpawnParameters Params;
 	Params.Owner = this;
 	Params.Instigator = OwnerPawn;
@@ -129,6 +136,7 @@ void AGasRodTool::RecallAllSpheres()
 		if (SpherePtr.IsValid())
 		{
 			SpherePtr->Destroy(); // recall = remove sphere
+			AddEmptySpheresToRod(1); // can be called after but count how many have been recalled
 		}
 	}
 
@@ -165,7 +173,7 @@ bool AGasRodTool::IsRodFull() const
 
 void AGasRodTool::ClearInventory(float RetainedFraction)
 {
-	EmptySphereCount = 0;
+	EmptySphereCount = 0; // Check this out
 
 	if (RetainedFraction <= 0.0f)
 	{
