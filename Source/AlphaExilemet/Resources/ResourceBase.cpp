@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "ResourceBase.h"
 #include "AlphaExilemet/Data/AlphaExilemetTypes.h"
 #include "TimerManager.h"
@@ -16,17 +14,15 @@ void AResourceBase::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	// Load stats from DT_Resources
 	if (ResourceID.DataTable && !ResourceID.RowName.IsNone())
 	{
 		const FResourceRow* Row = ResourceID.DataTable->FindRow<FResourceRow>(
 			ResourceID.RowName,
 			TEXT("AResourceBase::BeginPlay — loading resource stats from DataTable")
 		);
-
+		
 		if (Row)
 		{
-			// Override whatever the Blueprint default says
 			Health = Row->Health;
 			CurrencyValuePerUnit = static_cast<float>(Row->SellValue);
 			VeinRegenerationTime = Row->RegenTime;
@@ -44,22 +40,21 @@ void AResourceBase::BeginPlay()
 	else
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("AResourceBase [%s]: ResourceID is not set. Using Blueprint defaults for Health / SellValue."),
+			TEXT("AResourceBase [%s]: ResourceID is not set. Using Blueprint defaults."),
 			*GetName()
 		);
 	}
-
-	// Cache initial values AFTER loading from the DataTable
+	
 	InitialHealth = Health;
 	InitialScale  = GetActorScale3D();
 }
 
 bool AResourceBase::ApplyResourceDamage(float DamageAmount)
 {
-	bool wasDepletedByThisDamage = false;
+	bool bDepletedNow = false;
 	
 	if (bIsDepleted)
-		return wasDepletedByThisDamage;
+		return false;
 	
 	Health -= DamageAmount;
 	
@@ -68,7 +63,7 @@ bool AResourceBase::ApplyResourceDamage(float DamageAmount)
 	if (Health <= 0.f)
 	{
 		DepleteResource();
-		wasDepletedByThisDamage = true;
+		bDepletedNow = true;
 		
 		GetWorldTimerManager().SetTimer(
 			RegenTimer,
@@ -79,13 +74,12 @@ bool AResourceBase::ApplyResourceDamage(float DamageAmount)
 		);
 	}
 	
-	return wasDepletedByThisDamage;
+	return bDepletedNow;
 }
 
 void AResourceBase::RegenerateResource()
 {
 	Health = InitialHealth;
-	
 	bIsDepleted = false;
 	
 	SetActorHiddenInGame(false);
@@ -105,7 +99,6 @@ void AResourceBase::DepleteResource()
 void AResourceBase::UpdateScale()
 {
 	float HealthRatio = Health / InitialHealth;
-	
 	HealthRatio = FMath::Clamp(HealthRatio, 0.1f, 1.f);
 	
 	SetActorScale3D(InitialScale * HealthRatio);

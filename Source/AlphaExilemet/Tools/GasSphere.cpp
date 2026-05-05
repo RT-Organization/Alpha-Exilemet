@@ -26,7 +26,6 @@ void AGasSphere::NotifyActorBeginOverlap(AActor* OtherActor)
 	Super::NotifyActorBeginOverlap(OtherActor);
 	
 	if (bIsAttached || bIsFull) return;
-	
 	if (!OtherActor) return;
 	
 	AGasResource* Gas = Cast<AGasResource>(OtherActor);
@@ -51,8 +50,30 @@ void AGasSphere::TryAttachToGas(AGasResource* Gas)
 	
 	bIsAttached = true;
 	
+	Velocity = Mesh->GetPhysicsLinearVelocity();
 	Mesh->SetSimulatePhysics(false);
-	SetActorLocation(Gas->GetActorLocation());
+	
+	// --- Duration from gameplay ---
+	float GasHealth = Gas->GetHealth();
+	TimeToKill = FMath::Max(0.01f, GasHealth / DamagePerSecond);
+	
+	ElapsedTime = 0.f;
+	
+	// --- TRUE starting offset (fixes snapping) ---
+	InitialOffset = GetActorLocation() - Gas->GetActorLocation();
+	InitialRadius = InitialOffset.Size();
+	
+	// Random start angle
+	CurrentAngle = FMath::FRandRange(0.f, PI * 2.f);
+	
+	FVector ToSphere = InitialOffset.GetSafeNormal();
+	FVector VelDir = Velocity.GetSafeNormal();
+	
+	// Cross product tells us rotation direction
+	FVector Cross = FVector::CrossProduct(ToSphere, VelDir);
+	
+	// Use Z sign (since you're orbiting around UpVector)
+	OrbitDirection = (Cross.Z >= 0.f) ? 1.f : -1.f;
 }
 
 void AGasSphere::Tick(float DeltaTime)
@@ -61,20 +82,60 @@ void AGasSphere::Tick(float DeltaTime)
 	
 	if (!bIsAttached || bIsFull || !TargetGas) return;
 	
+	ElapsedTime += DeltaTime;
+	
+	float Alpha = FMath::Clamp(ElapsedTime / TimeToKill, 0.f, 1.f);
+	
+	float EasedAlpha = FMath::InterpEaseInOut(0.f, 1.f, Alpha, SpiralEasePower);
+	
+	// Shrink radius
+	float CurrentRadius = FMath::Lerp(InitialRadius, 0.f, EasedAlpha);
+	
+	// Speed up rotation
+	float SpeedMul = FMath::Lerp(1.f, OrbitSpeedMultiplier, EasedAlpha);
+	CurrentAngle += OrbitDirection * OrbitSpeed * SpeedMul * DeltaTime;
+	
+	// --- TRUE 3D ORBIT ---
+	FVector StartDir = InitialOffset.GetSafeNormal();
+	
+	// Rotate around Z (can be changed later)
+	FVector RotatedDir = StartDir.RotateAngleAxis(FMath::RadiansToDegrees(CurrentAngle), FVector::UpVector);
+	
+	FVector NewOffset = RotatedDir * CurrentRadius;
+	
+	// Preserve original vertical start → collapse naturally
+	NewOffset.Z = FMath::Lerp(InitialOffset.Z, 0.f, EasedAlpha);
+	
+	FVector TargetLocation = TargetGas->GetActorLocation() + NewOffset;
+	FVector CurrentLocation = GetActorLocation();
+	
+	// Spring toward target
+	float Stiffness = FMath::Lerp(15.f, 60.f, EasedAlpha);
+	float Damping = 8.f;
+	
+	FVector Force = (TargetLocation - CurrentLocation) * Stiffness;
+	Velocity += Force * DeltaTime;
+	
+	// Damping
+	Velocity *= (1.f - FMath::Clamp(Damping * DeltaTime, 0.f, 1.f));
+	
+	SetActorLocation(CurrentLocation + Velocity * DeltaTime);
+	
+	// --- DAMAGE ---
 	bool bKilled = TargetGas->ApplyResourceDamage(DamagePerSecond * DeltaTime);
 	
 	if (bKilled)
 	{
 		bIsFull = true;
-
+		
 		if (TargetGas)
 		{
 			TargetGas->ReleaseReservation();
 		}
-
+		
 		bIsAttached = false;
 		TargetGas = nullptr;
-
+		
 		Mesh->SetSimulatePhysics(true);
 	}
 }
@@ -97,7 +158,7 @@ void AGasSphere::Interact_Implementation(AAlphaExilemetCharacter* Interactor)
 void AGasSphere::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
-
+	
 	if (TargetGas)
 	{
 		TargetGas->ReleaseReservation();
