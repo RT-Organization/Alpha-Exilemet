@@ -100,7 +100,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="GasRod|Inventory")
 	bool ReturnFullSphere(FName GasType);
-
+	
+	virtual void UpgradeStat(FName StatName) override;
+	
 	// =========================================================================
 	// INVENTORY QUERIES
 	// =========================================================================

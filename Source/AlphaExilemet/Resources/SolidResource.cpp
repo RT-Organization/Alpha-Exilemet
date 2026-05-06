@@ -43,6 +43,7 @@ void ASolidResource::DepleteResource()
 	{
 		LuckBonus = FMath::FloorToInt(LastPickaxe->GetMiningLuck());
 	}
+	LuckBonus = FMath::Clamp(LuckBonus, 0, Row->MaxLuckBoost);
 	int32 MaxDropsWithLuck = BaseMaxDrops + LuckBonus;
 	int32 DropCount = FMath::RandRange(1, MaxDropsWithLuck);
 	for (int32 i = 0; i < DropCount; i++)

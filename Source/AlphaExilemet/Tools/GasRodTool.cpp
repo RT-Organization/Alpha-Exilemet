@@ -129,6 +129,13 @@ bool AGasRodTool::ReturnFullSphere(FName GasType)
 	return true;
 }
 
+void AGasRodTool::UpgradeStat(FName StatName)
+{
+	Super::UpgradeStat(StatName);
+	
+	AddEmptySpheresToRod(GetMaxCapacity());
+}
+
 void AGasRodTool::RecallAllSpheres()
 {
 	for (auto& SpherePtr : ActiveSpheres)
