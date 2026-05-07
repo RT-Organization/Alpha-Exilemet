@@ -47,6 +47,12 @@ protected:
 
 public:
 	// =========================================================================
+	// Components
+	// =========================================================================
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="GasRod|Components")
+	USceneComponent* SphereSpawnOffset;
+	
+	// =========================================================================
 	// PROGRESSION
 	// =========================================================================
 	
@@ -94,7 +100,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="GasRod|Inventory")
 	bool ReturnFullSphere(FName GasType);
-
+	
+	virtual void UpgradeStat(FName StatName) override;
+	
 	// =========================================================================
 	// INVENTORY QUERIES
 	// =========================================================================

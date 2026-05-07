@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -13,14 +11,10 @@ class ALPHAEXILEMET_API AResourceBase : public AActor
 	GENERATED_BODY()
 	
 public:	
-	// Sets default values for this actor's properties
 	AResourceBase();
 
 protected:
-	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
-	
-	
 	
 	/* ----------------------------- */
 	/*          COMPONENTS           */
@@ -29,13 +23,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Resource")
 	USceneComponent* Root;
 	
-	
-	
 	/* ----------------------------- */
 	/*            STATS              */
 	/* ----------------------------- */
 	
-	// Select the Resources Data Table, then pick the exact Resource from the dropdown
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Resource")
 	FDataTableRowHandle ResourceID;
 
@@ -51,8 +42,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Resource")
 	float CurrencyValuePerUnit = 20.f;
 	
-	
-	
 	/* ----------------------------- */
 	/*        REGENERATION           */
 	/* ----------------------------- */
@@ -64,18 +53,31 @@ protected:
 	
 	FTimerHandle RegenTimer;
 	
-	
-	
 	/* ----------------------------- */
 	/*        INTERNAL METHODS       */
 	/* ----------------------------- */
 	
-	void RegenerateResource();
+	virtual void RegenerateResource();
 	virtual void DepleteResource();
-	
 	virtual void UpdateScale();
-public:	
-	// Returns true if damage causes this resource to be depleted when it wasn't
+
+public:
+	
+	// =========================================================================
+	// ACCESSORS (NEW)
+	// =========================================================================
+	
+	UFUNCTION(BlueprintPure, Category="Resource")
+	float GetHealth() const { return Health; }
+	
+	UFUNCTION(BlueprintPure, Category="Resource")
+	float GetInitialHealth() const { return InitialHealth; }
+	
+	UFUNCTION(BlueprintPure, Category="Resource")
+	bool IsDepleted() const { return bIsDepleted; }
+	
+	// =========================================================================
+	
 	UFUNCTION(BlueprintCallable, Category="Resource")
 	bool ApplyResourceDamage(float DamageAmount);
 	

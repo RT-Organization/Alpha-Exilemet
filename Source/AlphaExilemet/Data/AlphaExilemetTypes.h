@@ -214,6 +214,10 @@ struct FResourceRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Drops",
 		meta=(EditCondition="ResourceType == EResourceType::Solid", EditConditionHides))
 	int32 MaxDrops = 1;
+	// Max bonus drops coming from luck (0 = no bonus from luck)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource Data|Drops",
+		meta=(EditCondition="ResourceType == EResourceType::Solid", EditConditionHides, ClampMin="0"))
+	int32 MaxLuckBoost = 5;
 	
 	// -------------------------------------------------------------------------
 	// VISUAL / COLOR SETTINGS

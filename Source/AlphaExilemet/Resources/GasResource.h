@@ -15,6 +15,8 @@ class ALPHAEXILEMET_API AGasResource : public AResourceBase
 	
 public:	
 	AGasResource();
+	
+	virtual void BeginPlay() override;
 
 	UFUNCTION(BlueprintPure, Category="Gas")
 	FName GetGasType() const;
@@ -55,5 +57,6 @@ protected:
 	float ScaleInterpSpeed = 3.0f;
 
 	virtual void UpdateScale() override;
+	virtual void RegenerateResource() override;
 	virtual void DepleteResource() override;
 };
