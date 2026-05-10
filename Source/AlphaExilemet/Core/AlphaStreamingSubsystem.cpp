@@ -1,6 +1,23 @@
 #include "AlphaStreamingSubsystem.h"
 #include "Kismet/GameplayStatics.h"
 #include "AlphaExilemetGameInstance.h"
+#include "AlphaExilemet/AlphaExilemetCharacter.h"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS — internal player fetch
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace
+{
+	// Returns the pawn cast to our character type, or nullptr.
+	// Used in ExitPortal and CompletePortalChallenge to avoid code duplication.
+	AAlphaExilemetCharacter* GetLocalPlayer(UWorld* World)
+	{
+		if (!World) return nullptr;
+		APlayerController* PC = World->GetFirstPlayerController();
+		return PC ? Cast<AAlphaExilemetCharacter>(PC->GetPawn()) : nullptr;
+	}
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GENERIC STREAM
@@ -25,7 +42,7 @@ void UAlphaStreamingSubsystem::StreamLevel(FName LevelToLoad, FName LevelToUnloa
 	{
 		FLatentActionInfo UnloadInfo;
 		UnloadInfo.CallbackTarget    = this;
-		UnloadInfo.ExecutionFunction = FName("OnStreamLevelLoaded"); // Not used for unload
+		UnloadInfo.ExecutionFunction = FName("OnStreamLevelLoaded");
 		UnloadInfo.Linkage           = 0;
 		UnloadInfo.UUID              = ++LatentUUID;
 		UGameplayStatics::UnloadStreamLevel(World, LevelToUnload, UnloadInfo, false);
@@ -62,12 +79,25 @@ void UAlphaStreamingSubsystem::HandleTutorialCompletion()
 
 void UAlphaStreamingSubsystem::EnterPortal(FName PortalLevelName, FTransform PlayerEntryTransform)
 {
-	UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance());
-	if (GI && GI->LocalSaveRef)
+	// ── FIRE ENTER DELEGATE FIRST ────────────────────────────────────────────
+	// GameMode BP binds here and creates WB_LoadingScreen BEFORE any streaming.
+	// This ensures the screen is up before any hitching from the load.
+	OnPortalEnterStarted.Broadcast();
+
+	// ── PERSIST STATE ────────────────────────────────────────────────────────
+	if (UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance()))
 	{
-		// Remember where the player was standing before entering.
-		GI->LocalSaveRef->PrePortalTransform = PlayerEntryTransform;
-		GI->LocalSaveRef->CurrentLevelName   = PortalLevelName;
+		if (GI->LocalSaveRef)
+		{
+			// PlayerEntryTransform already has the ReturnYawOffset baked in
+			// by APortalBase::EnterPortalLevel, so ExitPortal() can restore
+			// it directly without extra math.
+			GI->LocalSaveRef->PrePortalTransform = PlayerEntryTransform;
+			GI->LocalSaveRef->CurrentLevelName   = PortalLevelName;
+		}
+
+		// SavePlayerData captures health, oxygen, currency, inventory, tools.
+		// If the game crashes inside a portal, loading restores the pre-portal state.
 		GI->SavePlayerData();
 	}
 
@@ -76,6 +106,7 @@ void UAlphaStreamingSubsystem::EnterPortal(FName PortalLevelName, FTransform Pla
 
 	// DESIGN DECISION: Main is NEVER unloaded while inside a portal.
 	// Pass NAME_None so StreamLevel does NOT unload anything.
+	// OnStreamComplete fires when loading finishes → GameMode fades out screen.
 	StreamLevel(PortalLevelName, NAME_None);
 }
 
@@ -91,6 +122,8 @@ void UAlphaStreamingSubsystem::ExitPortal()
 
 	if (GI && GI->LocalSaveRef)
 	{
+		// PrePortalTransform was saved by EnterPortal() with the return-yaw
+		// already baked in by APortalBase, so no rotation math needed here.
 		ReturnTransform     = GI->LocalSaveRef->PrePortalTransform;
 		bHasReturnTransform = true;
 
@@ -99,29 +132,36 @@ void UAlphaStreamingSubsystem::ExitPortal()
 		GI->SavePlayerData();
 	}
 
-	// Restore player to pre-portal position.
-	if (bHasReturnTransform)
+	// ── RESTORE PLAYER ───────────────────────────────────────────────────────
+	UWorld* World = GetWorld();
+	AAlphaExilemetCharacter* Player = GetLocalPlayer(World);
+
+	if (Player)
 	{
-		if (UWorld* World = GetWorld())
+		// Teleport back to the pre-portal position (already yaw-rotated).
+		if (bHasReturnTransform)
 		{
-			if (AAlphaExilemetCharacter* Player = Cast<AAlphaExilemetCharacter>(
-				World->GetFirstPlayerController() ? World->GetFirstPlayerController()->GetPawn() : nullptr))
+			Player->SetActorTransform(
+				ReturnTransform, false, nullptr, ETeleportType::TeleportPhysics);
+
+			if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
 			{
-				Player->SetActorTransform(ReturnTransform, false, nullptr, ETeleportType::TeleportPhysics);
+				PC->SetControlRotation(ReturnTransform.GetRotation().Rotator());
 			}
 		}
+
+		// ── RE-ENABLE SURVIVAL ───────────────────────────────────────────────
+		// Always re-enable — survival was disabled by APortalBase::EnterPortalLevel.
+		Player->bIsSurvivalActive = true;
 	}
 
-	// DESIGN DECISION: Main was never unloaded; we only need to unload the portal.
-	// No load call needed — Main is already resident.
+	// ── UNLOAD THE PORTAL LEVEL ──────────────────────────────────────────────
+	// Main was never unloaded, so no load call needed — it's already resident.
 	FName PortalToUnload = ActivePortalName;
 	ActivePortalName     = NAME_None;
 
-	if (!PortalToUnload.IsNone())
+	if (!PortalToUnload.IsNone() && World)
 	{
-		UWorld* World = GetWorld();
-		if (!World) return;
-
 		FLatentActionInfo UnloadInfo;
 		UnloadInfo.CallbackTarget    = this;
 		UnloadInfo.ExecutionFunction = FName("OnStreamLevelLoaded");
@@ -132,12 +172,42 @@ void UAlphaStreamingSubsystem::ExitPortal()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PORTAL — COMPLETE CHALLENGE
+// ─────────────────────────────────────────────────────────────────────────────
+
+void UAlphaStreamingSubsystem::CompletePortalChallenge()
+{
+	// ── RE-ENABLE SURVIVAL ───────────────────────────────────────────────────
+	// Do this first so any end-of-challenge logic (e.g. a win screen widget
+	// that checks bIsSurvivalActive) already sees the correct value.
+	if (AAlphaExilemetCharacter* Player = GetLocalPlayer(GetWorld()))
+	{
+		Player->bIsSurvivalActive = true;
+	}
+
+	// ── SIGNAL THE GAMEMODE BP ───────────────────────────────────────────────
+	// The GameMode BP must be bound to OnPortalExitStarted.
+	// Expected BP sequence:
+	//   OnPortalExitStarted fired
+	//     → Create WB_LoadingScreen + play fade-in animation
+	//     → Delay (match the fade-in duration, e.g. 0.5 s)
+	//     → Call ExitPortal()            ← C++ unloads portal, teleports player
+	//     → OnStreamComplete fired
+	//       → Call StartFadeOutSequence on the loading screen widget
+	OnPortalExitStarted.Broadcast();
+
+	UE_LOG(LogTemp, Log,
+		TEXT("UAlphaStreamingSubsystem: CompletePortalChallenge — survival re-enabled, OnPortalExitStarted broadcast."));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // LATENT CALLBACK
 // ─────────────────────────────────────────────────────────────────────────────
 
 void UAlphaStreamingSubsystem::OnStreamLevelLoaded()
 {
 	// Always broadcast the generic "something finished loading" event.
+	// WB_LoadingScreen binds here and starts its fade-out animation.
 	OnStreamComplete.Broadcast();
 
 	// If this was the Tutorial→Main transition, fire the specific delegate
@@ -148,6 +218,7 @@ void UAlphaStreamingSubsystem::OnStreamLevelLoaded()
 		OnTutorialToMainComplete.Broadcast();
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("UAlphaStreamingSubsystem: Level stream complete. TutorialTransition was %s."),
+	UE_LOG(LogTemp, Log,
+		TEXT("UAlphaStreamingSubsystem: Level stream complete. TutorialTransition was %s."),
 		bTutorialTransition ? TEXT("true") : TEXT("false"));
 }

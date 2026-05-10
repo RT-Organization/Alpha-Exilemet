@@ -1,49 +1,34 @@
 #include "TutorialDirector.h"
 
-// Unreal Engine
 #include "Kismet/GameplayStatics.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
-// Project
+// LevelSequence — use module-relative paths
 #include "LevelSequenceActor.h"
 #include "LevelSequencePlayer.h"
+
+// Project
 #include "AlphaExilemet/AlphaExilemetCharacter.h"
 #include "AlphaExilemet/BaseCamp.h"
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CONSTRUCTOR
-// ─────────────────────────────────────────────────────────────────────────────
+#include "AlphaExilemet/Tools/ToolBase.h"
+#include "AlphaExilemet/Core/AlphaStreamingSubsystem.h"
 
 ATutorialDirector::ATutorialDirector()
 {
 	PrimaryActorTick.bCanEverTick = false;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ENGINE OVERRIDES
-// ─────────────────────────────────────────────────────────────────────────────
-
 void ATutorialDirector::BeginPlay()
 {
 	Super::BeginPlay();
-
-	// ── IMPORTANT: Do NOT call InitializeTutorial() here. ──────────────────
-	//
-	// BeginPlay fires at the same frame as level load. The GameMode may not
-	// have spawned or possessed the player yet, so GetTutorialPlayer() would
-	// return nullptr, the overlap bind would silently fail, and the sequence
-	// would play with no camera switch (FP view bug) or crash (Camera Manager
-	// Accessed None).
-	//
-	// Instead, the GameMode calls InitializeTutorial() explicitly after
-	// SpawnNewGamePlayer() completes. See GM_SimulatorGamemode → SpawnNewGamePlayer.
-	// ─────────────────────────────────────────────────────────────────────────
+	// Intentionally empty. InitializeTutorial() is called by the GameMode
+	// AFTER the player is spawned and possessed — not here.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC: InitializeTutorial
-// Called by GM_SimulatorGamemode after the player is spawned and possessed.
+// InitializeTutorial
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::InitializeTutorial()
@@ -51,26 +36,28 @@ void ATutorialDirector::InitializeTutorial()
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	// ── 1. Verify player is valid ──────────────────────────────────────────
+	// 1. Player must exist ──────────────────────────────────────────────────
 	AAlphaExilemetCharacter* Player = GetTutorialPlayer();
 	if (!Player)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("ATutorialDirector::InitializeTutorial — player not found! "
-			     "Make sure GM calls this AFTER SpawnNewGamePlayer."));
+			TEXT("ATutorialDirector::InitializeTutorial — Player not found. "
+			     "Call this AFTER InitializePlayer() in the GameMode."));
 		return;
 	}
 
-	// ── 2. Find the intro Level Sequence by tag ────────────────────────────
+	// 2. Hide HUD immediately — player just spawned, HUD may briefly appear
+	BP_HideHUD();
+
+	// 3. Find Level Sequence by tag ─────────────────────────────────────────
 	TArray<AActor*> TaggedActors;
 	UGameplayStatics::GetAllActorsWithTag(World, IntroSequenceTag, TaggedActors);
 
 	if (TaggedActors.Num() == 0)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("ATutorialDirector::InitializeTutorial — no actor found with tag '%s'. "
-			     "Select the LevelSequenceActor in L_Tutorial → Details → Actor → Tags "
-			     "and add 'TutorialIntroSeq'."),
+			TEXT("ATutorialDirector::InitializeTutorial — No actor tagged '%s'. "
+			     "Select Cutscene1 → Details → Actor → Tags. Case-sensitive."),
 			*IntroSequenceTag.ToString());
 		return;
 	}
@@ -79,9 +66,7 @@ void ATutorialDirector::InitializeTutorial()
 	if (!SeqActor)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("ATutorialDirector::InitializeTutorial — actor tagged '%s' is not a "
-			     "LevelSequenceActor. Check the level outliner."),
-			*IntroSequenceTag.ToString());
+			TEXT("ATutorialDirector::InitializeTutorial — Tagged actor is not a LevelSequenceActor."));
 		return;
 	}
 
@@ -89,18 +74,17 @@ void ATutorialDirector::InitializeTutorial()
 	if (!IntroSequencePlayer)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("ATutorialDirector::InitializeTutorial — LevelSequenceActor has no "
-			     "Sequence Player. Check that a Level Sequence asset is assigned to it."));
+			TEXT("ATutorialDirector::InitializeTutorial — LevelSequenceActor has no SequencePlayer. "
+			     "Assign a Level Sequence asset to Cutscene1."));
 		return;
 	}
 
-	// ── 3. Bind the OnStop callback ────────────────────────────────────────
-	// Use AddUniqueDynamic so re-entering this function never double-binds.
-	IntroSequencePlayer->OnStop.AddUniqueDynamic(this, &ATutorialDirector::OnIntroSequenceFinished);
+	// 4. Bind OnStop ────────────────────────────────────────────────────────
+	IntroSequencePlayer->OnStop.AddUniqueDynamic(
+		this, &ATutorialDirector::OnIntroSequenceFinished);
 
-	// ── 4. Bind out-of-bounds overlap guard ────────────────────────────────
-	// Do this here (not in BeginPlay) so the player is definitely valid
-	// when the callback fires.
+	// 5. Bind out-of-bounds overlap on BaseCamp ─────────────────────────────
+	// Bound here (not BeginPlay) so the callback only fires when the player exists.
 	if (AActor* BaseCampActor = FindBaseCamp())
 	{
 		if (ABaseCamp* BaseCamp = Cast<ABaseCamp>(BaseCampActor))
@@ -112,35 +96,28 @@ void ATutorialDirector::InitializeTutorial()
 			}
 		}
 	}
-	else
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("ATutorialDirector::InitializeTutorial — BaseCamp not found in level. "
-			     "Out-of-bounds guard will not be active."));
-	}
 
-	// ── 5. Disable player input before the cinematic ──────────────────────
+	// 6. Disable player input before cinematic ─────────────────────────────
 	if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
 	{
 		FInputModeUIOnly UIMode;
 		PC->SetInputMode(UIMode);
+		PC->bShowMouseCursor = false;
 	}
 
-	// ── 6. Play the intro sequence ─────────────────────────────────────────
-	// The sequence MUST have a Camera Cut track with the CineCameraActor
-	// assigned. Without a Camera Cut track, Sequencer will not switch the
-	// viewport — this is the most common cause of the "FP view during cinematic"
-	// bug and must be fixed in the Sequencer editor, not in code.
+	// 7. Ensure survival is off during Tutorial ────────────────────────────
+	Player->bIsSurvivalActive = false;
+
+	// 8. Play the intro sequence ────────────────────────────────────────────
+	// REQUIREMENT: Cutscene1 must have a Camera Cut track with CineCameraActor.
 	IntroSequencePlayer->Play();
 
 	UE_LOG(LogTemp, Log,
-		TEXT("ATutorialDirector: CS_TutorialIntro started. Player input disabled."));
+		TEXT("ATutorialDirector: Cutscene started. Input disabled. HUD hidden."));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRIVATE: OnIntroSequenceFinished
-// Bound to IntroSequencePlayer::OnStop. Fires when Sequencer reaches the end
-// or when Stop() is called manually.
+// OnIntroSequenceFinished — bound to IntroSequencePlayer::OnStop
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::OnIntroSequenceFinished()
@@ -148,13 +125,11 @@ void ATutorialDirector::OnIntroSequenceFinished()
 	AAlphaExilemetCharacter* Player = GetTutorialPlayer();
 	if (!Player) return;
 
-	// ── 1. Capture the player's current world position ─────────────────────
-	// At this moment the camera blend from Sequencer → FP camera is happening
-	// (0.8s). The player's actor location is valid and this is the position
-	// we use to teleport them back if they wander out of bounds.
+	// 1. Capture crater position — where Finn stands at end of cinematic.
+	//    This is the position BP_OnPlayerLeftBase will teleport back to.
 	CraterStartPosition = Player->GetActorLocation();
 
-	// ── 2. Re-enable player input ──────────────────────────────────────────
+	// 2. Restore input
 	if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
 	{
 		FInputModeGameOnly GameMode;
@@ -162,18 +137,39 @@ void ATutorialDirector::OnIntroSequenceFinished()
 		PC->bShowMouseCursor = false;
 	}
 
+	// 3. Spawn and immediately equip the tutorial pickaxe
+	if (TutorialPickaxeClass && SpawnedTutorialPickaxe == nullptr)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride =
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		SpawnedTutorialPickaxe = GetWorld()->SpawnActor<AToolBase>(
+			TutorialPickaxeClass,
+			Player->GetActorLocation(),
+			Player->GetActorRotation(),
+			SpawnParams);
+
+		if (SpawnedTutorialPickaxe)
+		{
+			SpawnedTutorialPickaxe->SetActorEnableCollision(false);
+			Player->AddToolToInventory(SpawnedTutorialPickaxe);
+			Player->StartWieldTool(0);
+		}
+	}
+
 	UE_LOG(LogTemp, Log,
-		TEXT("ATutorialDirector: CS_TutorialIntro finished. "
-		     "Input restored. CraterStartPosition = %s"),
+		TEXT("ATutorialDirector: Intro finished. CraterPos=%s. Pickaxe equipped."),
 		*CraterStartPosition.ToString());
 
-	// ── 3. Notify the Blueprint child class ───────────────────────────────
+	// 4. Tell Blueprint to fade the HUD back in and show any hint UI
 	BP_OnIntroFinished();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRIVATE: OnOxygenSphereEndOverlap
-// Fires when ANY actor leaves the BaseCamp bubble. Filtered to player only.
+// OnOxygenSphereEndOverlap
+// C++ does NOT teleport — it only validates and calls the BP event.
+// The BP event owns the full fade→teleport→unfade sequence.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::OnOxygenSphereEndOverlap(
@@ -182,29 +178,135 @@ void ATutorialDirector::OnOxygenSphereEndOverlap(
 	UPrimitiveComponent* OtherComp,
 	int32                OtherBodyIndex)
 {
-	// Only react to the player character.
+	// Only react to the player
 	AAlphaExilemetCharacter* Player = Cast<AAlphaExilemetCharacter>(OtherActor);
 	if (!Player) return;
 
-	// Guard: if the intro hasn't finished yet (e.g. the level just loaded and
-	// the capsule is settling), CraterStartPosition is zero — do nothing.
+	// Guard: zero until cinematic ends. Prevents firing during level load.
 	if (CraterStartPosition.IsZero()) return;
 
-	// Teleport the player back to the center of the crater.
-	// Use SetActorLocation (NOT SetActorTransform with TeleportPhysics) so the
-	// Character Movement Component resets cleanly without physics artifacts.
-	//Player->SetActorLocation(CraterStartPosition, false, nullptr, ETeleportType::TeleportPhysics);
-
 	UE_LOG(LogTemp, Log,
-		TEXT("ATutorialDirector: Player left tutorial boundary. Teleported back to %s."),
-		*CraterStartPosition.ToString());
+		TEXT("ATutorialDirector: Player left boundary. Calling BP_OnPlayerLeftBase."));
 
-	// Let the Blueprint child add camera-fade FX, UI flash, etc.
+	// Blueprint handles: disable input, fade black, teleport, fade clear, enable input.
 	BP_OnPlayerLeftBase();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRIVATE HELPERS
+// ClearTutorialPickaxe
+// Call this before HandleTutorialCompletion fires.
+// Removes the pickaxe from inventory and destroys the actor.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void ATutorialDirector::ClearTutorialPickaxe()
+{
+	AAlphaExilemetCharacter* Player = GetTutorialPlayer();
+	if (!Player) return;
+
+	if (SpawnedTutorialPickaxe)
+	{
+		// Remove from inventory array
+		Player->OwnedTools.Remove(SpawnedTutorialPickaxe);
+
+		// If this tool was actively held, clear the current tool reference
+		if (Player->CurrentTool == SpawnedTutorialPickaxe)
+		{
+			Player->CurrentTool = nullptr;
+			Player->ActiveToolIndex = -1;
+		}
+
+		// Destroy the actor from the world
+		SpawnedTutorialPickaxe->Destroy();
+		SpawnedTutorialPickaxe = nullptr;
+
+		// Broadcast so the HUD tool slot updates
+		Player->OnInventoryUpdated.Broadcast();
+		Player->OnToolWielded.Broadcast(-1);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: Tutorial pickaxe cleared."));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OnSkullInteracted — called by BP_SkullProp via DirectorRef
+// ─────────────────────────────────────────────────────────────────────────────
+
+void ATutorialDirector::OnSkullInteracted()
+{
+	if (bSkullInteractionActive) return;
+	bSkullInteractionActive = true;
+
+	AAlphaExilemetCharacter* Player = GetTutorialPlayer();
+	if (!Player) return;
+
+	// Freeze movement and input immediately
+	if (UCharacterMovementComponent* Movement = Player->GetCharacterMovement())
+	{
+		Movement->DisableMovement();
+	}
+	if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
+	{
+		FInputModeUIOnly UIMode;
+		PC->SetInputMode(UIMode);
+	}
+
+	// Clear the pickaxe before the level swap
+	ClearTutorialPickaxe();
+
+	// Start skull flicker and spell sound simultaneously
+	BP_StartSkullFlicker();
+	BP_PlayMagicSpellSound();
+
+	// Timer: wait for the 5-second spell sound to finish
+	GetWorldTimerManager().SetTimer(
+		SpellDurationHandle,
+		this,
+		&ATutorialDirector::OnSpellDurationComplete,
+		5.0f,
+		false);
+}
+
+// T+5.0s — spell ends, cut to instant black
+void ATutorialDirector::OnSpellDurationComplete()
+{
+	BP_ShowInstantBlack();
+
+	GetWorldTimerManager().SetTimer(
+		PostBlackSoundHandle,
+		this,
+		&ATutorialDirector::OnPostBlackDelay,
+		1.0f,
+		false);
+}
+
+// T+6.0s — explosion sounds
+void ATutorialDirector::OnPostBlackDelay()
+{
+	BP_PlayExplosionSequence();
+
+	GetWorldTimerManager().SetTimer(
+		LevelSwapHandle,
+		this,
+		&ATutorialDirector::OnLevelSwapReady,
+		3.5f,
+		false);
+}
+
+// T+9.5s — trigger level swap
+void ATutorialDirector::OnLevelSwapReady()
+{
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UAlphaStreamingSubsystem* Streaming =
+			GI->GetSubsystem<UAlphaStreamingSubsystem>())
+		{
+			Streaming->HandleTutorialCompletion();
+		}
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
 AAlphaExilemetCharacter* ATutorialDirector::GetTutorialPlayer() const
