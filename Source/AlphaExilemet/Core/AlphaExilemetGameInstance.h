@@ -7,15 +7,35 @@
 #include "UpgradeProgressionManager.h"
 #include "AlphaExilemetGameInstance.generated.h"
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EGamePhase
+// Single source of truth for what the game is currently doing.
+// Set BEFORE streaming any level. Read in OnAnyLevelStreamComplete.
+// Never use level name strings for routing decisions.
+// ─────────────────────────────────────────────────────────────────────────────
+UENUM(BlueprintType)
+enum class EGamePhase : uint8
+{
+	None             UMETA(DisplayName = "None"),
+	MainMenu         UMETA(DisplayName = "Main Menu"),
+	NewGame_Tutorial UMETA(DisplayName = "New Game — Tutorial"),
+	Main             UMETA(DisplayName = "Main Gameplay"),
+	LoadedGame       UMETA(DisplayName = "Loaded Game"),
+};
+
 UCLASS()
 class ALPHAEXILEMET_API UAlphaExilemetGameInstance : public UGameInstance
 {
 	GENERATED_BODY()
 
 public:
-	// -------------------------------------------------------------------------
-	// SAVE / LOAD
-	// -------------------------------------------------------------------------
+	// ── PHASE ────────────────────────────────────────────────────────────────
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Phase")
+	EGamePhase CurrentPhase = EGamePhase::None;
+
+	// ── SAVE / LOAD ──────────────────────────────────────────────────────────
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|SaveLoad")
 	FString CurrentSaveSlot = "SaveSlot1";
 
@@ -28,42 +48,29 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|SaveLoad")
 	ABaseCamp* BaseRef;
 
-	// -------------------------------------------------------------------------
-	// UPGRADE PROGRESSION MANAGER
-	// -------------------------------------------------------------------------
+	// ── PROGRESSION ──────────────────────────────────────────────────────────
 
-	/**
-	 * The single source of truth for live upgrade costs at runtime.
-	 * Widgets and terminals should read costs from here — NOT from DataTables.
-	 *
-	 * Set the three DataTable references below in the Blueprint CDO so the
-	 * manager can seed itself on game start.
-	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Progression")
 	UUpgradeProgressionManager* ProgressionManager;
 
-	/** Assign DT_CharacterUpgrades here in the GameInstance Blueprint CDO. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AlphaExilemet|Progression|DataTables")
 	UDataTable* CharacterUpgradeTable;
 
-	/** Assign DT_ToolUpgrades here in the GameInstance Blueprint CDO. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AlphaExilemet|Progression|DataTables")
 	UDataTable* ToolUpgradeTable;
 
-	/** Assign DT_ShipRepairs here in the GameInstance Blueprint CDO. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AlphaExilemet|Progression|DataTables")
 	UDataTable* ShipRepairTable;
 
-	// -------------------------------------------------------------------------
-	// CORE SAVE / LOAD FUNCTIONS (existing)
-	// -------------------------------------------------------------------------
-	
+	// ── SAVE / LOAD FUNCTIONS ────────────────────────────────────────────────
+
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	bool DoesSaveExist(FString SlotName);
 
+	/** Creates a fresh save. Sets CurrentPhase = NewGame_Tutorial automatically. */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void CreateNewGame(FString SlotName);
-	
+
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void SavePlayerData();
 
@@ -76,31 +83,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void SetupShipData();
 
-	// -------------------------------------------------------------------------
-	// PROGRESSION MANAGER FUNCTIONS (new)
-	// -------------------------------------------------------------------------
-
 	/**
-	 * Creates the ProgressionManager (if needed) and seeds it from the DataTables
-	 * using the CURRENT levels on PlayerRef and BaseRef.
+	 * BUG 4 FIX: One function that runs the full load sequence in the correct order.
+	 * Call this from GM LoadGamePlayer instead of the four functions individually.
 	 *
-	 * CALL ORDER: After SetupPlayerData() and SetupShipData() so levels are loaded.
-	 * For a fresh game (no save), call it right after the player spawns.
+	 * Internally calls:
+	 *   SetupPlayerData()       — teleports to saved position if bHasValidTransform
+	 *   SetupShipData()         — restores ship repair levels
+	 *   InitProgressionManager()— seeds upgrade costs from DataTables
+	 *   SetupProgressionData()  — overlays saved partial payments
 	 */
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
+	void SetupLoadedGame();
+
+	// ── PROGRESSION FUNCTIONS ────────────────────────────────────────────────
+
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Progression")
 	void InitProgressionManager();
 
-	/**
-	 * Overlays any previously-saved partial payments onto RuntimeCosts.
-	 * Call AFTER InitProgressionManager().
-	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Progression")
 	void SetupProgressionData();
 
-	/**
-	 * Saves the current RuntimeCosts (including partial payments) to LocalSaveRef.
-	 * Call alongside SavePlayerData() and SaveShipData().
-	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Progression")
 	void SaveProgressionData();
 };
