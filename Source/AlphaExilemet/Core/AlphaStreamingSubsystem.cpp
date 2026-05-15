@@ -2,6 +2,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "AlphaExilemetGameInstance.h"
 #include "AlphaExilemet/AlphaExilemetCharacter.h"
+#include "AlphaExilemet/Tools/ToolBase.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS — internal player fetch
@@ -55,6 +56,18 @@ void UAlphaStreamingSubsystem::StreamLevel(FName LevelToLoad, FName LevelToUnloa
 
 void UAlphaStreamingSubsystem::HandleTutorialCompletion()
 {
+	// Clear tutorial pickaxe before saving
+	if (AAlphaExilemetCharacter* Player = GetLocalPlayer(GetWorld()))
+	{
+		for (AToolBase* Tool : Player->OwnedTools)
+		{
+			if (Tool) Tool->Destroy();
+		}
+		Player->OwnedTools.Empty();
+		Player->CurrentTool = nullptr;
+		Player->ActiveToolIndex = -1;
+	}
+	
 	// Save before swapping levels so data is not lost.
 	if (UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance()))
 	{
