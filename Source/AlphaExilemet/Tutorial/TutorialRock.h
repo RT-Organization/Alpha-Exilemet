@@ -4,24 +4,21 @@
 #include "AlphaExilemet/Resources/SolidResource.h"
 #include "TutorialRock.generated.h"
 
+class UNiagaraSystem;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DELEGATE
-// Declared at file scope so BP_TutorialDirector can bind to each rock instance.
 // ─────────────────────────────────────────────────────────────────────────────
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTutorialRockDestroyed, ATutorialRock*, Rock);
 
 /**
- * ATutorialRock
+ * ATutorialRock  v2
  *
- * A lightweight subclass of ASolidResource used exclusively in L_Tutorial.
- * The existing pickaxe trace hits it via the ASolidResource cast — zero changes
- * needed to PickaxeTool.
- *
- * Key difference from ASolidResource:
- *   - DepleteResource() skips ore drops entirely (calls AResourceBase::DepleteResource,
- *     NOT ASolidResource::DepleteResource).
- *   - Broadcasts OnTutorialRockDestroyed so BP_TutorialDirector can count hits
- *     and trigger the skull-reveal sequence.
+ * Changes from v1:
+ *   - Added DestructionVFX (UNiagaraSystem*) — assign NS_RockBreak (or similar)
+ *     in BP_TutorialRock Class Defaults. Spawns at the rock's world location
+ *     when health reaches zero. No extra Blueprint nodes needed.
+ *   - DestructionVFXScale controls the emitter scale (default 1.0).
  */
 UCLASS()
 class ALPHAEXILEMET_API ATutorialRock : public ASolidResource
@@ -29,9 +26,25 @@ class ALPHAEXILEMET_API ATutorialRock : public ASolidResource
 	GENERATED_BODY()
 
 public:
+	// ── VFX ──────────────────────────────────────────────────────────────────
+
 	/**
-	 * Bind to this in BP_TutorialDirector::BeginPlay (GetAllActorsOfClass loop).
-	 * Fires once when this rock's Health drops to zero.
+	 * Niagara particle system spawned at the rock's location when depleted.
+	 * Assign in BP_TutorialRock → Class Defaults → Tutorial|VFX.
+	 * Leave null to skip VFX entirely (no error).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tutorial|VFX")
+	UNiagaraSystem* DestructionVFX = nullptr;
+
+	/** Uniform scale applied to the spawned Niagara emitter. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tutorial|VFX")
+	float DestructionVFXScale = 1.0f;
+
+	// ── EVENTS ───────────────────────────────────────────────────────────────
+
+	/**
+	 * Bind in BP_TutorialDirector::BeginPlay (GetAllActorsOfClass loop).
+	 * Fires once when this rock's health drops to zero.
 	 */
 	UPROPERTY(BlueprintAssignable, Category = "Tutorial|Events")
 	FOnTutorialRockDestroyed OnTutorialRockDestroyed;
@@ -39,9 +52,10 @@ public:
 protected:
 	/**
 	 * Overrides ASolidResource::DepleteResource().
-	 * Calls AResourceBase::DepleteResource() directly (hides actor, disables collision,
-	 * starts regen timer) — intentionally skips the ore-drop spawning logic.
-	 * Then broadcasts OnTutorialRockDestroyed.
+	 *   1. Spawns DestructionVFX at the rock's world location (if assigned).
+	 *   2. Calls AResourceBase::DepleteResource() — hides actor, disables
+	 *      collision, starts regen timer. Skips ore-drop logic intentionally.
+	 *   3. Broadcasts OnTutorialRockDestroyed.
 	 */
 	virtual void DepleteResource() override;
 };
