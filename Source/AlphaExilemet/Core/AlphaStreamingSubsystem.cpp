@@ -3,15 +3,15 @@
 #include "AlphaExilemetGameInstance.h"
 #include "AlphaExilemet/AlphaExilemetCharacter.h"
 #include "AlphaExilemet/Tools/ToolBase.h"
+#include "Engine/LevelStreaming.h"
+#include "GameFramework/PlayerStart.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HELPERS — internal player fetch
+// HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
 namespace
 {
-	// Returns the pawn cast to our character type, or nullptr.
-	// Used in ExitPortal and CompletePortalChallenge to avoid code duplication.
 	AAlphaExilemetCharacter* GetLocalPlayer(UWorld* World)
 	{
 		if (!World) return nullptr;
@@ -29,16 +29,13 @@ void UAlphaStreamingSubsystem::StreamLevel(FName LevelToLoad, FName LevelToUnloa
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	// Build latent info so LoadStreamLevel fires OnStreamLevelLoaded on completion.
 	FLatentActionInfo LatentInfo;
 	LatentInfo.CallbackTarget    = this;
 	LatentInfo.ExecutionFunction = FName("OnStreamLevelLoaded");
 	LatentInfo.Linkage           = 0;
-	LatentInfo.UUID              = ++LatentUUID; // Unique per call
-
+	LatentInfo.UUID              = ++LatentUUID;
 	UGameplayStatics::LoadStreamLevel(World, LevelToLoad, true, true, LatentInfo);
 
-	// Unload only if a target was specified (pass NAME_None to skip).
 	if (!LevelToUnload.IsNone())
 	{
 		FLatentActionInfo UnloadInfo;
@@ -51,38 +48,29 @@ void UAlphaStreamingSubsystem::StreamLevel(FName LevelToLoad, FName LevelToUnloa
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TUTORIAL → MAIN TRANSITION
+// TUTORIAL → MAIN
 // ─────────────────────────────────────────────────────────────────────────────
 
 void UAlphaStreamingSubsystem::HandleTutorialCompletion()
 {
-	// Clear tutorial pickaxe before saving
+	// Clear tutorial tools before saving so they don't persist into Main.
 	if (AAlphaExilemetCharacter* Player = GetLocalPlayer(GetWorld()))
 	{
 		for (AToolBase* Tool : Player->OwnedTools)
-		{
 			if (Tool) Tool->Destroy();
-		}
 		Player->OwnedTools.Empty();
-		Player->CurrentTool = nullptr;
+		Player->CurrentTool     = nullptr;
 		Player->ActiveToolIndex = -1;
 	}
-	
-	// Save before swapping levels so data is not lost.
+
 	if (UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance()))
 	{
 		if (GI->LocalSaveRef)
-		{
 			GI->LocalSaveRef->CurrentLevelName = FName("Main");
-		}
 		GI->SavePlayerData();
 	}
 
-	// Flag this as the tutorial-to-main transition so OnStreamLevelLoaded
-	// knows to broadcast OnTutorialToMainComplete when Main finishes loading.
 	bTutorialTransition = true;
-
-	// Load Main, unload Tutorial.
 	StreamLevel(FName("Main"), FName("Tutorial"));
 }
 
@@ -90,37 +78,105 @@ void UAlphaStreamingSubsystem::HandleTutorialCompletion()
 // PORTAL — ENTER
 // ─────────────────────────────────────────────────────────────────────────────
 
-void UAlphaStreamingSubsystem::EnterPortal(FName PortalLevelName, FTransform PlayerEntryTransform)
+void UAlphaStreamingSubsystem::EnterPortal(FName PortalLevelName, FTransform PlayerReturnTransform)
 {
-	// ── FIRE ENTER DELEGATE FIRST ────────────────────────────────────────────
-	// GameMode BP binds here and creates WB_LoadingScreen BEFORE any streaming.
-	// This ensures the screen is up before any hitching from the load.
-	OnPortalEnterStarted.Broadcast();
+	UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance());
 
-	// ── PERSIST STATE ────────────────────────────────────────────────────────
-	if (UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance()))
+	// ── 1. SET PHASE FIRST ───────────────────────────────────────────────────
+	// Must be set before broadcasting so if the GM BP reads phase inside the
+	// OnPortalEnterStarted handler, it already sees InPortal.
+	if (GI)
 	{
-		if (GI->LocalSaveRef)
-		{
-			// PlayerEntryTransform already has the ReturnYawOffset baked in
-			// by APortalBase::EnterPortalLevel, so ExitPortal() can restore
-			// it directly without extra math.
-			GI->LocalSaveRef->PrePortalTransform = PlayerEntryTransform;
-			GI->LocalSaveRef->CurrentLevelName   = PortalLevelName;
-		}
-
-		// SavePlayerData captures health, oxygen, currency, inventory, tools.
-		// If the game crashes inside a portal, loading restores the pre-portal state.
-		GI->SavePlayerData();
+		GI->CurrentPhase = EGamePhase::InPortal;
 	}
 
-	// Store the active portal name so ExitPortal() knows what to unload.
-	ActivePortalName = PortalLevelName;
+	// ── 2. SHOW LOADING SCREEN ───────────────────────────────────────────────
+	// Broadcast BEFORE any streaming or saving so the screen is up before any
+	// frame hitch from I/O. GM BP creates WB_LoadingScreen here.
+	OnPortalEnterStarted.Broadcast();
 
-	// DESIGN DECISION: Main is NEVER unloaded while inside a portal.
-	// Pass NAME_None so StreamLevel does NOT unload anything.
-	// OnStreamComplete fires when loading finishes → GameMode fades out screen.
+	// ── 3. PERSIST STATE ─────────────────────────────────────────────────────
+	// PlayerReturnTransform already has the 180° yaw baked in by APortalBase
+	// so ExitPortal() can restore it directly with no extra math.
+	if (GI && GI->LocalSaveRef)
+	{
+		GI->LocalSaveRef->PrePortalTransform = PlayerReturnTransform;
+		GI->LocalSaveRef->CurrentLevelName   = PortalLevelName;
+	}
+	if (GI)
+	{
+		GI->SavePlayerData(); // captures health, oxygen, tools, currency
+	}
+
+	// ── 4. STREAM ────────────────────────────────────────────────────────────
+	// Main is NEVER unloaded while inside a portal.
+	// OnStreamComplete fires when the load finishes → GM InPortal switch case runs.
+	ActivePortalName = PortalLevelName;
 	StreamLevel(PortalLevelName, NAME_None);
+
+	UE_LOG(LogTemp, Log, TEXT("UAlphaStreamingSubsystem::EnterPortal — streaming '%s'. Phase = InPortal."),
+		*PortalLevelName.ToString());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PORTAL — TELEPORT TO PLAYERSTART IN PORTAL LEVEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+void UAlphaStreamingSubsystem::TeleportPlayerToPortalStart()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	AAlphaExilemetCharacter* Player = GetLocalPlayer(World);
+	if (!Player)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TeleportPlayerToPortalStart: No player pawn found."));
+		return;
+	}
+
+	// Iterate through ALL streaming levels and find the one that matches the
+	// active portal name, then grab its PlayerStart.
+	for (ULevelStreaming* StreamingLevel : World->GetStreamingLevels())
+	{
+		if (!StreamingLevel || !StreamingLevel->IsLevelLoaded()) continue;
+
+		// The package name is the full path; we match by checking if it ends
+		// with the portal level name (e.g. ".../Portal_Desert").
+		const FString PkgName = StreamingLevel->GetWorldAssetPackageFName().ToString();
+		if (!PkgName.EndsWith(ActivePortalName.ToString())) continue;
+
+		ULevel* Level = StreamingLevel->GetLoadedLevel();
+		if (!Level) continue;
+
+		for (AActor* Actor : Level->Actors)
+		{
+			if (!Actor) continue;
+			if (APlayerStart* PS = Cast<APlayerStart>(Actor))
+			{
+				Player->SetActorTransform(
+					PS->GetActorTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+
+				if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
+				{
+					PC->SetControlRotation(PS->GetActorRotation());
+				}
+
+				UE_LOG(LogTemp, Log,
+					TEXT("TeleportPlayerToPortalStart: Teleported to '%s' in '%s'."),
+					*PS->GetName(), *PkgName);
+				return;
+			}
+		}
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TeleportPlayerToPortalStart: Level '%s' matched but has no PlayerStart!"),
+			*PkgName);
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("TeleportPlayerToPortalStart: No loaded streaming level matches portal name '%s'."),
+		*ActivePortalName.ToString());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -130,46 +186,50 @@ void UAlphaStreamingSubsystem::EnterPortal(FName PortalLevelName, FTransform Pla
 void UAlphaStreamingSubsystem::ExitPortal()
 {
 	UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance());
+
+	// ── 1. RESTORE TRANSFORM ─────────────────────────────────────────────────
 	FTransform ReturnTransform;
-	bool bHasReturnTransform = false;
+	bool bHasReturn = false;
 
 	if (GI && GI->LocalSaveRef)
 	{
-		// PrePortalTransform was saved by EnterPortal() with the return-yaw
-		// already baked in by APortalBase, so no rotation math needed here.
-		ReturnTransform     = GI->LocalSaveRef->PrePortalTransform;
-		bHasReturnTransform = true;
+		ReturnTransform = GI->LocalSaveRef->PrePortalTransform;
+		bHasReturn      = true;
 
-		// Reset save state back to Main.
 		GI->LocalSaveRef->CurrentLevelName = FName("Main");
-		GI->SavePlayerData();
+		GI->SavePlayerData(); // save current state (tools acquired in portal, etc.)
 	}
 
-	// ── RESTORE PLAYER ───────────────────────────────────────────────────────
 	UWorld* World = GetWorld();
 	AAlphaExilemetCharacter* Player = GetLocalPlayer(World);
 
+	if (Player && bHasReturn)
+	{
+		Player->SetActorTransform(
+			ReturnTransform, false, nullptr, ETeleportType::TeleportPhysics);
+
+		if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
+		{
+			PC->SetControlRotation(ReturnTransform.GetRotation().Rotator());
+		}
+	}
+
+	// ── 2. RE-ENABLE SURVIVAL ────────────────────────────────────────────────
 	if (Player)
 	{
-		// Teleport back to the pre-portal position (already yaw-rotated).
-		if (bHasReturnTransform)
-		{
-			Player->SetActorTransform(
-				ReturnTransform, false, nullptr, ETeleportType::TeleportPhysics);
-
-			if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
-			{
-				PC->SetControlRotation(ReturnTransform.GetRotation().Rotator());
-			}
-		}
-
-		// ── RE-ENABLE SURVIVAL ───────────────────────────────────────────────
-		// Always re-enable — survival was disabled by APortalBase::EnterPortalLevel.
 		Player->bIsSurvivalActive = true;
 	}
 
-	// ── UNLOAD THE PORTAL LEVEL ──────────────────────────────────────────────
-	// Main was never unloaded, so no load call needed — it's already resident.
+	// ── 3. SET PHASE TO MAIN ─────────────────────────────────────────────────
+	// Do this BEFORE the unload so that when OnStreamLevelLoaded fires
+	// (after unload completes), the GM switch sees "Main" and fades out
+	// the loading screen correctly.
+	if (GI)
+	{
+		GI->CurrentPhase = EGamePhase::Main;
+	}
+
+	// ── 4. UNLOAD PORTAL LEVEL ───────────────────────────────────────────────
 	FName PortalToUnload = ActivePortalName;
 	ActivePortalName     = NAME_None;
 
@@ -181,36 +241,47 @@ void UAlphaStreamingSubsystem::ExitPortal()
 		UnloadInfo.Linkage           = 0;
 		UnloadInfo.UUID              = ++LatentUUID;
 		UGameplayStatics::UnloadStreamLevel(World, PortalToUnload, UnloadInfo, false);
+
+		UE_LOG(LogTemp, Log,
+			TEXT("UAlphaStreamingSubsystem::ExitPortal — unloading '%s'. Phase = Main."),
+			*PortalToUnload.ToString());
 	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PORTAL — COMPLETE CHALLENGE
+// PORTAL — COMPLETE CHALLENGE (called by the other programmer)
 // ─────────────────────────────────────────────────────────────────────────────
 
 void UAlphaStreamingSubsystem::CompletePortalChallenge()
 {
-	// ── RE-ENABLE SURVIVAL ───────────────────────────────────────────────────
-	// Do this first so any end-of-challenge logic (e.g. a win screen widget
-	// that checks bIsSurvivalActive) already sees the correct value.
+	// Re-enable survival before broadcasting so any end-of-challenge widgets
+	// that check bIsSurvivalActive already see the correct value.
 	if (AAlphaExilemetCharacter* Player = GetLocalPlayer(GetWorld()))
 	{
 		Player->bIsSurvivalActive = true;
 	}
 
-	// ── SIGNAL THE GAMEMODE BP ───────────────────────────────────────────────
-	// The GameMode BP must be bound to OnPortalExitStarted.
-	// Expected BP sequence:
-	//   OnPortalExitStarted fired
-	//     → Create WB_LoadingScreen + play fade-in animation
-	//     → Delay (match the fade-in duration, e.g. 0.5 s)
-	//     → Call ExitPortal()            ← C++ unloads portal, teleports player
-	//     → OnStreamComplete fired
-	//       → Call StartFadeOutSequence on the loading screen widget
+	// Signal the GM BP:
+	//   → Create WB_LoadingScreen + fade in
+	//   → Delay (match fade-in duration ~0.4s)
+	//   → Call ExitPortal()        (C++ teleports + unloads)
+	//   → OnStreamComplete fires   (unload done)
+	//   → GM Main switch case      → fade out loading screen
 	OnPortalExitStarted.Broadcast();
 
 	UE_LOG(LogTemp, Log,
-		TEXT("UAlphaStreamingSubsystem: CompletePortalChallenge — survival re-enabled, OnPortalExitStarted broadcast."));
+		TEXT("UAlphaStreamingSubsystem::CompletePortalChallenge — survival re-enabled, OnPortalExitStarted broadcast."));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEBUG
+// ─────────────────────────────────────────────────────────────────────────────
+
+void UAlphaStreamingSubsystem::Debug_ForceCompleteChallenge()
+{
+	UE_LOG(LogTemp, Warning,
+		TEXT("UAlphaStreamingSubsystem::Debug_ForceCompleteChallenge — forcing portal exit."));
+	CompletePortalChallenge();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,12 +290,10 @@ void UAlphaStreamingSubsystem::CompletePortalChallenge()
 
 void UAlphaStreamingSubsystem::OnStreamLevelLoaded()
 {
-	// Always broadcast the generic "something finished loading" event.
-	// WB_LoadingScreen binds here and starts its fade-out animation.
+	// Always broadcast the generic event.
+	// GM BP's OnAnyLevelStreamComplete binds here and switches on CurrentPhase.
 	OnStreamComplete.Broadcast();
 
-	// If this was the Tutorial→Main transition, fire the specific delegate
-	// that WB_TutorialBlackout is bound to, then reset the flag.
 	if (bTutorialTransition)
 	{
 		bTutorialTransition = false;
@@ -232,6 +301,6 @@ void UAlphaStreamingSubsystem::OnStreamLevelLoaded()
 	}
 
 	UE_LOG(LogTemp, Log,
-		TEXT("UAlphaStreamingSubsystem: Level stream complete. TutorialTransition was %s."),
+		TEXT("UAlphaStreamingSubsystem::OnStreamLevelLoaded fired. TutorialTransition=%s."),
 		bTutorialTransition ? TEXT("true") : TEXT("false"));
 }
