@@ -15,6 +15,21 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnStreamComplete);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTutorialToMainComplete);
 
 /**
+ * Fires after the GameMode has finished spawning and setting up the player
+ * in the Main level following a Tutorial→Main transition.
+ *
+ * WHO FIRES IT:
+ *   GM_SimulatorGamemode BP — at the very END of SpawnNewGamePlayer,
+ *   after InitializePlayer, SetupPlayerGame, and survival flags are set.
+ *
+ * WHO BINDS TO IT:
+ *   WB_TutorialBlackout — binds in Event Construct, removes itself when it fires.
+ *   This is the ONLY thing the widget does with game state.
+ *   The widget does NOT call anything on the GameMode.
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTutorialPlayerReady);
+
+/**
  * Fires at the START of EnterPortal(), before the level begins streaming.
  * GameMode BP binds here → creates WB_LoadingScreen immediately.
  */
@@ -43,12 +58,29 @@ public:
 	FOnStreamComplete OnStreamComplete;
 
 	/**
-	 * Broadcast ONLY when the Tutorial → Main transition completes.
-	 * WB_TutorialBlackout binds to this in Event Construct and calls
-	 * GameMode::SpawnPlayerFromTutorial when it fires.
+	 * Broadcast ONLY when the Tutorial → Main transition completes loading.
+	 *
+	 * WHO BINDS: GM_SimulatorGamemode — in its BeginPlay or InitializeInstance.
+	 * When this fires, the GM calls SpawnNewGamePlayer.
+	 * WB_TutorialBlackout does NOT bind here anymore.
 	 */
 	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Streaming")
 	FOnTutorialToMainComplete OnTutorialToMainComplete;
+
+	/**
+	 * Broadcast by GM_SimulatorGamemode at the END of SpawnNewGamePlayer,
+	 * after the player is fully initialized and the level is ready.
+	 *
+	 * WHO BINDS: WB_TutorialBlackout — binds in Event Construct.
+	 * When this fires, the widget plays its fade-out and removes itself.
+	 * This is the ONLY way the widget learns it is safe to disappear.
+	 *
+	 * HOW TO BROADCAST (in GM BP, last node of SpawnNewGamePlayer):
+	 *   [Get Game Instance → Get Subsystem (Alpha Streaming Subsystem)]
+	 *   → [On Tutorial Player Ready → Broadcast]
+	 */
+	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "AlphaExilemet|Streaming")
+	FOnTutorialPlayerReady OnTutorialPlayerReady;
 
 	/**
 	 * Fires at the START of EnterPortal() — before any streaming begins.
@@ -79,64 +111,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
 	void HandleTutorialCompletion();
 
-	/**
-	 * Loads the portal level ON TOP of Main (Main stays resident).
-	 * Saves PrePortalTransform (already yaw-offset by APortalBase) and sets
-	 * ActivePortalName for ExitPortal().
-	 *
-	 * Fires OnPortalEnterStarted immediately so the GameMode BP can show
-	 * the loading screen before streaming begins.
-	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
 	void EnterPortal(FName PortalLevelName, FTransform PlayerEntryTransform);
 
-	/**
-	 * Unloads the active portal level and teleports the player back to the
-	 * position saved by EnterPortal() (PrePortalTransform).
-	 * Main was never unloaded, so no reload is needed.
-	 * Re-enables bIsSurvivalActive on the player automatically.
-	 *
-	 * Call this from the GameMode BP AFTER the loading screen is visible,
-	 * triggered by OnPortalExitStarted.
-	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
 	void ExitPortal();
 
-	/**
-	 * Called by the challenge programmer (or their BP) to signal that the
-	 * portal challenge is done.
-	 *
-	 * What this does in order:
-	 *   1. Re-enables bIsSurvivalActive on the player.
-	 *   2. Broadcasts OnPortalExitStarted so the GameMode BP can show the
-	 *      loading screen.
-	 *
-	 * The GameMode BP is then responsible for:
-	 *   - Playing the loading screen fade-in.
-	 *   - Calling ExitPortal() after the screen is fully opaque.
-	 *   - Fading out the loading screen when OnStreamComplete fires.
-	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
 	void CompletePortalChallenge();
 
 private:
-	// =========================================================================
-	// STATE
-	// =========================================================================
-
-	/** Name of the portal level currently loaded; NAME_None when not in a portal. */
 	FName ActivePortalName = NAME_None;
-
-	/** Incremented per StreamLevel call so each latent action has a unique UUID. */
 	int32 LatentUUID = 0;
-
-	/**
-	 * True from the moment HandleTutorialCompletion() fires until
-	 * OnStreamLevelLoaded() has broadcast OnTutorialToMainComplete.
-	 */
 	bool bTutorialTransition = false;
 
-	/** Latent callback — fires when the most-recent LoadStreamLevel finishes. */
 	UFUNCTION()
 	void OnStreamLevelLoaded();
 };

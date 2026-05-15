@@ -20,22 +20,34 @@ ATutorialDirector::ATutorialDirector()
 	PrimaryActorTick.bCanEverTick = false;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BeginPlay
+//
+// Three responsibilities:
+//   1. Let the BP complete its setup (rock binding + skull ref) — that runs
+//      in the BP's own BeginPlay which fires first in derived classes.
+//   2. Self-register with the GameMode so GM never needs to search for us.
+//
+// The player is NOT cached here — the pawn is not possessed yet.
+// ─────────────────────────────────────────────────────────────────────────────
+
 void ATutorialDirector::BeginPlay()
 {
 	Super::BeginPlay();
-	// Intentionally empty.
-	// CachedPlayer and CachedPC are set in InitializeTutorial(), which is
-	// called by GM_SimulatorGamemode AFTER the player is spawned and possessed.
-	//
-	// DO NOT cache the player here — BeginPlay fires before the pawn exists.
-	//
-	// BP BeginPlay is responsible for:
-	//   GetAllActorsOfClass(TutorialRock) → bind delegates
-	//   GetActorOfClass(ASkullProp)       → SET SkullRef
+
+	// BP BeginPlay runs before this (derived-before-base ordering in UE5 BP),
+	// so SkullRef and the rock bindings are already set by the time we arrive.
+
+	// Push self-reference to the GameMode.
+	// This eliminates the GetAllActorsOfClass → GET[0] race condition:
+	// the GM stores our pointer and uses it directly when the player is ready.
+	BP_RegisterWithGameMode();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // InitializeTutorial
+// Called by GM_SimulatorGamemode via its stored TutorialDirectorRef,
+// after the player pawn is spawned and possessed.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::InitializeTutorial()
@@ -44,17 +56,15 @@ void ATutorialDirector::InitializeTutorial()
 	if (!World) return;
 
 	// ── 1. CACHE PLAYER REFERENCES ───────────────────────────────────────────
-	// This is the ONLY correct place to cache the player.
-	// GetPlayerCharacter returns null during BeginPlay because the pawn has
-	// not been possessed yet at that stage.
+	// Safe here: the GM guarantees the pawn is possessed before calling us.
 	CachedPlayer = Cast<AAlphaExilemetCharacter>(
 		UGameplayStatics::GetPlayerCharacter(this, 0));
 
 	if (!CachedPlayer)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("ATutorialDirector::InitializeTutorial — Player not found. "
-			     "Ensure GM_SimulatorGamemode calls this after SpawnDefaultPawn."));
+			TEXT("ATutorialDirector::InitializeTutorial — Player pawn not found. "
+			     "GM must call this after the pawn is possessed."));
 		return;
 	}
 
@@ -66,9 +76,8 @@ void ATutorialDirector::InitializeTutorial()
 		return;
 	}
 
-	// ── 2. WIRE SKULL DIRECTOR REFERENCE ─────────────────────────────────────
-	// BP BeginPlay sets SkullRef via GetActorOfClass, which fires before
-	// InitializeTutorial(), so SkullRef is valid by now.
+	// ── 2. WIRE SKULL ────────────────────────────────────────────────────────
+	// SkullRef is set in BP BeginPlay (which runs before InitializeTutorial).
 	if (SkullRef)
 	{
 		SkullRef->SetDirector(this);
@@ -77,38 +86,34 @@ void ATutorialDirector::InitializeTutorial()
 	{
 		UE_LOG(LogTemp, Warning,
 			TEXT("ATutorialDirector::InitializeTutorial — SkullRef is null. "
-			     "Did BP BeginPlay assign it via GetActorOfClass(ASkullProp)?"));
+			     "BP BeginPlay must call GetActorOfClass(ASkullProp) → SET SkullRef."));
 	}
 
-	// ── 3. HIDE HUD ──────────────────────────────────────────────────────────
-	// BP implementation: hide main HUD widget using CachedPlayer.
+	// ── 3. HIDE MAIN HUD ─────────────────────────────────────────────────────
 	BP_HideHUD();
 
-	// ── 4. SURVIVAL OFF DURING TUTORIAL ──────────────────────────────────────
+	// ── 4. DISABLE SURVIVAL ──────────────────────────────────────────────────
 	CachedPlayer->bIsSurvivalActive = false;
 
-	// ── 5. FIND INTRO SEQUENCE ───────────────────────────────────────────────
-	TArray<AActor*> TaggedActors;
-	UGameplayStatics::GetAllActorsWithTag(World, IntroSequenceTag, TaggedActors);
-	if (TaggedActors.Num() == 0)
+	// ── 5. VALIDATE SEQUENCE REFERENCE ───────────────────────────────────────
+	// IntroSequenceRef is EditInstanceOnly — assign it once by dragging
+	// the LevelSequenceActor from the Outliner into the Details panel.
+	// No tags, no search, no mismatch.
+	if (!IntroSequenceRef)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("ATutorialDirector::InitializeTutorial — No actor tagged '%s'."),
-			*IntroSequenceTag.ToString());
+			TEXT("ATutorialDirector::InitializeTutorial — IntroSequenceRef is null. "
+			     "Select the placed BP_TutorialDirector in the Tutorial level, open "
+			     "Details → Tutorial|Config → Intro Sequence, and assign Cutscene1."));
 		return;
 	}
 
-	ALevelSequenceActor* SeqActor = Cast<ALevelSequenceActor>(TaggedActors[0]);
-	if (!SeqActor)
-	{
-		UE_LOG(LogTemp, Error, TEXT("ATutorialDirector — Tagged actor is not a LevelSequenceActor."));
-		return;
-	}
-
-	IntroSequencePlayer = SeqActor->GetSequencePlayer();
+	IntroSequencePlayer = IntroSequenceRef->GetSequencePlayer();
 	if (!IntroSequencePlayer)
 	{
-		UE_LOG(LogTemp, Error, TEXT("ATutorialDirector — LevelSequenceActor has no Sequence Player."));
+		UE_LOG(LogTemp, Error,
+			TEXT("ATutorialDirector — IntroSequenceRef has no SequencePlayer. "
+			     "Verify the LevelSequenceActor has a valid LevelSequence asset."));
 		return;
 	}
 
@@ -123,21 +128,17 @@ void ATutorialDirector::InitializeTutorial()
 		CachedPC->bShowMouseCursor = false;
 	}
 
-	// ── 8. SET CINECAM BEFORE PLAY (avoids 1-frame first-person flash) ───────
-	TArray<AActor*> CamActors;
-	UGameplayStatics::GetAllActorsWithTag(World, FName("TutorialCineCam"), CamActors);
-	if (CamActors.Num() > 0)
+	// ── 8. VIEW TARGET (optional) ────────────────────────────────────────────
+	// Skip if TutorialCineCamRef is null — the LevelSequence Camera Cut track
+	// will handle the view target switch automatically in that case.
+	if (TutorialCineCamRef)
 	{
-		CachedPC->SetViewTargetWithBlend(CamActors[0], 0.0f);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ATutorialDirector — No actor tagged 'TutorialCineCam'."));
+		CachedPC->SetViewTargetWithBlend(TutorialCineCamRef, 0.0f);
 	}
 
-	// ── 9. PLAY CUTSCENE ─────────────────────────────────────────────────────
+	// ── 9. PLAY ──────────────────────────────────────────────────────────────
 	IntroSequencePlayer->Play();
-	UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: InitializeTutorial complete. Cutscene playing."));
+	UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: Cutscene playing."));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -148,18 +149,16 @@ void ATutorialDirector::OnIntroSequenceFinished()
 {
 	if (!CachedPlayer || !CachedPC) return;
 
-	// Return camera to player
+	// Return camera + input to player.
 	CachedPC->SetViewTargetWithBlend(CachedPlayer, 0.0f);
-
-	// Re-enable game input
 	FInputModeGameOnly GameMode;
 	CachedPC->SetInputMode(GameMode);
 	CachedPC->bShowMouseCursor = false;
 
-	// Capture crater position (used by ExecuteTeleportToCrater)
+	// Save crater position — must be non-zero before the boundary guard fires.
 	CraterStartPosition = CachedPlayer->GetActorLocation();
 
-	// Bind OxygenSphere EndOverlap — safe here, CraterStartPosition is set above
+	// Wire boundary guard now that CraterStartPosition is valid.
 	if (AActor* BaseCampActor = FindBaseCamp())
 	{
 		if (ABaseCamp* BaseCamp = Cast<ABaseCamp>(BaseCampActor))
@@ -173,24 +172,22 @@ void ATutorialDirector::OnIntroSequenceFinished()
 		}
 	}
 
-	// Spawn and equip tutorial pickaxe
+	// Spawn tutorial pickaxe.
 	if (TutorialPickaxeClass && !SpawnedTutorialPickaxe)
 	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 		SpawnedTutorialPickaxe = GetWorld()->SpawnActor<AToolBase>(
 			TutorialPickaxeClass,
 			CachedPlayer->GetActorLocation(),
-			CachedPlayer->GetActorRotation(),
-			SpawnParams);
+			CachedPlayer->GetActorRotation(), Params);
 
 		if (SpawnedTutorialPickaxe)
 		{
 			SpawnedTutorialPickaxe->SetActorEnableCollision(false);
 			CachedPlayer->AddToolToInventory(SpawnedTutorialPickaxe);
 			CachedPlayer->StartWieldTool(0);
-			UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: Tutorial pickaxe equipped."));
 		}
 	}
 
@@ -198,96 +195,49 @@ void ATutorialDirector::OnIntroSequenceFinished()
 		TEXT("ATutorialDirector: Intro finished. CraterPos=%s."),
 		*CraterStartPosition.ToString());
 
-	// Notify BP: create WBP_TutorialOverlay
-	BP_OnIntroFinished();
+	BP_OnIntroFinished(); // BP creates WBP_TutorialOverlay
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OnOxygenSphereEndOverlap
+// Boundary guard
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::OnOxygenSphereEndOverlap(
-	UPrimitiveComponent* OverlappedComp,
-	AActor*              OtherActor,
-	UPrimitiveComponent* OtherComp,
-	int32                OtherBodyIndex)
+	UPrimitiveComponent*, AActor* OtherActor, UPrimitiveComponent*, int32)
 {
 	if (!Cast<AAlphaExilemetCharacter>(OtherActor)) return;
-
-	// Do not teleport if the skull interaction sequence is already running —
-	// the player is committed to the end-of-tutorial flow.
 	if (bSkullInteractionActive) return;
-
-	if (CraterStartPosition.IsZero())
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("ATutorialDirector: Boundary teleport skipped — CraterStartPosition is zero."));
-		return;
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: Player left boundary. Starting teleport."));
+	if (CraterStartPosition.IsZero()) return;
 	ExecuteTeleportToCrater();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Teleport Sequence  (replaces BP_OnPlayerLeftBase entirely)
-//
-// Stage 1 — ExecuteTeleportToCrater:
-//   Soft-locks move input. Fades camera to black over 1 second.
-//   Sets TeleportFadeOutHandle (1.0s) → OnTeleportReadyToMove.
-//
-// Stage 2 — OnTeleportReadyToMove (fires at fade-out completion):
-//   Teleports the player to CraterStartPosition.
-//   Starts fade-in back to normal. Sets TeleportFadeInHandle (1.0s).
-//
-// Stage 3 — OnTeleportComplete (fires at fade-in completion):
-//   Restores move input. Ensures movement mode is Walking.
+// Teleport sequence
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::ExecuteTeleportToCrater()
 {
 	if (!CachedPlayer || !CachedPC || CraterStartPosition.IsZero()) return;
-
 	SuppressPlayerMoveInput();
-
-	if (APlayerCameraManager* CamMgr = CachedPC->PlayerCameraManager)
-	{
-		// Fade to solid black over 1 second, hold when finished.
-		CamMgr->StartCameraFade(0.f, 1.f, 1.0f, FLinearColor::Black, false, true);
-	}
-
-	GetWorldTimerManager().SetTimer(
-		TeleportFadeOutHandle,
-		this,
-		&ATutorialDirector::OnTeleportReadyToMove,
-		1.0f, false);
+	if (APlayerCameraManager* Cam = CachedPC->PlayerCameraManager)
+		Cam->StartCameraFade(0.f, 1.f, 1.0f, FLinearColor::Black, false, true);
+	GetWorldTimerManager().SetTimer(TeleportFadeOutHandle,
+		this, &ATutorialDirector::OnTeleportReadyToMove, 1.0f, false);
 }
 
 void ATutorialDirector::OnTeleportReadyToMove()
 {
 	if (!CachedPlayer || !CachedPC) return;
-
-	// Teleport — TeleportPhysics avoids sweep errors at the new location.
-	CachedPlayer->SetActorLocation(
-		CraterStartPosition, false, nullptr, ETeleportType::TeleportPhysics);
-
-	if (APlayerCameraManager* CamMgr = CachedPC->PlayerCameraManager)
-	{
-		// Fade back in from solid black over 1 second, do not hold.
-		CamMgr->StartCameraFade(1.f, 0.f, 1.0f, FLinearColor::Black, false, false);
-	}
-
-	GetWorldTimerManager().SetTimer(
-		TeleportFadeInHandle,
-		this,
-		&ATutorialDirector::OnTeleportComplete,
-		1.0f, false);
+	CachedPlayer->SetActorLocation(CraterStartPosition, false, nullptr, ETeleportType::TeleportPhysics);
+	if (APlayerCameraManager* Cam = CachedPC->PlayerCameraManager)
+		Cam->StartCameraFade(1.f, 0.f, 1.0f, FLinearColor::Black, false, false);
+	GetWorldTimerManager().SetTimer(TeleportFadeInHandle,
+		this, &ATutorialDirector::OnTeleportComplete, 1.0f, false);
 }
 
 void ATutorialDirector::OnTeleportComplete()
 {
 	RestorePlayerMoveInput();
-	UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: Teleport complete. Input restored."));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -299,37 +249,25 @@ void ATutorialDirector::ClearTutorialPickaxe()
 	if (!CachedPlayer || !SpawnedTutorialPickaxe) return;
 
 	CachedPlayer->OwnedTools.Remove(SpawnedTutorialPickaxe);
-
 	if (CachedPlayer->CurrentTool == SpawnedTutorialPickaxe)
 	{
 		CachedPlayer->CurrentTool     = nullptr;
 		CachedPlayer->ActiveToolIndex = -1;
 	}
-
 	SpawnedTutorialPickaxe->Destroy();
 	SpawnedTutorialPickaxe = nullptr;
 
 	CachedPlayer->OnInventoryUpdated.Broadcast();
 	CachedPlayer->OnToolWielded.Broadcast(-1);
-
-	UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: Tutorial pickaxe cleared."));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OnSkullInteracted
+// Skull interaction sequence
 //
-// Called by ASkullProp::HandleInteract().
-//
-// IMPORTANT: Player input is NOT locked here.
-// The player is free to move during the entire 5.5s flicker sequence and can
-// look at the skull from any angle.
-// Input is locked in OnSpellDurationComplete() at the instant-black moment.
-//
-// Timeline:
-//   0.0s  — pickaxe removed, skull flicker starts, spell SFX plays
-//   5.5s  — OnSpellDurationComplete: input locked, screen black, skull resets
-//   6.5s  — OnPostBlackDelay: explosion SFX plays
-//   9.5s  — OnLevelSwapReady: Tutorial → Main transition
+//   0.0 s  flicker starts, spell SFX plays — player FREE TO MOVE
+//   5.5 s  input locked, black screen, skull resets
+//   6.5 s  explosion SFX
+//   9.5 s  Tutorial→Main via AlphaStreamingSubsystem
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::OnSkullInteracted()
@@ -338,109 +276,60 @@ void ATutorialDirector::OnSkullInteracted()
 	bSkullInteractionActive = true;
 
 	ClearTutorialPickaxe();
-
-	// Start skull flicker directly — no BP event needed, SkullRef is typed.
-	if (SkullRef)
-	{
-		SkullRef->StartFlicker();
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error,
-			TEXT("ATutorialDirector::OnSkullInteracted — SkullRef is null!"));
-	}
-
+	if (SkullRef) SkullRef->StartFlicker();
 	BP_PlayMagicSpellSound();
 
-	// Player moves freely for 5.5s while watching the flicker.
-	GetWorldTimerManager().SetTimer(
-		SpellDurationHandle,
-		this,
-		&ATutorialDirector::OnSpellDurationComplete,
-		5.5f, false);
-
-	UE_LOG(LogTemp, Log,
-		TEXT("ATutorialDirector: Skull interaction started. Player free to move for 5.5s."));
+	GetWorldTimerManager().SetTimer(SpellDurationHandle,
+		this, &ATutorialDirector::OnSpellDurationComplete, 5.5f, false);
 }
 
 void ATutorialDirector::OnSpellDurationComplete()
 {
-	// ── LOCK INPUT (instant-black moment) ────────────────────────────────────
-	// This is the exact frame the screen goes black. The player cannot see
-	// anything happening after this point, so it is safe to freeze everything.
 	LockPlayerInputFull();
-
-	// ── BLACK SCREEN ─────────────────────────────────────────────────────────
 	BP_ShowInstantBlack();
+	if (SkullRef) SkullRef->StopAndReset();
 
-	// ── STOP SKULL (invisible under black) ───────────────────────────────────
-	if (SkullRef)
-	{
-		SkullRef->StopAndReset();
-	}
-
-	GetWorldTimerManager().SetTimer(
-		PostBlackSoundHandle,
-		this,
-		&ATutorialDirector::OnPostBlackDelay,
-		1.0f, false);
+	GetWorldTimerManager().SetTimer(PostBlackSoundHandle,
+		this, &ATutorialDirector::OnPostBlackDelay, 1.0f, false);
 }
 
 void ATutorialDirector::OnPostBlackDelay()
 {
 	BP_PlayExplosionSequence();
-
-	GetWorldTimerManager().SetTimer(
-		LevelSwapHandle,
-		this,
-		&ATutorialDirector::OnLevelSwapReady,
-		3.0f, false);
+	GetWorldTimerManager().SetTimer(LevelSwapHandle,
+		this, &ATutorialDirector::OnLevelSwapReady, 3.0f, false);
 }
 
 void ATutorialDirector::OnLevelSwapReady()
 {
 	if (UGameInstance* GI = GetGameInstance())
 	{
-		if (UAlphaStreamingSubsystem* Streaming = GI->GetSubsystem<UAlphaStreamingSubsystem>())
+		if (UAlphaStreamingSubsystem* SS = GI->GetSubsystem<UAlphaStreamingSubsystem>())
 		{
-			Streaming->HandleTutorialCompletion();
+			SS->HandleTutorialCompletion();
 		}
 	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INPUT HELPERS
+// Input helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::SuppressPlayerMoveInput()
 {
-	// Blocks movement input only. The movement component stays in Walking
-	// mode — physics and gravity continue to work normally.
-	if (CachedPC)
-	{
-		CachedPC->SetIgnoreMoveInput(true);
-	}
+	if (CachedPC) CachedPC->SetIgnoreMoveInput(true);
 }
 
 void ATutorialDirector::RestorePlayerMoveInput()
 {
 	if (!CachedPC) return;
-
 	CachedPC->SetIgnoreMoveInput(false);
-
-	// Guarantee the movement component is in Walking mode.
-	// If anything (e.g. a prior crash) left it in MOVE_None, this fixes it.
 	if (CachedPlayer)
 	{
-		if (UCharacterMovementComponent* Movement = CachedPlayer->GetCharacterMovement())
+		if (UCharacterMovementComponent* Mv = CachedPlayer->GetCharacterMovement())
 		{
-			if (Movement->MovementMode == MOVE_None)
-			{
-				Movement->SetMovementMode(MOVE_Walking);
-				UE_LOG(LogTemp, Warning,
-					TEXT("ATutorialDirector::RestorePlayerMoveInput — MovementMode was None; "
-					     "forced back to Walking."));
-			}
+			if (Mv->MovementMode == MOVE_None)
+				Mv->SetMovementMode(MOVE_Walking);
 		}
 	}
 }
@@ -448,31 +337,20 @@ void ATutorialDirector::RestorePlayerMoveInput()
 void ATutorialDirector::LockPlayerInputFull()
 {
 	if (!CachedPlayer || !CachedPC) return;
-
-	// 1. Stop the character from moving at all.
-	if (UCharacterMovementComponent* Movement = CachedPlayer->GetCharacterMovement())
-	{
-		Movement->DisableMovement();
-	}
-
-	// 2. Suppress move input so even if movement mode is restored
-	//    externally, the player still cannot give move commands.
+	if (UCharacterMovementComponent* Mv = CachedPlayer->GetCharacterMovement())
+		Mv->DisableMovement();
 	CachedPC->SetIgnoreMoveInput(true);
-
-	// 3. Switch to UI-only input — the blackout widget covers the screen and
-	//    the player should not be able to fire weapons, jump, or look around.
 	FInputModeUIOnly UIMode;
 	CachedPC->SetInputMode(UIMode);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
+// Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 AAlphaExilemetCharacter* ATutorialDirector::GetTutorialPlayer() const
 {
-	return Cast<AAlphaExilemetCharacter>(
-		UGameplayStatics::GetPlayerCharacter(this, 0));
+	return Cast<AAlphaExilemetCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
 }
 
 AActor* ATutorialDirector::FindBaseCamp() const

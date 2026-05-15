@@ -8,34 +8,27 @@ class ULevelSequencePlayer;
 class ALevelSequenceActor;
 class AAlphaExilemetCharacter;
 class AToolBase;
-class ASkullProp;               // ← typed ref replaces AActor*
+class ASkullProp;
 class APlayerController;
 class UCharacterMovementComponent;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ATutorialDirector  v11
+// ATutorialDirector  v13
 //
-// Changes from v10:
-//   - CachedPlayer + CachedPC added; set in InitializeTutorial() (not BeginPlay).
-//     This is the ONLY safe moment — the player is guaranteed spawned by then.
-//     Remove ChaceVariable macro + PlayerRef variable from BP_TutorialDirector.
+// Changes from v12:
+//   - BP_RegisterWithGameMode BlueprintImplementableEvent added.
+//     Called at the END of BeginPlay so the Director pushes itself to the GM.
+//     This replaces the GM's GetAllActorsOfClass → GET[0] → IsValid chain
+//     with a direct stored reference, eliminating the race condition entirely.
 //
-//   - SkullRef type: AActor* → ASkullProp*
-//     Enables direct C++ calls (StartFlicker, StopAndReset, OnRiseComplete)
-//     with no cast overhead and no BP event indirection.
+//   - BeginPlay now calls BP_RegisterWithGameMode after the standard setup.
 //
-//   - BP_OnPlayerLeftBase REMOVED — replaced by ExecuteTeleportToCrater() in C++.
-//     Full camera-fade + teleport + re-enable is handled by three timer stages.
-//
-//   - BP_StartSkullFlicker REMOVED — OnSkullInteracted() calls SkullRef→StartFlicker().
-//   - BP_StopAndResetSkull REMOVED — OnSpellDurationComplete() calls SkullRef→StopAndReset().
-//
-//   - OnSkullInteracted() updated: does NOT lock input anymore.
-//     Player is free to move during the flicker sequence.
-//     Input is locked inside OnSpellDurationComplete() at the instant-black moment.
-//
-//   - LockPlayerInputFull() / SuppressPlayerMoveInput() / RestorePlayerMoveInput()
-//     added for explicit, readable input state management.
+// Race condition explanation:
+//   GET[0] on an empty array crashes in BP (CallFunc_Array_Get_Item error).
+//   The array is empty because GetAllActorsOfClass in the GM runs before
+//   the Tutorial sublevel's actors complete BeginPlay.
+//   Fix: the Director registers itself with the GM the moment it exists —
+//   the GM never needs to search.
 // ─────────────────────────────────────────────────────────────────────────────
 
 UCLASS(Abstract, Blueprintable)
@@ -50,16 +43,29 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
-	// ── CONFIG ────────────────────────────────────────────────────────────────
-
-	/** Tag on the LevelSequenceActor for CS_TutorialIntro. Default: TutorialIntroSeq */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config")
-	FName IntroSequenceTag = FName("TutorialIntroSeq");
+	// ── LEVEL REFERENCES — assign in the placed instance Details panel ────────
 
 	/**
-	 * BP_Pickaxe class. Assign in BP_TutorialDirector Class Defaults.
-	 * Spawned + equipped when cutscene ends. Cleared on skull interaction.
+	 * The LevelSequenceActor for the tutorial intro cutscene.
+	 * Assign once by dragging Cutscene1 from the Outliner into this slot
+	 * in the placed BP_TutorialDirector's Details panel.
+	 * No tags needed. Survives animation changes because Spawnables
+	 * travel with the sequence asset, not with the level.
 	 */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Config",
+		meta = (DisplayName = "Intro Sequence"))
+	ALevelSequenceActor* IntroSequenceRef = nullptr;
+
+	/**
+	 * Optional: camera actor the view snaps to before sequence.Play().
+	 * Prevents 1-frame FP flash. Leave null if the LevelSequence
+	 * Camera Cut track already handles the view switch.
+	 */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Config",
+		meta = (DisplayName = "Cinecam Actor"))
+	AActor* TutorialCineCamRef = nullptr;
+
+	/** BP_Pickaxe class. Set in Class Defaults (not instance — it never changes). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config")
 	TSubclassOf<AToolBase> TutorialPickaxeClass;
 
@@ -68,38 +74,20 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tutorial|Runtime")
 	ULevelSequencePlayer* IntroSequencePlayer = nullptr;
 
-	/**
-	 * Captured in OnIntroSequenceFinished. The player's crater position.
-	 * Zero until the cutscene ends — guards premature overlap events.
-	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tutorial|Runtime")
 	FVector CraterStartPosition = FVector::ZeroVector;
 
 	/**
-	 * Cached in InitializeTutorial() — GUARANTEED non-null at that point
-	 * because GM_SimulatorGamemode calls InitializeTutorial() after spawning
-	 * the player.
-	 *
-	 * USE THIS in all BP implementable events instead of a BP-side PlayerRef.
-	 * Never cache the player in BP BeginPlay — it fires before the pawn is
-	 * possessed and GetPlayerCharacter(0) returns null.
+	 * Cached in InitializeTutorial() only — guaranteed non-null at that point.
+	 * NEVER cache in BeginPlay: the pawn is not possessed yet.
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tutorial|Runtime")
 	AAlphaExilemetCharacter* CachedPlayer = nullptr;
 
-	/**
-	 * Player controller cached alongside CachedPlayer in InitializeTutorial().
-	 * Used for input mode changes, camera fades, and move-input suppression.
-	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tutorial|Runtime")
 	APlayerController* CachedPC = nullptr;
 
-	/**
-	 * Typed skull reference — set in BP_TutorialDirector BeginPlay via
-	 * GetActorOfClass(ASkullProp) → SET SkullRef.
-	 * Must be set before InitializeTutorial() is called (it wires DirectorRef
-	 * on the skull).
-	 */
+	/** Set in BP BeginPlay via GetActorOfClass(ASkullProp) → SET SkullRef. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Tutorial|Skull")
 	ASkullProp* SkullRef = nullptr;
 
@@ -108,66 +96,69 @@ public:
 
 	// ── PUBLIC INTERFACE ──────────────────────────────────────────────────────
 
-	/** Called by GM_SimulatorGamemode after player spawned + possessed. */
+	/** Called by GM_SimulatorGamemode (via stored TutorialDirectorRef) after the player is possessed. */
 	UFUNCTION(BlueprintCallable, Category = "Tutorial")
 	void InitializeTutorial();
 
-	/**
-	 * Called by ASkullProp::HandleInteract() when the player presses Interact
-	 * on the skull and bCanInteract is true.
-	 *
-	 * Sequence:
-	 *   - Removes tutorial pickaxe
-	 *   - Starts skull flicker (C++ directly)
-	 *   - Plays spell SFX (BP event)
-	 *   - Player remains FREE TO MOVE for 5.5s
-	 *   - At 5.5s → OnSpellDurationComplete locks input + shows black screen
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Tutorial|Skull")
 	void OnSkullInteracted();
 
-	/** Removes the tutorial pickaxe. Auto-called by OnSkullInteracted(). */
 	UFUNCTION(BlueprintCallable, Category = "Tutorial")
 	void ClearTutorialPickaxe();
 
 	// ── BLUEPRINT IMPLEMENTABLE EVENTS ────────────────────────────────────────
 protected:
 	/**
-	 * Called at the START of InitializeTutorial().
-	 * Hide the player's main HUD widget here.
-	 * Use CachedPlayer (BlueprintReadOnly) — do NOT call GetPlayerCharacter
-	 * and do NOT use a separately-cached BP PlayerRef.
+	 * Called at the END of C++ BeginPlay.
+	 * Implement in BP_TutorialDirector to push self-reference to the GM:
+	 *
+	 *   [Event BP_RegisterWithGameMode]
+	 *     → [Get Game Mode → Cast To GM_SimulatorGamemode]
+	 *     → [SET TutorialDirectorRef  (Target = As GM Simulator Gamemode, Value = Self)]
+	 *
+	 * After this, GM_SimulatorGamemode::SpawnNewGamePlayer calls:
+	 *   [TutorialDirectorRef → Is Valid]
+	 *     True → [Initialize Tutorial  (Target = TutorialDirectorRef)]
+	 *
+	 * No GetAllActorsOfClass, no array, no GET[0], no crash.
+	 * BeginPlay fires while the sublevel loads — by the time SpawnNewGamePlayer
+	 * runs, TutorialDirectorRef is already set.
 	 */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Events")
+	void BP_RegisterWithGameMode();
+
+	/** Hide the player's main HUD. Use CachedPlayer (BlueprintReadOnly). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Events")
 	void BP_HideHUD();
 
-	/** Called after the cutscene ends. Create and add WBP_TutorialOverlay here. */
+	/** Cutscene finished. Create and Add WBP_TutorialOverlay to Viewport here. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Events")
 	void BP_OnIntroFinished();
 
-	/** Play the magic/spell SFX (Play Sound 2D). */
+	/** Play spell SFX (Play Sound 2D). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Skull")
 	void BP_PlayMagicSpellSound();
 
 	/**
-	 * Create WBP_TutorialBlackout at opacity 1.0, ZOrder 99, Add to Viewport.
-	 * This is called by OnSpellDurationComplete() — input is already locked
-	 * and the skull is already reset before this fires.
+	 * Create WBP_TutorialBlackout → Add to Viewport (ZOrder 99).
+	 *
+	 * BP implementation — two nodes only:
+	 *   [Event BP_ShowInstantBlack]
+	 *     → [Create WB Tutorial Blackout Widget  (Owning Player = Get Player Controller)]
+	 *     → [Add to Viewport  ZOrder = 99]
+	 *
+	 * The widget's Event Construct binds to AlphaStreamingSubsystem::OnTutorialPlayerReady.
+	 * When OnTutorialPlayerReady fires (broadcast by GM after player setup is done),
+	 * the widget removes itself.  The widget never calls the GM.
 	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Skull")
 	void BP_ShowInstantBlack();
 
-	/**
-	 * Play the explosion SFX at the ship actor's world location.
-	 * Use ExplosionSpawnRef (public, assignable in editor) for the position.
-	 * Guard with IsValid(ExplosionSpawnRef) before Play Sound At Location.
-	 */
+	/** Play explosion SFX at ship location. Guard with IsValid(ExplosionSpawnRef). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Skull")
 	void BP_PlayExplosionSequence();
 
 private:
-	// ── SEQUENCE CALLBACKS ────────────────────────────────────────────────────
-
 	UFUNCTION()
 	void OnIntroSequenceFinished();
 
@@ -178,52 +169,26 @@ private:
 		UPrimitiveComponent* OtherComp,
 		int32                OtherBodyIndex);
 
-	// Teleport sequence (replaces BP_OnPlayerLeftBase entirely)
-	void ExecuteTeleportToCrater();   // Entry — locks move input, fades out
-	void OnTeleportReadyToMove();     // After 1s fade-out: teleport, fade in
-	void OnTeleportComplete();        // After 1s fade-in: re-enable move input
+	void ExecuteTeleportToCrater();
+	void OnTeleportReadyToMove();
+	void OnTeleportComplete();
 
-	// Skull interaction sequence
-	void OnSpellDurationComplete();   // 5.5s after interaction: black + stop skull
-	void OnPostBlackDelay();          // 1.0s after black: explosion SFX
-	void OnLevelSwapReady();          // 3.0s after explosion: level swap
+	void OnSpellDurationComplete();
+	void OnPostBlackDelay();
+	void OnLevelSwapReady();
 
-	// ── INPUT HELPERS ─────────────────────────────────────────────────────────
-
-	/**
-	 * Soft lock used during the teleport sequence.
-	 * Only blocks move input. Movement component stays in Walking mode so
-	 * gravity and physics continue to work correctly during the fade.
-	 */
 	void SuppressPlayerMoveInput();
-
-	/**
-	 * Restores move input after SuppressPlayerMoveInput().
-	 * Also forces MovementMode back to Walking in case it drifted to None.
-	 */
 	void RestorePlayerMoveInput();
-
-	/**
-	 * Hard lock used at the instant-black moment of the skull sequence.
-	 * Disables the movement component entirely + switches to UI-only input.
-	 * Never reversed — the player enters the Main level fresh.
-	 */
 	void LockPlayerInputFull();
-
-	// ── HELPERS ───────────────────────────────────────────────────────────────
 
 	AAlphaExilemetCharacter* GetTutorialPlayer() const;
 	AActor*                  FindBaseCamp() const;
 
-	// ── TIMER HANDLES ─────────────────────────────────────────────────────────
-
-	FTimerHandle TeleportFadeOutHandle;   // fires to execute teleport after fade-out
-	FTimerHandle TeleportFadeInHandle;    // fires to restore input after fade-in
-	FTimerHandle SpellDurationHandle;     // 5.5s spell → instant black
-	FTimerHandle PostBlackSoundHandle;    // 1.0s under black → explosion SFX
-	FTimerHandle LevelSwapHandle;         // 3.0s after explosion → level swap
-
-	// ── OWNED ACTORS ──────────────────────────────────────────────────────────
+	FTimerHandle TeleportFadeOutHandle;
+	FTimerHandle TeleportFadeInHandle;
+	FTimerHandle SpellDurationHandle;
+	FTimerHandle PostBlackSoundHandle;
+	FTimerHandle LevelSwapHandle;
 
 	UPROPERTY()
 	AToolBase* SpawnedTutorialPickaxe = nullptr;
