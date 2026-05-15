@@ -21,6 +21,16 @@ enum class EGamePhase : uint8
 	NewGame_Tutorial UMETA(DisplayName = "New Game — Tutorial"),
 	Main             UMETA(DisplayName = "Main Gameplay"),
 	LoadedGame       UMETA(DisplayName = "Loaded Game"),
+
+	/**
+	 * Set by AlphaStreamingSubsystem::EnterPortal() BEFORE streaming begins.
+	 * Cleared back to Main by ExitPortal() BEFORE the unload completes.
+	 *
+	 * GM switch reads this in OnAnyLevelStreamComplete:
+	 *   InPortal → TeleportPlayerToPortalStart + disable survival + fade out screen.
+	 *   Main     → if loading screen ref is valid → fade out screen (covers portal exit).
+	 */
+	InPortal         UMETA(DisplayName = "In Portal Challenge"),
 };
 
 UCLASS()
@@ -84,14 +94,14 @@ public:
 	void SetupShipData();
 
 	/**
-	 * BUG 4 FIX: One function that runs the full load sequence in the correct order.
+	 * One call that runs the full load sequence in the correct order.
 	 * Call this from GM LoadGamePlayer instead of the four functions individually.
 	 *
 	 * Internally calls:
-	 *   SetupPlayerData()       — teleports to saved position if bHasValidTransform
-	 *   SetupShipData()         — restores ship repair levels
-	 *   InitProgressionManager()— seeds upgrade costs from DataTables
-	 *   SetupProgressionData()  — overlays saved partial payments
+	 *   SetupPlayerData()        — teleports to saved position if bHasValidTransform
+	 *   SetupShipData()          — restores ship repair levels
+	 *   InitProgressionManager() — seeds upgrade costs from DataTables
+	 *   SetupProgressionData()   — overlays saved partial payments
 	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void SetupLoadedGame();
