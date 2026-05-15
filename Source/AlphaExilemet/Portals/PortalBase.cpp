@@ -5,6 +5,7 @@
 #include "NiagaraComponent.h"
 #include "AlphaExilemet/AlphaExilemetCharacter.h"
 #include "AlphaExilemet/Core/AlphaStreamingSubsystem.h"
+#include "Kismet/GameplayStatics.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTRUCTION
