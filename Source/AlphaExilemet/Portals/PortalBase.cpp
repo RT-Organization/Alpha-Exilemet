@@ -15,19 +15,53 @@ APortalBase::APortalBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	// The arch mesh is the root — no extra scene component needed.
+	// ── MESH ──────────────────────────────────────────────────────────────────
+	// Root is the mesh. Collision is DISABLED — the TriggerBox handles overlaps.
 	PortalMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PortalMesh"));
 	SetRootComponent(PortalMesh);
 	PortalMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// Walk-through trigger: sits at the interior of the arch.
-	// Resize and reposition in the Blueprint viewport until it feels right.
+	// ── TRIGGER BOX ───────────────────────────────────────────────────────────
+	// Attached to the mesh at origin.
+	// Default extents: 50×130×130 cm — covers a standard arch opening.
+	//
+	// IMPORTANT: if you scale the portal Actor (not just the mesh) in the editor,
+	// the TriggerBox extents scale with it.
+	//   Portal actor scale 7.5 + TriggerBox extent 50×130×130
+	//   → world size 375×975×975 cm — FAR too large.
+	//
+	// Best practice: keep Actor scale = 1 and scale PortalMesh component instead.
+	// OR override TriggerBoxExtent in the Blueprint CDO and adjust manually.
 	TriggerBox = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerBox"));
 	TriggerBox->SetupAttachment(PortalMesh);
-	TriggerBox->SetBoxExtent(FVector(40.f, 80.f, 90.f));
-	TriggerBox->SetCollisionProfileName(TEXT("Trigger"));
+	TriggerBox->SetBoxExtent(TriggerBoxExtent);
 
-	// Per-portal VFX: assign the Niagara System in the Blueprint CDO.
+	// ── COLLISION — explicit setup, never rely on named profiles ─────────────
+	//
+	// NoCollision           = zero physics presence, cannot be walked on.
+	//                         Solves the "invisible step" the player trips on.
+	// QueryOnly             = still generates overlap queries even with NoCollision.
+	// ECC_Pawn Overlap      = only the player capsule (Pawn channel) triggers this.
+	// SetGenerateOverlapEvents(true) = required for OnComponentBeginOverlap to fire.
+	//
+	// Using SetCollisionProfileName("OverlapOnlyPawn") is NOT enough because that
+	// profile sets the object type to WorldDynamic, which can still block movement
+	// and act as a step depending on the project's collision matrix.
+	// Setting everything explicitly removes any dependency on project collision settings.
+
+	TriggerBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	TriggerBox->SetCollisionObjectType(ECC_WorldDynamic);
+
+	// Ignore everything by default, then selectively overlap Pawn.
+	TriggerBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+	TriggerBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+
+	TriggerBox->SetGenerateOverlapEvents(true);
+
+	// Prevent UE from treating this box as a walkable step surface.
+	TriggerBox->CanCharacterStepUpOn = ECB_No;
+
+	// ── VFX ───────────────────────────────────────────────────────────────────
 	PortalVFX = CreateDefaultSubobject<UNiagaraComponent>(TEXT("PortalVFX"));
 	PortalVFX->SetupAttachment(PortalMesh);
 	PortalVFX->SetAutoActivate(true);
@@ -40,11 +74,30 @@ APortalBase::APortalBase()
 void APortalBase::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Re-apply extent from CDO property (may have been changed in the BP editor).
+	TriggerBox->SetBoxExtent(TriggerBoxExtent);
+
+	// Re-apply collision explicitly at runtime.
+	// This overrides anything the editor might have serialised onto the component,
+	// ensuring the trigger always works regardless of what the Details panel shows.
+	TriggerBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	TriggerBox->SetCollisionObjectType(ECC_WorldDynamic);
+	TriggerBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+	TriggerBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	TriggerBox->SetGenerateOverlapEvents(true);
+	TriggerBox->CanCharacterStepUpOn = ECB_No;
+
 	TriggerBox->OnComponentBeginOverlap.AddDynamic(this, &APortalBase::OnOverlapBegin);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OVERLAP — entry gate
+// OVERLAP — immediate entry
+//
+// Fires the moment the player capsule intersects the TriggerBox.
+// No hold-time, no delay — entry is instantaneous.
+// The cooldown prevents double-fires that would happen if the loading
+// screen takes a moment to appear and the player is still moving forward.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void APortalBase::OnOverlapBegin(UPrimitiveComponent* OverlappedComp,
@@ -54,7 +107,6 @@ void APortalBase::OnOverlapBegin(UPrimitiveComponent* OverlappedComp,
                                   bool                bFromSweep,
                                   const FHitResult&   SweepResult)
 {
-	// Gate: portal must be active, not on cooldown, overlapper must be the player.
 	if (!bPortalActive || bOnCooldown) return;
 
 	AAlphaExilemetCharacter* Player = Cast<AAlphaExilemetCharacter>(OtherActor);
@@ -64,7 +116,7 @@ void APortalBase::OnOverlapBegin(UPrimitiveComponent* OverlappedComp,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ENTRY — main logic
+// ENTRY
 // ─────────────────────────────────────────────────────────────────────────────
 
 void APortalBase::EnterPortalLevel(AAlphaExilemetCharacter* Player)
@@ -74,48 +126,37 @@ void APortalBase::EnterPortalLevel(AAlphaExilemetCharacter* Player)
 	if (PortalLevelName.IsNone())
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("APortalBase [%s]: EnterPortalLevel called but PortalLevelName is not set — aborting."),
-			*GetName());
+			TEXT("APortalBase [%s]: PortalLevelName is not set — aborting entry."), *GetName());
 		return;
 	}
 
-	// ── COOLDOWN — prevents double-trigger during the loading-screen fade ────
+	// Lock trigger for TriggerCooldown seconds.
 	bOnCooldown = true;
 	GetWorldTimerManager().SetTimer(
 		CooldownHandle, this, &APortalBase::ClearCooldown, TriggerCooldown, false);
 
-	// ── DISABLE SURVIVAL (oxygen drain stops in portal levels) ──────────────
+	// Disable survival immediately — oxygen won't drain inside the challenge.
 	Player->bIsSurvivalActive = false;
 
-	// ── BLUEPRINT HOOK — other programmer sets up challenge state here ───────
-	// Examples: equip pickaxe, set a challenge flag on GI, spawn a guide actor.
+	// Per-portal Blueprint hook (equip tool, set challenge flag, play VO, etc.)
 	BP_OnPortalSetup(Player);
 
-	// ── BUILD RETURN TRANSFORM ───────────────────────────────────────────────
-	// We bake the return-yaw offset NOW so ExitPortal() can restore it directly
-	// without extra math. The player's XY position is preserved; only Yaw
-	// is rotated so they face back through the arch when they return.
-	const FTransform CurrentTransform = Player->GetActorTransform();
-	FRotator         ReturnRotation   = CurrentTransform.GetRotation().Rotator();
-	ReturnRotation.Yaw += ReturnYawOffset;
+	// Build the return transform with yaw offset baked in so ExitPortal()
+	// can restore it directly with no extra math.
+	FRotator ReturnRotation = Player->GetActorRotation();
+	ReturnRotation.Yaw     += ReturnYawOffset;
 
 	const FTransform ReturnTransform(
 		FQuat(ReturnRotation),
-		CurrentTransform.GetLocation(),
-		FVector::OneVector);   // Scale is always 1
+		Player->GetActorLocation(),
+		FVector::OneVector);
 
-	// ── STREAM — Main stays loaded; portal level is loaded on top ───────────
-	// EnterPortal() in AlphaStreamingSubsystem:
-	//   1. Saves ReturnTransform as PrePortalTransform in the save object.
-	//   2. Calls SavePlayerData() → preserves health, inventory, tools, etc.
-	//   3. Fires OnPortalEnterStarted → GameMode BP shows the loading screen.
-	//   4. Calls LoadStreamLevel(PortalLevelName) WITHOUT unloading Main.
-	//   5. On completion, fires OnStreamComplete → GameMode BP fades out screen.
+	// Hand off to the subsystem — it handles loading screen, save, streaming.
 	if (UGameInstance* GI = GetGameInstance())
 	{
-		if (UAlphaStreamingSubsystem* Streaming = GI->GetSubsystem<UAlphaStreamingSubsystem>())
+		if (UAlphaStreamingSubsystem* SS = GI->GetSubsystem<UAlphaStreamingSubsystem>())
 		{
-			Streaming->EnterPortal(PortalLevelName, ReturnTransform);
+			SS->EnterPortal(PortalLevelName, ReturnTransform);
 		}
 	}
 }
@@ -127,7 +168,6 @@ void APortalBase::EnterPortalLevel(AAlphaExilemetCharacter* Player)
 void APortalBase::SetPortalActive(bool bActive)
 {
 	bPortalActive = bActive;
-	// Also disable overlap events so UE doesn't do the cast work on every frame.
 	TriggerBox->SetGenerateOverlapEvents(bActive);
 }
 

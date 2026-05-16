@@ -8,10 +8,7 @@
 #include "AlphaExilemetGameInstance.generated.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EGamePhase
-// Single source of truth for what the game is currently doing.
-// Set BEFORE streaming any level. Read in OnAnyLevelStreamComplete.
-// Never use level name strings for routing decisions.
+// EGamePhase  (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 UENUM(BlueprintType)
 enum class EGamePhase : uint8
@@ -21,15 +18,6 @@ enum class EGamePhase : uint8
 	NewGame_Tutorial UMETA(DisplayName = "New Game — Tutorial"),
 	Main             UMETA(DisplayName = "Main Gameplay"),
 	LoadedGame       UMETA(DisplayName = "Loaded Game"),
-
-	/**
-	 * Set by AlphaStreamingSubsystem::EnterPortal() BEFORE streaming begins.
-	 * Cleared back to Main by ExitPortal() BEFORE the unload completes.
-	 *
-	 * GM switch reads this in OnAnyLevelStreamComplete:
-	 *   InPortal → TeleportPlayerToPortalStart + disable survival + fade out screen.
-	 *   Main     → if loading screen ref is valid → fade out screen (covers portal exit).
-	 */
 	InPortal         UMETA(DisplayName = "In Portal Challenge"),
 };
 
@@ -81,6 +69,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void CreateNewGame(FString SlotName);
 
+	/**
+	 * Saves player state to disk.
+	 *
+	 * TUTORIAL GUARD: If CurrentLevelName is "Tutorial", this is a no-op.
+	 * Tutorial progress is never persisted — quitting in Tutorial will restart
+	 * the Tutorial on next load. Only Main-level state is ever written.
+	 *
+	 * PORTAL GUARD: If CurrentLevelName is a portal level name, the save writes
+	 * CurrentLevelName = "Main" instead (so on load, the player resumes in Main,
+	 * not stuck in a portal that needs to be re-streamed from scratch).
+	 * Portal challenges always restart on load — progress inside them is not saved.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void SavePlayerData();
 
@@ -93,18 +93,31 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void SetupShipData();
 
-	/**
-	 * One call that runs the full load sequence in the correct order.
-	 * Call this from GM LoadGamePlayer instead of the four functions individually.
-	 *
-	 * Internally calls:
-	 *   SetupPlayerData()        — teleports to saved position if bHasValidTransform
-	 *   SetupShipData()          — restores ship repair levels
-	 *   InitProgressionManager() — seeds upgrade costs from DataTables
-	 *   SetupProgressionData()   — overlays saved partial payments
-	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void SetupLoadedGame();
+
+	/**
+	 * Single entry point for loading any save slot from the Load Menu.
+	 * Replaces the entire WB_LoadMenu "Load Slot Game" BP chain.
+	 *
+	 * What it does in order:
+	 *   1. Loads the save file from disk → sets LocalSaveRef.
+	 *   2. Reads CurrentLevelName from the save.
+	 *   3. Decides which level to stream and what phase to enter:
+	 *        "Tutorial" → phase = NewGame_Tutorial, load Tutorial (restart from scratch)
+	 *        portal name → phase = LoadedGame, load Main only (portal is restarted fresh)
+	 *        "Main"     → phase = LoadedGame, load Main normally
+	 *   4. Sets CurrentPhase.
+	 *   5. Starts streaming via AlphaStreamingSubsystem.
+	 *      GM's OnAnyLevelStreamComplete fires when done → routes by phase.
+	 *
+	 * The loading screen must already be visible before calling this.
+	 * Call from WB_LoadMenu Load Slot:
+	 *   [Create + Add Loading Screen] → [LoadSaveAndStream(SlotName)]
+	 *   That replaces the entire old BP chain.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
+	void LoadSaveAndStream(FString SlotName);
 
 	// ── PROGRESSION FUNCTIONS ────────────────────────────────────────────────
 
@@ -116,4 +129,13 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Progression")
 	void SaveProgressionData();
+
+private:
+	/**
+	 * Set of level names that are portal levels (not Tutorial, not Main).
+	 * Used by SavePlayerData() to detect portal-level saves and redirect them to Main.
+	 * If you add a new portal level, add its FName here.
+	 * Alternatively, check if CurrentLevelName != "Tutorial" && != "Main".
+	 */
+	bool IsPortalLevel(const FName& LevelName) const;
 };

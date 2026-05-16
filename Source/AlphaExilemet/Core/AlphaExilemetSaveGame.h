@@ -12,17 +12,20 @@ class ALPHAEXILEMET_API UAlphaExilemetSaveGame : public USaveGame
 
 public:
 	UAlphaExilemetSaveGame();
-	
-	/* ----------------------------- */
-	/* LEVEL                         */
-	/* ----------------------------- */
-	
+
+	/* ─── LEVEL ─────────────────────────────────────────────────────────── */
+
+	/**
+	 * The level name at time of last save.
+	 * "Tutorial" → load restarts Tutorial from beginning.
+	 * portal name → SavePlayerData() redirects this to "Main" automatically.
+	 * "Main" → normal load.
+	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Level")
 	FName CurrentLevelName;
 
-	/* ----------------------------- */
-	/* STATUS                        */
-	/* ----------------------------- */
+	/* ─── STATUS ─────────────────────────────────────────────────────────── */
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Status")
 	float SavedHealth;
 
@@ -32,15 +35,8 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Status")
 	float SavedCurrency;
 
-	/* ----------------------------- */
-	/* POS & ROT                     */
-	/* ----------------------------- */
+	/* ─── POSITION ───────────────────────────────────────────────────────── */
 
-	/**
-	 * Guards SetupPlayerData() from teleporting to a zero FTransform on fresh saves.
-	 * Set to true ONLY in SavePlayerData() after a real save has occurred.
-	 * Default false so a brand-new game never teleports to world origin.
-	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Pos&Rot")
 	bool bHasValidTransform;
 
@@ -52,19 +48,17 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Level")
 	FTransform PrePortalTransform;
-	
-	/* ----------------------------- */
-	/* UPGRADES                      */
-	/* ----------------------------- */
+
+	/* ─── UPGRADES ───────────────────────────────────────────────────────── */
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Upgrades")
 	TMap<EPlayerStat, int32> SavedUpgradeLevels;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Upgrades")
 	TMap<EShipSystem, int32> SavedShipRepairLevels;
 
-	/* ----------------------------- */
-	/* TOOL UPGRADES & INVENTORY     */
-	/* ----------------------------- */
+	/* ─── TOOLS / INVENTORY ──────────────────────────────────────────────── */
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
 	TMap<FName, int32> SavedToolUpgrades;
 
@@ -77,10 +71,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
 	TMap<FName, int32> SavedHarvestedGas;
 
-	/**
-	 * How many empty (unfired) spheres the gas rod was holding at save time.
-	 * Full spheres are stored in SavedHarvestedGas (gas type -> count).
-	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
 	int32 SavedEmptySphereCount = 0;
 
@@ -90,17 +80,23 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Tools")
 	int32 SavedActiveToolIndex = -1;
 
-	/* ----------------------------- */
-	/* PARTIAL UPGRADE PAYMENTS      */
-	/* ----------------------------- */
-	/**
-	 * Remaining cost for upgrades that have been partially paid.
-	 * Key   = DataTable row name (the UpgradeKey used in widgets).
-	 * Value = How much is still owed (currency + materials).
-	 *
-	 * Untouched upgrades  -> NOT stored here (re-seeded from DataTable on load).
-	 * Fully-paid upgrades -> NOT stored here (manager seeds the next level).
-	 */
+	/* ─── PARTIAL UPGRADE PAYMENTS ───────────────────────────────────────── */
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Progression")
 	TMap<FName, FUpgradeCost> SavedRemainingCosts;
+
+	/* ─── ONE-TIME FLAGS ─────────────────────────────────────────────────── */
+
+	/**
+	 * Set to true the first time the player clicks OK on the ship repair warning
+	 * screen (WB_ShipRepairWarning). Once true, the warning is never shown again.
+	 *
+	 * Default false — warning shows on first visit to ship terminal after Tutorial.
+	 * Never shows for loaded games where this is already true.
+	 *
+	 * Checked in: WBP_ShipTerminal Event Construct.
+	 * Set in: WB_ShipRepairWarning OK button handler.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|OneTimeFlags")
+	bool bShipRepairWarningShown = false;
 };

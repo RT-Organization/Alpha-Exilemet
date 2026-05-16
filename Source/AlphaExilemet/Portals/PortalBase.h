@@ -16,32 +16,35 @@ class UNiagaraComponent;
  * Set PortalLevelName to the streaming sub-level (e.g. "Portal_Desert").
  *
  * ──────────────────────────────────────────────────────────────────────
- * BLUEPRINT EXTENSION POINTS (implement in the child BP, not in C++)
+ * IMPORTANT — TRIGGER BOX SIZE
+ * ──────────────────────────────────────────────────────────────────────
+ * The TriggerBox is attached to PortalMesh. If you scale the portal actor
+ * in the editor (e.g. 7.5x), the TriggerBox scale compounds.
+ *
+ * ALWAYS check the TriggerBox in the Blueprint Viewport:
+ *   1. Select TriggerBox in the Components panel.
+ *   2. Make sure its WORLD SIZE is roughly 80×200×220 cm
+ *      (wide enough for the player capsule to pass through reliably).
+ *   3. If the portal actor has a large scale, reduce the TriggerBox scale
+ *      to compensate, or set TriggerBoxExtent to a smaller value in CDO.
+ *
+ * Default TriggerBoxExtent = 50×130×130 cm — tune per portal in BP CDO.
+ *
+ * ──────────────────────────────────────────────────────────────────────
+ * BLUEPRINT EXTENSION POINTS
  * ──────────────────────────────────────────────────────────────────────
  *
  *  BP_OnPortalSetup(EnteringPlayer)
- *    • Runs just BEFORE the level starts streaming.
- *    • Survival is already disabled by the time this fires.
- *    • Use it to: equip a specific tool, apply a status effect, set a
- *      challenge-specific flag, play a one-shot VO, etc.
- *    • Leave empty if the portal needs no special setup.
+ *    Fires just BEFORE the level starts streaming, survival already off.
+ *    Use it to equip tools, set challenge flags, play VO, etc.
+ *    Leave empty if this portal needs no special setup.
  *
  * ──────────────────────────────────────────────────────────────────────
- * CHALLENGE COMPLETION (for the other programmer)
+ * CHALLENGE COMPLETION
  * ──────────────────────────────────────────────────────────────────────
  *
- *  When the challenge is done, call:
+ *  When done, call from any BP:
  *    StreamingSubsystem → CompletePortalChallenge()
- *
- *  That function re-enables survival, broadcasts OnPortalExitStarted so
- *  the GameMode BP can show the loading screen, and then the GameMode BP
- *  calls ExitPortal() after a short fade delay.
- *
- * ──────────────────────────────────────────────────────────────────────
- * LEVEL STREAMING NOTE
- * ──────────────────────────────────────────────────────────────────────
- *  Main is NEVER unloaded. Portals are loaded ON TOP of Main.
- *  On exit, only the portal sub-level is unloaded.
  */
 UCLASS()
 class ALPHAEXILEMET_API APortalBase : public AActor
@@ -58,63 +61,61 @@ protected:
 	// COMPONENTS
 	// =========================================================================
 
-	/**
-	 * The arch mesh. Assign the static mesh in the Blueprint CDO.
-	 * Collision is disabled on the mesh — the TriggerBox handles interaction.
-	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Portal|Components")
 	UStaticMeshComponent* PortalMesh;
 
 	/**
-	 * Walk-through box collider placed at the interior of the arch.
-	 * Move and resize it freely in the Viewport until the UX feels right.
-	 * Default extent: X=40, Y=80, Z=90  (cm) — a sensible start for a
-	 * human-sized arch opening.  Adjust per mesh.
+	 * Walk-through trigger box.
+	 * RESIZE THIS in the Blueprint Viewport after assigning the mesh.
+	 * Select TriggerBox → Details → Shape → Box Extent.
+	 * Make sure it covers the arch opening in world space.
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Portal|Components")
 	UBoxComponent* TriggerBox;
 
-	/**
-	 * Niagara VFX component placed at the arch centre.
-	 * Assign the Niagara System asset in the Blueprint CDO.
-	 * Activated automatically on BeginPlay.
-	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Portal|Components")
 	UNiagaraComponent* PortalVFX;
 
 public:
 	// =========================================================================
-	// CONFIGURATION  (set in Blueprint CDO or per-instance in the editor)
+	// CONFIGURATION
 	// =========================================================================
 
-	/**
-	 * Name of the streaming sub-level to load when the player steps through.
-	 * Must match the sub-level asset name exactly (e.g. "Portal_Desert").
-	 * Leave empty → portal is inert.
-	 */
+	/** Sub-level name to load on entry. Must match the asset name exactly. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Portal|Config")
 	FName PortalLevelName;
 
 	/**
-	 * Yaw (degrees) added to the player's rotation when they return.
-	 * 180° = player faces back toward the arch they exited — recommended.
-	 * Set 0 to keep the same rotation they had on entry.
+	 * Yaw added to the player's rotation on return.
+	 * 180 = player faces back toward the portal arch. Recommended default.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Portal|Config")
 	float ReturnYawOffset = 180.0f;
 
 	/**
-	 * Seconds the trigger is suppressed after a successful activation.
-	 * Prevents double-fires while the loading screen is coming up.
+	 * Seconds the trigger is locked after one activation.
+	 * Prevents double-fires during the loading screen fade-in.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Portal|Config")
 	float TriggerCooldown = 3.0f;
+
+	/**
+	 * Half-extents (cm) of the TriggerBox set in the constructor.
+	 * Override in the Blueprint CDO if the default doesn't fit your arch.
+	 *
+	 * NOTE: If the portal actor itself is scaled in the editor, these extents
+	 * are affected by the parent scale. In that case, shrink the extents here
+	 * to compensate, OR keep actor scale at 1 and scale the mesh component
+	 * instead (preferred).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Portal|Config")
+	FVector TriggerBoxExtent = FVector(50.f, 130.f, 130.f);
 
 	// =========================================================================
 	// RUNTIME STATE
 	// =========================================================================
 
-	/** Set false from BP to lock a portal (e.g. not yet unlocked). */
+	/** Set false from BP to lock a portal (not yet unlocked). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Portal|State")
 	bool bPortalActive = true;
 
@@ -122,39 +123,26 @@ public:
 	// PUBLIC FUNCTIONS
 	// =========================================================================
 
-	/** Enable or disable the portal at runtime (also disables overlap events). */
+	/** Enable or disable the portal at runtime. */
 	UFUNCTION(BlueprintCallable, Category = "Portal")
 	void SetPortalActive(bool bActive);
 
 	/**
-	 * Manually trigger entry — normally called automatically by the box trigger.
-	 * Exposed so cutscenes / debug commands can force an entry.
+	 * Manually trigger entry (also called automatically by the TriggerBox).
+	 * Exposed for cutscenes or debug commands.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Portal")
 	void EnterPortalLevel(AAlphaExilemetCharacter* Player);
 
 	// =========================================================================
-	// BLUEPRINT EXTENSION POINTS
+	// BLUEPRINT EXTENSION
 	// =========================================================================
 
-	/**
-	 * IMPLEMENT IN BLUEPRINT (optional).
-	 *
-	 * Fires just before the streaming call, after survival is disabled.
-	 * Use it to configure per-portal challenge state:
-	 *   • Equip the pickaxe / specific tool
-	 *   • Set a challenge-progress variable on the GameInstance
-	 *   • Play a VO / ambient sound
-	 *   • Spawn a challenge actor
-	 */
+	/** Override in Blueprint to set up per-portal challenge state. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Portal|Events")
 	void BP_OnPortalSetup(AAlphaExilemetCharacter* EnteringPlayer);
 
 private:
-	// =========================================================================
-	// INTERNALS
-	// =========================================================================
-
 	bool bOnCooldown = false;
 	FTimerHandle CooldownHandle;
 
