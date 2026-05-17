@@ -167,19 +167,22 @@ void AAlphaExilemetCharacter::Tick(float DeltaTime)
 	
 	// --- 2. INTERACTION PROMPT LOGIC ---
 	bIsLookingAtInteractable = false;
-	FVector StartLoc = FirstPersonCameraComponent->GetComponentLocation();
-	FVector ForwardVector = FirstPersonCameraComponent->GetForwardVector();
-	FVector EndLoc = StartLoc + (ForwardVector * InteractionDistance);
+	FVector StartLoc    = FirstPersonCameraComponent->GetComponentLocation();
+	FVector EndLoc      = StartLoc + (FirstPersonCameraComponent->GetForwardVector() * InteractionDistance);
 
 	FHitResult HitResult;
 	FCollisionQueryParams CollisionParams;
-	CollisionParams.AddIgnoredActor(this); 
-	
+	CollisionParams.AddIgnoredActor(this);
+
 	if (GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, CollisionParams))
 	{
-		if (HitResult.GetActor() && HitResult.GetActor()->Implements<UInteractable>())
+		AActor* HitActor = HitResult.GetActor();
+		if (HitActor && HitActor->Implements<UInteractable>())
 		{
-			bIsLookingAtInteractable = true;
+			if (IInteractable::Execute_CanBeInteractedWith(HitActor))
+			{
+				bIsLookingAtInteractable = true;
+			}
 		}
 	}
 	
@@ -410,18 +413,18 @@ void AAlphaExilemetCharacter::StopInspectCurrentTool()
 void AAlphaExilemetCharacter::TryInteract()
 {
 	FVector StartLoc = FirstPersonCameraComponent->GetComponentLocation();
-	FVector ForwardVector = FirstPersonCameraComponent->GetForwardVector();
-	FVector EndLoc = StartLoc + (ForwardVector * InteractionDistance);
+	FVector EndLoc   = StartLoc + (FirstPersonCameraComponent->GetForwardVector() * InteractionDistance);
 
 	FHitResult HitResult;
 	FCollisionQueryParams CollisionParams;
-	CollisionParams.AddIgnoredActor(this); 
+	CollisionParams.AddIgnoredActor(this);
 
 	if (GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, CollisionParams))
 	{
-		if (AActor* HitActor = HitResult.GetActor())
+		AActor* HitActor = HitResult.GetActor();
+		if (HitActor && HitActor->Implements<UInteractable>())
 		{
-			if (HitActor->Implements<UInteractable>())
+			if (IInteractable::Execute_CanBeInteractedWith(HitActor))
 			{
 				IInteractable::Execute_Interact(HitActor, this);
 			}

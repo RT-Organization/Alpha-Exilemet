@@ -29,9 +29,27 @@ void ABaseTerminal::BeginPlay()
 	Super::BeginPlay();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CanBeInteractedWith
+// Returns false while bIsInteracting so the prompt is hidden and the player
+// cannot spam-interact during camera transitions.
+// ─────────────────────────────────────────────────────────────────────────────
+
+bool ABaseTerminal::CanBeInteractedWith_Implementation() const
+{
+	return !bIsInteracting;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Interact_Implementation
+// ─────────────────────────────────────────────────────────────────────────────
+
 void ABaseTerminal::Interact_Implementation(AAlphaExilemetCharacter* Interactor)
 {
 	if (!Interactor) return;
+
+	// Lock immediately — prevents double-interaction during the blend.
+	bIsInteracting = true;
 
 	APlayerController* PC = Cast<APlayerController>(Interactor->GetController());
 	if (PC)
@@ -44,19 +62,26 @@ void ABaseTerminal::Interact_Implementation(AAlphaExilemetCharacter* Interactor)
 		PC->SetViewTargetWithBlend(this, CameraBlendTime, EViewTargetBlendFunction::VTBlend_Cubic);
 
 		GetWorld()->GetTimerManager().SetTimer(
-			CameraBlendTimerHandle, 
-			this, 
-			&ABaseTerminal::OnBlendComplete, 
-			CameraBlendTime, 
-			false
-		);
+			CameraBlendTimerHandle,
+			this,
+			&ABaseTerminal::OnBlendComplete,
+			CameraBlendTime,
+			false);
 	}
 }
 
 void ABaseTerminal::OnBlendComplete()
 {
+	// Camera has arrived at the terminal view — tell BP to show the UI.
 	BP_OnTerminalViewReady(CurrentInteractor);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StopTerminalInteraction
+// Called by the Blueprint UI when the player closes the terminal.
+// Starts the camera blend back to the player. Input is restored only after
+// the blend completes to prevent the player looking around mid-animation.
+// ─────────────────────────────────────────────────────────────────────────────
 
 void ABaseTerminal::StopTerminalInteraction(AAlphaExilemetCharacter* Interactor)
 {
@@ -65,20 +90,15 @@ void ABaseTerminal::StopTerminalInteraction(AAlphaExilemetCharacter* Interactor)
 	APlayerController* PC = Cast<APlayerController>(Interactor->GetController());
 	if (PC)
 	{
-		// 1. Start the camera blend back to the player
 		PC->SetViewTargetWithBlend(Interactor, CameraBlendTime, EViewTargetBlendFunction::VTBlend_Cubic);
-
-		// 2. Cache the interactor to use in the timer
 		CurrentInteractor = Interactor;
 
-		// 3. Wait for the blend to finish BEFORE giving them control back
 		GetWorld()->GetTimerManager().SetTimer(
-			StopBlendTimerHandle, 
-			this, 
-			&ABaseTerminal::RestoreInput, 
-			CameraBlendTime, 
-			false
-		);
+			StopBlendTimerHandle,
+			this,
+			&ABaseTerminal::RestoreInput,
+			CameraBlendTime,
+			false);
 	}
 }
 
@@ -92,6 +112,11 @@ void ABaseTerminal::RestoreInput()
 		PC->SetIgnoreMoveInput(false);
 		PC->SetIgnoreLookInput(false);
 	}
+
+	// Unlock AFTER the camera has fully returned to the player.
+	// This is the correct moment — the player now has full control and the
+	// terminal is visible in the world again, so they can interact again.
+	bIsInteracting = false;
 }
 
 void ABaseTerminal::OnConstruction(const FTransform& Transform)
@@ -100,20 +125,14 @@ void ABaseTerminal::OnConstruction(const FTransform& Transform)
 
 	if (bUseMeshForInteraction)
 	{
-		// 1. Disable the box so the raycast passes through it
 		InteractionBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
-        
-		// 2. Enable the mesh to block the raycast
 		TerminalMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 		TerminalMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	}
 	else
 	{
-		// 1. Enable the box to block the raycast
 		InteractionBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 		InteractionBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-
-		// 2. Disable the mesh interaction
 		TerminalMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
 	}
 }
