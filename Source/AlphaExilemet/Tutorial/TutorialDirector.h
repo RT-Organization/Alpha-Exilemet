@@ -15,21 +15,20 @@ class USkeletalMeshComponent;
 class ACameraActor;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ATutorialDirector  v16
+// ATutorialDirector  v17
 //
-// Changes from v15:
-//   - SmoothCutsceneTransition system added.
-//     The intro cutscene ends with a CineCamera positioned at the player's
-//     head socket. Instead of an instant snap, we:
-//       1. Keep the CineCamera as the view target after the sequence ends.
-//       2. Move the CineCamera smoothly toward the real player's head socket
-//          over CutsceneTransitionBlendTime seconds using a tick-based lerp.
-//       3. Once the CineCamera is close enough (< 2 cm), we hide the proxy,
-//          unhide the player, switch view target to the player, and give input.
-//     This makes the cutscene-to-gameplay transition invisible.
-//
-//   - WakeUpDirector gets the same system (same parameters, separate flow).
-//   - ProxySwap is now deferred until SmoothCutsceneTransition completes.
+// Changes from v16:
+//   - SequenceEndCameraRef REMOVED. No level setup needed by the designer.
+//   - Smooth transition now works by reading the PlayerCameraManager's current
+//     view location/rotation at the moment the sequence ends. This is exactly
+//     where the Sequencer's CineCamera left the camera.
+//   - A temporary invisible ACameraActor is spawned at that point and used as
+//     the view target during the lerp. It moves toward FirstPersonCameraComponent
+//     world transform over CutsceneTransitionBlendTime seconds, then is destroyed.
+//   - FirstPersonCamera offset is used directly (not head bone socket) because
+//     the camera is attached to the mesh with a custom offset, not at bone origin.
+//   - Works with zero extra level setup — just set CutsceneTransitionBlendTime
+//     in Class Defaults and compile.
 // ─────────────────────────────────────────────────────────────────────────────
 
 UCLASS(Abstract, Blueprintable)
@@ -47,46 +46,42 @@ protected:
 public:
 	// ── LEVEL REFERENCES ──────────────────────────────────────────────────────
 
+	/** The LevelSequenceActor for the intro cutscene (Cutscene1). */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Config",
 		meta = (DisplayName = "Intro Sequence"))
 	ALevelSequenceActor* IntroSequenceRef = nullptr;
 
-	/** The CineCamera actor that the sequence ends on. The smooth transition
-	 *  will move this camera into the player head socket position, then swap.
-	 *  Must be the SAME CineCamera that is the last active cut in the sequence.
-	 *  Assign in the placed BP_TutorialDirector instance Details panel. */
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Config",
-		meta = (DisplayName = "Sequence End CineCamera"))
-	AActor* SequenceEndCameraRef = nullptr;
-
-	/** Optional: camera actor for the cinematic view before sequence plays. */
+	/** Optional: camera actor for the view before the sequence starts.
+	 *  Leave null if the Camera Cut track handles the initial view. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Config",
 		meta = (DisplayName = "Cinecam Actor (Pre-Play)"))
 	AActor* TutorialCineCamRef = nullptr;
 
-	/** BP_Pickaxe class to spawn when the cutscene ends. Set in Class Defaults. */
+	/** BP_Pickaxe class spawned when the cutscene finishes. Set in Class Defaults. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config")
 	TSubclassOf<AToolBase> TutorialPickaxeClass;
 
-	/** Actor tag identifying the proxy skeletal mesh inside the Level Sequence. */
+	/** Actor tag identifying the proxy skeletal mesh Spawnable inside the sequence. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config",
 		meta = (DisplayName = "Proxy Character Tag"))
 	FName ProxyCharacterTag = FName("CutsceneProxy");
 
 	/**
-	 * Time in seconds for the CineCamera to smoothly move into the player's
-	 * head socket before the view target switches to the player.
-	 * 0.0 = instant snap (same as old behaviour).
-	 * 0.3–0.6 = recommended for a smooth, invisible handoff.
+	 * How long (seconds) the temporary camera takes to slide from the
+	 * Sequencer's final CineCamera position into the player's FirstPersonCamera.
+	 * 0.0 = instant snap (old behaviour, no lerp).
+	 * 0.4–0.7 = recommended for an invisible handoff.
+	 *
+	 * NO LEVEL SETUP NEEDED — the system reads the camera position automatically
+	 * from PlayerCameraManager at the moment the sequence ends.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config",
 		meta = (DisplayName = "Cutscene Transition Blend Time"))
 	float CutsceneTransitionBlendTime = 0.5f;
 
 	/**
-	 * Distance threshold (cm) at which the CineCamera is considered "at" the
-	 * player head socket. When the camera gets closer than this, the swap fires.
-	 * Default 3.0 cm is essentially invisible at normal play speeds.
+	 * Distance (cm) at which the temp camera snaps to the player camera and
+	 * the view switches. 3.0 cm is imperceptible at normal frame rates.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config",
 		meta = (DisplayName = "Transition Snap Distance (cm)"))
@@ -132,6 +127,8 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Events")
 	void BP_HideHUD();
 
+	/** Called when transition is complete and player has full control.
+	 *  Create and add WBP_TutorialOverlay here. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Events")
 	void BP_OnIntroFinished();
 
@@ -149,56 +146,42 @@ private:
 
 	void HidePlayerForCutscene();
 	AActor* FindCutsceneProxy() const;
-
-	/**
-	 * The deferred proxy swap. Called once the smooth camera transition
-	 * completes (or immediately if CutsceneTransitionBlendTime == 0).
-	 * Teleports the player to the proxy's last position, unhides the player,
-	 * hides the proxy, and gives camera + input back to the player.
-	 */
 	void ExecuteProxySwap();
 
 	// ── SMOOTH TRANSITION STATE ───────────────────────────────────────────────
 
-	/** True while the CineCamera is lerping toward the player head socket. */
-	bool bTransitionActive = false;
-
-	/** Elapsed time since the smooth transition started. */
-	float TransitionElapsed = 0.0f;
-
-	/** World position of the player head socket captured at sequence end. */
-	FVector TransitionTargetLocation = FVector::ZeroVector;
-
-	/** World rotation of the player's first-person camera at sequence end. */
-	FRotator TransitionTargetRotation = FRotator::ZeroRotator;
-
-	/** World location of the CineCamera at the moment the sequence ended. */
-	FVector TransitionStartLocation = FVector::ZeroVector;
-
-	/** Rotation of the CineCamera at the moment the sequence ended. */
-	FRotator TransitionStartRotation = FRotator::ZeroRotator;
-
 	/**
-	 * Tick-based smooth lerp of SequenceEndCameraRef toward the player head socket.
-	 * Fires ExecuteProxySwap when within TransitionSnapDistance.
+	 * Temporary ACameraActor spawned at sequence end position.
+	 * Lerps toward the player's FirstPersonCameraComponent, then destroyed.
+	 * Never visible in the level — purely a view target for the lerp duration.
 	 */
+	UPROPERTY()
+	ACameraActor* TempTransitionCamera = nullptr;
+
+	bool     bTransitionActive        = false;
+	float    TransitionElapsed        = 0.0f;
+	FVector  TransitionStartLocation  = FVector::ZeroVector;
+	FRotator TransitionStartRotation  = FRotator::ZeroRotator;
+
+	/** Called each tick while bTransitionActive. Moves TempTransitionCamera
+	 *  toward FirstPersonCameraComponent, fires ExecuteProxySwap on arrival. */
 	void TickSmoothTransition(float DeltaTime);
 
-	// ── SEQUENCE CALLBACKS ────────────────────────────────────────────────────
+	/** Runs after transition completes (or immediately on instant mode).
+	 *  Gives player control, spawns pickaxe, wires boundary guard, calls BP_OnIntroFinished. */
+	void FinishCutsceneHandoff();
+
+	// ── SEQUENCE CALLBACK ─────────────────────────────────────────────────────
 
 	UFUNCTION() void OnIntroSequenceFinished();
 
 	UFUNCTION()
-	void OnOxygenSphereEndOverlap(
-		UPrimitiveComponent* OverlappedComp,
-		AActor*              OtherActor,
-		UPrimitiveComponent* OtherComp,
-		int32                OtherBodyIndex);
+	void OnOxygenSphereEndOverlap(UPrimitiveComponent* OverlappedComp,
+		AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
 	void ExecuteTeleportToCrater();
 	void OnTeleportReadyToMove();
 	void OnTeleportComplete();
-
 	void OnSpellDurationComplete();
 	void OnSkullPausedBeforeBlack();
 	void OnPostBlackDelay();
@@ -213,7 +196,7 @@ private:
 	// ── MISC HELPERS ──────────────────────────────────────────────────────────
 
 	AAlphaExilemetCharacter* GetTutorialPlayer() const;
-	AActor*                  FindBaseCamp() const;
+	AActor* FindBaseCamp() const;
 
 	// ── TIMER HANDLES ─────────────────────────────────────────────────────────
 

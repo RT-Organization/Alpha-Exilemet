@@ -86,22 +86,20 @@ bool UUpgradeProgressionManager::CanPayAnything(FName UpgradeKey, AAlphaExilemet
 	if (!Player) return false;
 
 	const FUpgradeCost* Cost = RuntimeCosts.Find(UpgradeKey);
-	if (!Cost) return false; // Upgrade doesn't exist / Maxed out
-
-	// 1. FREE UPGRADE CHECK: Is the cost completely 0?
-	// If 0 currency and no materials required, the player can "afford" it!
+	if (!Cost) return false; // Upgrade maxed out
+	
 	if (Cost->CurrencyCost <= 0 && Cost->RequiredMaterials.Num() == 0)
 	{
 		return true;
 	}
 
-	// 2. Can we pay the currency in full?
+	// Can we pay the currency in full?
 	if (Cost->CurrencyCost > 0 && Player->Currency >= static_cast<float>(Cost->CurrencyCost)) 
 	{
 		return true;
 	}
 
-	// 3. Do we have at least 1 of ANY required material?
+	// Do we have at least 1 of ANY required material?
 	for (const auto& Pair : Cost->RequiredMaterials)
 	{
 		if (Pair.Value > 0 && Player->GetTotalResourceAmount(Pair.Key) > 0)
@@ -110,7 +108,7 @@ bool UUpgradeProgressionManager::CanPayAnything(FName UpgradeKey, AAlphaExilemet
 		}
 	}
 
-	// We aren't free, we don't have enough currency, and we have 0 materials to give.
+	// don't have enough currency and have 0 materials to give.
 	return false;
 }
 
@@ -130,7 +128,7 @@ bool UUpgradeProgressionManager::PayTowardsUpgrade(FName UpgradeKey, AAlphaExile
 	FUpgradeCost* Cost = RuntimeCosts.Find(UpgradeKey);
 	if (!Cost) return false;
 
-	// ── DEDUCT MATERIALS (Partial Payment) ──────────────────────────────────
+	// DEDUCT MATERIALS (Partial Payment)
 	for (auto It = Cost->RequiredMaterials.CreateIterator(); It; ++It)
 	{
 		int32 RequiredAmount = It->Value;
@@ -148,7 +146,7 @@ bool UUpgradeProgressionManager::PayTowardsUpgrade(FName UpgradeKey, AAlphaExile
 		}
 	}
 
-	// ── DEDUCT CURRENCY (All or Nothing) ────────────────────────────────────
+	// DEDUCT CURRENCY (All or Nothing)
 	if (Cost->CurrencyCost > 0 && Player->Currency >= static_cast<float>(Cost->CurrencyCost))
 	{
 		Player->Currency -= static_cast<float>(Cost->CurrencyCost);
@@ -157,23 +155,20 @@ bool UUpgradeProgressionManager::PayTowardsUpgrade(FName UpgradeKey, AAlphaExile
 		// Tell the entire game UI that the player's wallet just changed!
 		Player->OnCurrencyUpdated.Broadcast(Player->Currency);
 	}
-
-	// ── CLEANUP ─────────────────────────────────────────────────────────────
+	
 	// Remove materials from the map if their cost has reached 0
 	for (auto It = Cost->RequiredMaterials.CreateIterator(); It; ++It)
 	{
 		if (It->Value <= 0) It.RemoveCurrent();
 	}
-
-	// ── CHECK IF FULLY PAID ─────────────────────────────────────────────────
+	
 	// If currency is 0 and the materials map is empty, the upgrade is complete!
 	if (Cost->CurrencyCost <= 0 && Cost->RequiredMaterials.Num() == 0)
 	{
 		return true; 
 	}
 
-	// We made a partial payment, but it's not fully paid yet. 
-	// Returning false tells the Blueprint NOT to level up yet, just update the UI.
+	// partial payment
 	return false;
 }
 
@@ -186,7 +181,6 @@ void UUpgradeProgressionManager::AdvanceToNextLevelCost(FName UpgradeKey, int32 
 	}
 	else
 	{
-		// Maxed out — remove entirely
 		RuntimeCosts.Remove(UpgradeKey);
 	}
 }
@@ -198,18 +192,12 @@ void UUpgradeProgressionManager::AdvanceToNextLevelCost(FName UpgradeKey, int32 
 void UUpgradeProgressionManager::SaveToSaveObject(UAlphaExilemetSaveGame* SaveObject) const
 {
 	if (!SaveObject) return;
-	// We only save RuntimeCosts that differ from the DataTable defaults.
-	// Since this is an all-or-nothing system, RuntimeCosts only contains
-	// the current level's full cost (never partial amounts).
-	// We still save it so the correct level cost is restored on load.
 	SaveObject->SavedRemainingCosts = RuntimeCosts;
 }
 
 void UUpgradeProgressionManager::LoadFromSaveObject(const UAlphaExilemetSaveGame* SaveObject)
 {
 	if (!SaveObject) return;
-	// Overlay saved costs on top of initialized defaults.
-	// This ensures the correct level cost is shown after loading.
 	for (const auto& Pair : SaveObject->SavedRemainingCosts)
 	{
 		RuntimeCosts.Add(Pair.Key, Pair.Value);

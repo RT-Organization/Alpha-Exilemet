@@ -8,26 +8,17 @@ class ULevelSequencePlayer;
 class ALevelSequenceActor;
 class AAlphaExilemetCharacter;
 class APlayerController;
+class ACameraActor;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AWakeUpDirector  v2
+// AWakeUpDirector  v3
 //
-// Changes from v1:
-//   - Smooth CineCamera transition added.
-//     The wake-up cutscene ends with a CineCamera at the player's head.
-//     Instead of an instant camera hand-back we lerp the CineCamera
-//     into the player head socket over WakeUpTransitionBlendTime seconds,
-//     then execute the view target swap. Same system as ATutorialDirector.
-//
-// WORKFLOW:
-//   1. Placed BP_WakeUpDirector in Main level.
-//   2. Assign WakeUpSequenceRef in Details panel.
-//   3. Assign SequenceEndCameraRef (the CineCamera the sequence ends on).
-//   4. GM calls InitializeWakeUp() after SpawnNewGamePlayer (Tutorial→Main only).
-//   5. After the smooth transition completes:
-//        - Player gets camera + input back.
-//        - Survival enabled.
-//        - OnTutorialPlayerReady broadcast.
+// Changes from v2:
+//   - SequenceEndCameraRef REMOVED. No level setup needed.
+//   - Reads camera transform from PlayerCameraManager at sequence end.
+//   - Spawns TempTransitionCamera there, lerps it to FirstPersonCameraComponent,
+//     then destroys it and hands control back to the player.
+//   - Identical system to ATutorialDirector's smooth transition.
 // ─────────────────────────────────────────────────────────────────────────────
 
 UCLASS(Abstract, Blueprintable)
@@ -45,38 +36,28 @@ protected:
 public:
 	// ── LEVEL REFERENCES ──────────────────────────────────────────────────────
 
-	/** The LevelSequenceActor for the wake-up cutscene in the Main level. */
+	/** The LevelSequenceActor for the wake-up cutscene (LS_WakeUp). */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
 		meta = (DisplayName = "Wake Up Sequence"))
 	ALevelSequenceActor* WakeUpSequenceRef = nullptr;
 
-	/**
-	 * The CineCamera that the wake-up sequence ends on.
-	 * The smooth transition moves this camera to the player's head socket.
-	 * Must be the last active Camera Cut track actor in the sequence.
-	 * Assign in the placed BP_WakeUpDirector Details panel.
-	 */
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
-		meta = (DisplayName = "Sequence End CineCamera"))
-	AActor* SequenceEndCameraRef = nullptr;
-
-	/** Optional cinecam before sequence plays. Leave null if Camera Cut handles it. */
+	/** Optional: cinecam for the view before the sequence starts.
+	 *  Leave null if the Camera Cut track handles the initial view. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
 		meta = (DisplayName = "Cinecam Actor (Pre-Play)"))
 	AActor* WakeUpCineCamRef = nullptr;
 
 	/**
-	 * Time in seconds for the CineCamera to lerp into the player's head socket.
-	 * 0.0 = instant camera hand-back (same as old behaviour).
-	 * 0.3–0.6 = recommended for a smooth, invisible handoff.
+	 * How long (seconds) the temp camera takes to slide into the player's
+	 * FirstPersonCameraComponent after the wake-up sequence ends.
+	 * 0.0 = instant. 0.4–0.7 recommended.
+	 * NO LEVEL SETUP NEEDED — reads from PlayerCameraManager automatically.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config",
 		meta = (DisplayName = "Transition Blend Time"))
 	float WakeUpTransitionBlendTime = 0.5f;
 
-	/**
-	 * Distance threshold (cm) at which the CineCamera snaps to the head socket.
-	 */
+	/** Distance (cm) at which the temp camera snaps and the swap fires. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config",
 		meta = (DisplayName = "Transition Snap Distance (cm)"))
 	float TransitionSnapDistance = 3.0f;
@@ -94,48 +75,35 @@ public:
 
 	// ── PUBLIC INTERFACE ──────────────────────────────────────────────────────
 
-	/**
-	 * Called by GM_SimulatorGamemode inside SpawnNewGamePlayer,
-	 * ONLY when transitioning from Tutorial (GamePhase == NewGame_Tutorial).
-	 */
+	/** Called by GM_SimulatorGamemode inside SpawnNewGamePlayer,
+	 *  only when Phase == Main (Tutorial→Main transition). */
 	UFUNCTION(BlueprintCallable, Category = "WakeUp")
 	void InitializeWakeUp();
 
 protected:
 	// ── BLUEPRINT IMPLEMENTABLE EVENTS ────────────────────────────────────────
 
-	/**
-	 * Called at END of C++ BeginPlay.
-	 * Push self-reference to GM: GM.WakeUpDirectorRef = Self.
-	 */
+	/** Push self-reference to GM: GM.WakeUpDirectorRef = Self. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "WakeUp|Events")
 	void BP_RegisterWithGameMode();
 
-	/**
-	 * Called when the wake-up transition fully completes (after smooth blend).
-	 * Show HUD, play ambient sounds, trigger ship terminal warning, etc.
-	 */
+	/** Called when transition fully completes. Show HUD, play ambient audio, etc. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "WakeUp|Events")
 	void BP_OnWakeUpComplete();
 
 private:
 	// ── SMOOTH TRANSITION STATE ───────────────────────────────────────────────
 
+	UPROPERTY()
+	ACameraActor* TempTransitionCamera = nullptr;
+
 	bool     bTransitionActive       = false;
 	float    TransitionElapsed       = 0.0f;
 	FVector  TransitionStartLocation = FVector::ZeroVector;
 	FRotator TransitionStartRotation = FRotator::ZeroRotator;
-	FVector  TransitionTargetLocation = FVector::ZeroVector;
-	FRotator TransitionTargetRotation = FRotator::ZeroRotator;
 
 	void TickSmoothTransition(float DeltaTime);
-
-	/**
-	 * Fires when the smooth transition reaches the head socket.
-	 * Restores input, enables survival, broadcasts OnTutorialPlayerReady.
-	 */
 	void OnTransitionComplete();
 
-	UFUNCTION()
-	void OnWakeUpSequenceFinished();
+	UFUNCTION() void OnWakeUpSequenceFinished();
 };

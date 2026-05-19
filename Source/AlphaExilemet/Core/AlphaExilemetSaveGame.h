@@ -14,13 +14,7 @@ public:
 	UAlphaExilemetSaveGame();
 
 	/* ─── LEVEL ─────────────────────────────────────────────────────────── */
-
-	/**
-	 * The level name at time of last save.
-	 * "Tutorial" → load restarts Tutorial from beginning.
-	 * portal name → SavePlayerData() redirects this to "Main" automatically.
-	 * "Main" → normal load.
-	 */
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|Level")
 	FName CurrentLevelName;
 
@@ -87,16 +81,6 @@ public:
 
 	/* ─── ONE-TIME FLAGS ─────────────────────────────────────────────────── */
 
-	/**
-	 * Set to true the first time the player clicks OK on the ship repair warning
-	 * screen (WB_ShipRepairWarning). Once true, the warning is never shown again.
-	 *
-	 * Default false — warning shows on first visit to ship terminal after Tutorial.
-	 * Never shows for loaded games where this is already true.
-	 *
-	 * Checked in: WBP_ShipTerminal Event Construct.
-	 * Set in: WB_ShipRepairWarning OK button handler.
-	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "SaveData|OneTimeFlags")
 	bool bShipRepairWarningShown = false;
 };
