@@ -4,35 +4,23 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "AlphaStreamingSubsystem.generated.h"
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELEGATES
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Fires when the LOAD half of a StreamLevel call completes. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnStreamComplete);
-
-/** Fires ONLY when the Tutorial→Main transition finishes loading. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTutorialToMainComplete);
-
-/**
- * Broadcast by GM at the END of SpawnNewGamePlayer.
- * WB_TutorialBlackout binds here and plays its fade-out.
- */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTutorialPlayerReady);
-
-/**
- * Fires at the START of EnterPortal(), BEFORE streaming begins.
- * GM BP: bind → create WB_LoadingScreen immediately.
- */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPortalEnterStarted);
-
-/**
- * Fires when CompletePortalChallenge() is called.
- * GM BP: bind → create WB_LoadingScreen, delay, call ExitPortal().
- */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPortalExitStarted);
 
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Fires at the START of ReturnToMainMenu(), before any I/O.
+ * GM binds here to: destroy the player pawn, clear director refs,
+ * show the loading screen widget, and start the fade-out animation.
+ *
+ * WB_Pause "Main Menu" button:
+ *   1. Call StreamingSubsystem → ReturnToMainMenu()
+ *   2. Remove WB_Pause from Parent
+ *   ─── Everything else is handled by GM via this delegate ───
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnReturnToMainMenuStarted);
 
 UCLASS()
 class ALPHAEXILEMET_API UAlphaStreamingSubsystem : public UGameInstanceSubsystem
@@ -40,113 +28,154 @@ class ALPHAEXILEMET_API UAlphaStreamingSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
-	// =========================================================================
-	// DELEGATES
-	// =========================================================================
+	// ── DELEGATES ─────────────────────────────────────────────────────────────
 
-	/** Broadcast when a level finishes LOADING (never for unloads). */
+	/** Fires when a level LOAD completes. Never fires for unloads.
+	 *  NOTE: does NOT fire for the Tutorial→Main transition (use OnTutorialToMainComplete). */
 	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Streaming")
 	FOnStreamComplete OnStreamComplete;
 
-	/** GM binds here → calls SpawnNewGamePlayer when tutorial Main finishes loading. */
+	/** Fires when Tutorial→Main streaming finishes. GM binds → SpawnNewGamePlayer. */
 	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Streaming")
 	FOnTutorialToMainComplete OnTutorialToMainComplete;
 
-	/** GM fires this at end of SpawnNewGamePlayer. WB_TutorialBlackout binds → fades out. */
+	/** GM fires at end of SpawnNewGamePlayer. WB_TutorialBlackout binds → removes itself. */
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "AlphaExilemet|Streaming")
 	FOnTutorialPlayerReady OnTutorialPlayerReady;
 
-	/** GM BP: bind → create loading screen BEFORE streaming starts. */
+	/** Fires at START of EnterPortal() before I/O. GM creates loading screen here. */
 	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Streaming")
 	FOnPortalEnterStarted OnPortalEnterStarted;
 
-	/** GM BP: bind → create loading screen, delay, call ExitPortal(). */
+	/** Fires when CompletePortalChallenge() is called. GM creates loading screen. */
 	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Streaming")
 	FOnPortalExitStarted OnPortalExitStarted;
 
-	// =========================================================================
-	// PUBLIC FUNCTIONS
-	// =========================================================================
+	/**
+	 * Fires at the START of ReturnToMainMenu(), before level I/O.
+	 *
+	 * GM MUST bind to this in InitializeInstance to:
+	 *   1. Show loading screen widget (Add to Viewport, ZOrder 100).
+	 *   2. Start Fade Out Sequence on the loading screen.
+	 *   3. Destroy the player pawn (Get Player Character → Destroy Actor).
+	 *   4. Clear TutorialDirectorRef and WakeUpDirectorRef (SET null).
+	 *   5. Set CurrentPhase = MainMenu (already done in C++, but GM may use it).
+	 *
+	 * Nothing else is required — WB_Pause just calls ReturnToMainMenu and closes itself.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "AlphaExilemet|Streaming")
+	FOnReturnToMainMenuStarted OnReturnToMainMenuStarted;
+
+	// ── LEVEL TRACKING ────────────────────────────────────────────────────────
 
 	/**
-	 * Loads one level. Separately unloads another if LevelToUnload != NAME_None.
-	 * The two operations use different callbacks so OnStreamComplete fires ONCE
-	 * (only when the load finishes, not when the unload finishes).
+	 * The streaming sub-level that is currently active (loaded and visible).
+	 * Updated automatically by every streaming function in this class.
+	 *
+	 * GM InitializeInstance MUST call SetCurrentActiveLevel("MainMenu") at startup
+	 * so the subsystem starts in a known state.
+	 *
+	 * Values: "MainMenu", "Tutorial", "Main", or a portal level name.
 	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Streaming")
+	FName CurrentActiveLevel = NAME_None;
+
+	// ── PUBLIC FUNCTIONS ──────────────────────────────────────────────────────
+
+	/** Generic: load one level, optionally unload another. */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
 	void StreamLevel(FName LevelToLoad, FName LevelToUnload);
 
-	/** Saves progress → loads Main → unloads Tutorial. */
+	/**
+	 * Returns the player to the Main Menu from ANY level (Tutorial, Main, or Portal).
+	 * Uses CurrentActiveLevel to determine what to unload — no hardcoding needed.
+	 *
+	 * Fires OnReturnToMainMenuStarted BEFORE any I/O so the GM can show the
+	 * loading screen and clean up the player immediately.
+	 *
+	 * WB_Pause "Main Menu" button usage:
+	 *   [StreamingSubsystem → ReturnToMainMenu]
+	 *   [Remove from Parent]          ← close the pause widget
+	 *   ── GM handles all the rest via OnReturnToMainMenuStarted ──
+	 */
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
+	void ReturnToMainMenu();
+
+	/**
+	 * Manually set the currently tracked active level.
+	 * Call from GM InitializeInstance with "MainMenu" at game startup.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
+	void SetCurrentActiveLevel(FName LevelName) { CurrentActiveLevel = LevelName; }
+
+	/** Returns the name of the currently active streaming level. */
+	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Streaming")
+	FName GetCurrentActiveLevel() const { return CurrentActiveLevel; }
+
+	/** Used by LoadSaveAndStream to set the active portal before streaming. */
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
+	void SetActivePortalName(FName PortalName) { ActivePortalName = PortalName; }
+
+	/** Read-only access to current portal name (for BP debugging). */
+	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Streaming")
+	FName GetActivePortalName() const { return ActivePortalName; }
+
+	/**
+	 * Tutorial completion:
+	 *   - Destroys all player tools and saves a clean state.
+	 *   - Sets phase to Main.
+	 *   - Loads Main, unloads Tutorial.
+	 *   - Fires OnTutorialToMainComplete when done (NOT OnStreamComplete).
+	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
 	void HandleTutorialCompletion();
 
 	/**
-	 * PORTAL ENTRY
-	 *
-	 * Sequence:
-	 *  1. CurrentPhase = InPortal
-	 *  2. OnPortalEnterStarted → GM shows loading screen immediately
-	 *  3. SavePlayerData (health, tools, PrePortalTransform)
-	 *  4. LoadStreamLevel(portal)  → OnStreamComplete fires when done
-	 *  5. UnloadStreamLevel(Main)  → silent (no broadcast)
-	 *
-	 * Main IS unloaded so the levels never overlap visually.
+	 * Portal entry:
+	 *   Phase = InPortal → OnPortalEnterStarted → save state
+	 *   → load portal, unload CurrentActiveLevel.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
 	void EnterPortal(FName PortalLevelName, FTransform PlayerReturnTransform);
 
 	/**
-	 * Called from GM BP InPortal switch case AFTER OnStreamComplete fires.
-	 * Moves the existing pawn to the PlayerStart found inside the portal
-	 * streaming level — no pawn destroy/re-spawn.
+	 * Teleports existing pawn to PlayerStart in the active portal level.
+	 * Called from GM InPortal switch case after OnStreamComplete.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
 	void TeleportPlayerToPortalStart();
 
 	/**
-	 * PORTAL EXIT
-	 *
-	 * Sequence:
-	 *  1. Teleport player back to PrePortalTransform (yaw already baked by PortalBase)
-	 *  2. Re-enable survival
-	 *  3. CurrentPhase = Main
-	 *  4. LoadStreamLevel(Main)    → OnStreamComplete fires when done → GM fades screen
-	 *  5. UnloadStreamLevel(portal)→ silent
-	 *
-	 * Call from GM BP AFTER loading screen is fully opaque.
+	 * Portal exit:
+	 *   Teleport to PrePortalTransform → survival on → phase = Main
+	 *   → load Main, unload portal.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
 	void ExitPortal();
 
 	/**
-	 * Called by the challenge programmer when the challenge is done.
+	 * Called by challenge programmer when challenge is done.
 	 * Re-enables survival + broadcasts OnPortalExitStarted.
-	 * GM BP then shows the loading screen and calls ExitPortal().
 	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming")
 	void CompletePortalChallenge();
 
-	/** DEBUG — press key to force portal exit. Remove before shipping. */
+	/** DEBUG — force portal exit. Remove before shipping. */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Streaming|Debug")
 	void Debug_ForceCompleteChallenge();
 
 private:
 	FName ActivePortalName    = NAME_None;
-	int32 LoadLatentUUID      = 0;   // Used only for LOAD callbacks
-	int32 UnloadLatentUUID    = 1000; // Used only for UNLOAD callbacks (different range)
-	bool  bTutorialTransition = false;
+	int32 LoadLatentUUID      = 0;
+	int32 UnloadLatentUUID    = 1000;
 
 	/**
-	 * Fires when a LOAD completes. Broadcasts OnStreamComplete + tutorial delegate.
-	 * Never fires for unloads — unloads use OnStreamLevelUnloaded (silent).
+	 * When true, OnStreamLevelLoaded will fire OnTutorialToMainComplete instead
+	 * of OnStreamComplete. This prevents the GM's EGamePhase switch from running
+	 * the Tutorial setup a second time on the same load event.
 	 */
-	UFUNCTION()
-	void OnStreamLevelLoaded();
+	bool bTutorialTransition  = false;
 
-	/**
-	 * Fires when an UNLOAD completes. Does nothing — exists only so the
-	 * LatentActionInfo has a valid callback target and doesn't crash.
-	 */
-	UFUNCTION()
-	void OnStreamLevelUnloaded();
+	UFUNCTION() void OnStreamLevelLoaded();
+	UFUNCTION() void OnStreamLevelUnloaded();
 };

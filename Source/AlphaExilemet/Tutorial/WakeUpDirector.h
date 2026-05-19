@@ -10,33 +10,24 @@ class AAlphaExilemetCharacter;
 class APlayerController;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AWakeUpDirector  v1
+// AWakeUpDirector  v2
 //
-// Placed in the Main level. Handles the "wake up from tutorial" cutscene that
-// plays once — the first time the player arrives in Main from the Tutorial.
+// Changes from v1:
+//   - Smooth CineCamera transition added.
+//     The wake-up cutscene ends with a CineCamera at the player's head.
+//     Instead of an instant camera hand-back we lerp the CineCamera
+//     into the player head socket over WakeUpTransitionBlendTime seconds,
+//     then execute the view target swap. Same system as ATutorialDirector.
 //
 // WORKFLOW:
-//   1. Placed BP_WakeUpDirector in the Main level.
-//   2. Assign WakeUpSequenceRef in the instance Details panel (same as TutorialDirector).
-//   3. GM_SimulatorGamemode stores a WakeUpDirectorRef (same pattern as TutorialDirectorRef).
-//   4. After SpawnNewGamePlayer finishes setting up the player, GM checks:
-//        if (WakeUpDirectorRef is valid && GamePhase was NewGame_Tutorial)
-//            → WakeUpDirectorRef → InitializeWakeUp()
-//      Otherwise skip (loaded game or already done).
-//   5. After the wake-up cutscene ends, player has full control with no inventory.
-//
-// WHAT IT DOES:
-//   - Plays the wake-up cutscene (your animator's sequence).
-//   - During cutscene: HUD hidden, input locked to UI-only.
-//   - After cutscene:
-//       * Returns camera + input to player.
-//       * Enables survival.
-//       * Broadcasts OnTutorialPlayerReady so WB_TutorialBlackout removes itself.
-//
-// WHAT IT DOES NOT DO:
-//   - It does NOT manage inventory (player has none — tutorial pickaxe was cleared).
-//   - It does NOT save the game (first real save happens when player chooses to).
-//   - It does NOT spawn the ship terminal warning (separate actor handles that).
+//   1. Placed BP_WakeUpDirector in Main level.
+//   2. Assign WakeUpSequenceRef in Details panel.
+//   3. Assign SequenceEndCameraRef (the CineCamera the sequence ends on).
+//   4. GM calls InitializeWakeUp() after SpawnNewGamePlayer (Tutorial→Main only).
+//   5. After the smooth transition completes:
+//        - Player gets camera + input back.
+//        - Survival enabled.
+//        - OnTutorialPlayerReady broadcast.
 // ─────────────────────────────────────────────────────────────────────────────
 
 UCLASS(Abstract, Blueprintable)
@@ -49,26 +40,46 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
 
 public:
-	// ── LEVEL REFERENCE ───────────────────────────────────────────────────────
+	// ── LEVEL REFERENCES ──────────────────────────────────────────────────────
 
-	/**
-	 * The LevelSequenceActor for the wake-up cutscene in the Main level.
-	 * Assign once: select placed BP_WakeUpDirector → Details
-	 *   → WakeUp|Config → Wake Up Sequence → drag sequence from Outliner.
-	 */
+	/** The LevelSequenceActor for the wake-up cutscene in the Main level. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
 		meta = (DisplayName = "Wake Up Sequence"))
 	ALevelSequenceActor* WakeUpSequenceRef = nullptr;
 
 	/**
-	 * Optional: camera actor for the cinematic view before sequence plays.
-	 * Leave null if the LevelSequence Camera Cut track handles the view.
+	 * The CineCamera that the wake-up sequence ends on.
+	 * The smooth transition moves this camera to the player's head socket.
+	 * Must be the last active Camera Cut track actor in the sequence.
+	 * Assign in the placed BP_WakeUpDirector Details panel.
 	 */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
-		meta = (DisplayName = "Cinecam Actor"))
+		meta = (DisplayName = "Sequence End CineCamera"))
+	AActor* SequenceEndCameraRef = nullptr;
+
+	/** Optional cinecam before sequence plays. Leave null if Camera Cut handles it. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
+		meta = (DisplayName = "Cinecam Actor (Pre-Play)"))
 	AActor* WakeUpCineCamRef = nullptr;
+
+	/**
+	 * Time in seconds for the CineCamera to lerp into the player's head socket.
+	 * 0.0 = instant camera hand-back (same as old behaviour).
+	 * 0.3–0.6 = recommended for a smooth, invisible handoff.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config",
+		meta = (DisplayName = "Transition Blend Time"))
+	float WakeUpTransitionBlendTime = 0.5f;
+
+	/**
+	 * Distance threshold (cm) at which the CineCamera snaps to the head socket.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config",
+		meta = (DisplayName = "Transition Snap Distance (cm)"))
+	float TransitionSnapDistance = 3.0f;
 
 	// ── RUNTIME STATE ─────────────────────────────────────────────────────────
 
@@ -86,11 +97,6 @@ public:
 	/**
 	 * Called by GM_SimulatorGamemode inside SpawnNewGamePlayer,
 	 * ONLY when transitioning from Tutorial (GamePhase == NewGame_Tutorial).
-	 *
-	 * GM BP check (two nodes after player setup):
-	 *   [WakeUpDirectorRef → Is Valid]
-	 *     True → [InitializeWakeUp  (Target = WakeUpDirectorRef)]
-	 *   False → skip (loaded game)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "WakeUp")
 	void InitializeWakeUp();
@@ -99,28 +105,37 @@ protected:
 	// ── BLUEPRINT IMPLEMENTABLE EVENTS ────────────────────────────────────────
 
 	/**
-	 * Called at the END of C++ BeginPlay.
-	 * Push self-reference to the GM so GM never needs to search.
-	 *
-	 *   [Event BP_RegisterWithGameMode]
-	 *     → [Get Game Mode → Cast To GM_SimulatorGamemode]
-	 *     → [SET WakeUpDirectorRef  (Value = Self)]
+	 * Called at END of C++ BeginPlay.
+	 * Push self-reference to GM: GM.WakeUpDirectorRef = Self.
 	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "WakeUp|Events")
 	void BP_RegisterWithGameMode();
 
 	/**
-	 * Called when the wake-up cutscene ends.
-	 * Implement here: remove WB_TutorialBlackout reference if still present,
-	 * show the main HUD (Player HUD Ref → Set Visibility Visible).
-	 *
-	 * The widget removes itself via OnTutorialPlayerReady delegate — this event
-	 * is for any extra visual polish (fade-in of HUD, etc.).
+	 * Called when the wake-up transition fully completes (after smooth blend).
+	 * Show HUD, play ambient sounds, trigger ship terminal warning, etc.
 	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "WakeUp|Events")
 	void BP_OnWakeUpComplete();
 
 private:
+	// ── SMOOTH TRANSITION STATE ───────────────────────────────────────────────
+
+	bool     bTransitionActive       = false;
+	float    TransitionElapsed       = 0.0f;
+	FVector  TransitionStartLocation = FVector::ZeroVector;
+	FRotator TransitionStartRotation = FRotator::ZeroRotator;
+	FVector  TransitionTargetLocation = FVector::ZeroVector;
+	FRotator TransitionTargetRotation = FRotator::ZeroRotator;
+
+	void TickSmoothTransition(float DeltaTime);
+
+	/**
+	 * Fires when the smooth transition reaches the head socket.
+	 * Restores input, enables survival, broadcasts OnTutorialPlayerReady.
+	 */
+	void OnTransitionComplete();
+
 	UFUNCTION()
 	void OnWakeUpSequenceFinished();
 };

@@ -3,6 +3,7 @@
 
 #include "Kismet/GameplayStatics.h"
 #include "Components/SphereComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Camera/PlayerCameraManager.h"
@@ -14,24 +15,33 @@
 #include "AlphaExilemet/BaseCamp.h"
 #include "AlphaExilemet/Tools/ToolBase.h"
 #include "AlphaExilemet/Core/AlphaStreamingSubsystem.h"
+#include "Camera/CameraComponent.h"
 
 ATutorialDirector::ATutorialDirector()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	// Tick is needed for the smooth CineCamera→Player transition.
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false; // only enabled when transition is active
 }
 
 void ATutorialDirector::BeginPlay()
 {
 	Super::BeginPlay();
-	// BP BeginPlay runs before C++ Super in a derived Blueprint class, so
-	// SkullRef and rock bindings are already set by the time we arrive here.
 	BP_RegisterWithGameMode();
+}
+
+void ATutorialDirector::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (bTransitionActive)
+	{
+		TickSmoothTransition(DeltaTime);
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // InitializeTutorial
-// Called by GM_SimulatorGamemode via stored TutorialDirectorRef,
-// guaranteed to run after the player pawn is spawned and possessed.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::InitializeTutorial()
@@ -61,8 +71,7 @@ void ATutorialDirector::InitializeTutorial()
 	// ── 2. WIRE SKULL ────────────────────────────────────────────────────────
 	if (SkullRef) SkullRef->SetDirector(this);
 	else UE_LOG(LogTemp, Warning,
-		TEXT("ATutorialDirector::InitializeTutorial — SkullRef null. "
-		     "Did BP BeginPlay call GetActorOfClass(ASkullProp) → SET SkullRef?"));
+		TEXT("ATutorialDirector::InitializeTutorial — SkullRef null."));
 
 	// ── 3. HIDE MAIN HUD ─────────────────────────────────────────────────────
 	BP_HideHUD();
@@ -70,13 +79,11 @@ void ATutorialDirector::InitializeTutorial()
 	// ── 4. DISABLE SURVIVAL ──────────────────────────────────────────────────
 	CachedPlayer->bIsSurvivalActive = false;
 
-	// ── 5. VALIDATE SEQUENCE REFERENCE ───────────────────────────────────────
+	// ── 5. VALIDATE SEQUENCE ─────────────────────────────────────────────────
 	if (!IntroSequenceRef)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("ATutorialDirector::InitializeTutorial — IntroSequenceRef is null. "
-			     "Select BP_TutorialDirector in the level, Details "
-			     "→ Tutorial|Config → Intro Sequence → assign Cutscene1."));
+			TEXT("ATutorialDirector::InitializeTutorial — IntroSequenceRef is null."));
 		return;
 	}
 
@@ -87,23 +94,209 @@ void ATutorialDirector::InitializeTutorial()
 		return;
 	}
 
-	// ── 6. BIND + LOCK + PLAY ────────────────────────────────────────────────
+	// ── 6. HIDE REAL PLAYER ──────────────────────────────────────────────────
+	HidePlayerForCutscene();
+
+	// ── 7. LOCK ALL INPUT ────────────────────────────────────────────────────
+	LockPlayerInputFull();
+
+	// ── 8. BIND CUTSCENE END ─────────────────────────────────────────────────
 	IntroSequencePlayer->OnStop.AddUniqueDynamic(
 		this, &ATutorialDirector::OnIntroSequenceFinished);
 
-	{
-		FInputModeUIOnly UIMode;
-		CachedPC->SetInputMode(UIMode);
-		CachedPC->bShowMouseCursor = false;
-	}
-
+	// ── 9. SNAP TO CINECAM BEFORE PLAY ───────────────────────────────────────
 	if (TutorialCineCamRef)
 	{
 		CachedPC->SetViewTargetWithBlend(TutorialCineCamRef, 0.0f);
 	}
 
+	// ── 10. PLAY ─────────────────────────────────────────────────────────────
 	IntroSequencePlayer->Play();
 	UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: Cutscene playing."));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROXY SWAP HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+void ATutorialDirector::HidePlayerForCutscene()
+{
+	if (!CachedPlayer) return;
+	CachedPlayer->SetActorHiddenInGame(true);
+	if (USkeletalMeshComponent* Mesh = CachedPlayer->GetMesh())
+		Mesh->SetVisibility(false, true);
+
+	UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: Real player hidden for cutscene."));
+}
+
+AActor* ATutorialDirector::FindCutsceneProxy() const
+{
+	if (ProxyCharacterTag.IsNone())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("ATutorialDirector::FindCutsceneProxy — ProxyCharacterTag is empty."));
+		return nullptr;
+	}
+
+	TArray<AActor*> Tagged;
+	UGameplayStatics::GetAllActorsWithTag(GetWorld(), ProxyCharacterTag, Tagged);
+
+	if (Tagged.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("ATutorialDirector::FindCutsceneProxy — No actor tagged '%s'."),
+			*ProxyCharacterTag.ToString());
+		return nullptr;
+	}
+
+	return Tagged[0];
+}
+
+void ATutorialDirector::ExecuteProxySwap()
+{
+	if (!CachedPlayer || !CachedPC)
+	{
+		UE_LOG(LogTemp, Error, TEXT("ATutorialDirector::ExecuteProxySwap — CachedPlayer or CachedPC null."));
+		return;
+	}
+
+	// Find proxy and teleport the real player to its final position.
+	if (AActor* Proxy = FindCutsceneProxy())
+	{
+		CachedPlayer->SetActorLocationAndRotation(
+			Proxy->GetActorLocation(),
+			Proxy->GetActorRotation(),
+			false, nullptr, ETeleportType::TeleportPhysics);
+
+		CachedPC->SetControlRotation(TransitionTargetRotation);
+
+		// Hide the proxy — Sequencer will destroy it when the sequence ends.
+		Proxy->SetActorHiddenInGame(true);
+
+		UE_LOG(LogTemp, Log,
+			TEXT("ATutorialDirector::ExecuteProxySwap — Teleported to proxy pos=%s."),
+			*Proxy->GetActorLocation().ToString());
+	}
+	else
+	{
+		// No proxy — just unhide the player at their spawn location.
+		UE_LOG(LogTemp, Warning,
+			TEXT("ATutorialDirector::ExecuteProxySwap — No proxy found. Unhiding at spawn."));
+	}
+
+	// Unhide the real player.
+	CachedPlayer->SetActorHiddenInGame(false);
+	if (USkeletalMeshComponent* Mesh = CachedPlayer->GetMesh())
+		Mesh->SetVisibility(true, true);
+
+	// Hand camera back to the player — instant (0.0f) because the CineCamera
+	// is already AT the player head position after the smooth transition.
+	CachedPC->SetViewTargetWithBlend(CachedPlayer, 0.0f);
+
+	UE_LOG(LogTemp, Log, TEXT("ATutorialDirector::ExecuteProxySwap — Swap complete."));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SMOOTH CUTSCENE TRANSITION
+//
+// Called from OnIntroSequenceFinished. Instead of an instant proxy swap:
+//   1. We record the CineCamera's current world transform.
+//   2. We record where the player's head socket currently is.
+//   3. Tick() lerps the CineCamera from (1) to (2) over CutsceneTransitionBlendTime.
+//   4. When the CineCamera is within TransitionSnapDistance, ExecuteProxySwap fires.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void ATutorialDirector::TickSmoothTransition(float DeltaTime)
+{
+	if (!SequenceEndCameraRef || !CachedPlayer) return;
+
+	TransitionElapsed += DeltaTime;
+
+	// Re-sample the head socket every tick because the player root may drift
+	// slightly from physics (it's hidden but physics is still active).
+	if (USkeletalMeshComponent* Mesh = CachedPlayer->GetMesh())
+	{
+		FTransform HeadTransform = Mesh->GetSocketTransform(FName("head"), RTS_World);
+		TransitionTargetLocation = HeadTransform.GetLocation();
+		TransitionTargetRotation = HeadTransform.GetRotation().Rotator();
+	}
+
+	float Alpha = (CutsceneTransitionBlendTime > 0.0f)
+		? FMath::Clamp(TransitionElapsed / CutsceneTransitionBlendTime, 0.0f, 1.0f)
+		: 1.0f;
+
+	// Smooth step for a more natural deceleration feel.
+	float SmoothedAlpha = FMath::SmoothStep(0.0f, 1.0f, Alpha);
+
+	FVector  NewLoc = FMath::Lerp(TransitionStartLocation, TransitionTargetLocation, SmoothedAlpha);
+	FRotator NewRot = FMath::Lerp(TransitionStartRotation, TransitionTargetRotation, SmoothedAlpha);
+
+	SequenceEndCameraRef->SetActorLocationAndRotation(NewLoc, NewRot);
+
+	// Check if we're close enough to snap.
+	float Dist = FVector::Dist(NewLoc, TransitionTargetLocation);
+	if (Dist <= TransitionSnapDistance || Alpha >= 1.0f)
+	{
+		// Transition complete — stop ticking and do the final swap.
+		bTransitionActive = false;
+		SetActorTickEnabled(false);
+
+		// Snap the camera exactly to the head socket before swapping.
+		SequenceEndCameraRef->SetActorLocationAndRotation(
+			TransitionTargetLocation, TransitionTargetRotation);
+
+		ExecuteProxySwap();
+
+		// Now restore movement input and switch to game input mode.
+		RestorePlayerMoveInput();
+
+		FInputModeGameOnly GameMode;
+		CachedPC->SetInputMode(GameMode);
+		CachedPC->bShowMouseCursor = false;
+
+		// Save crater position.
+		CraterStartPosition = CachedPlayer->GetActorLocation();
+
+		// Wire boundary guard.
+		if (AActor* BaseCampActor = FindBaseCamp())
+		{
+			if (ABaseCamp* BaseCamp = Cast<ABaseCamp>(BaseCampActor))
+			{
+				if (BaseCamp->OxygenSphere)
+				{
+					BaseCamp->OxygenSphere->OnComponentEndOverlap.AddUniqueDynamic(
+						this, &ATutorialDirector::OnOxygenSphereEndOverlap);
+					UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: OxygenSphere boundary guard active."));
+				}
+			}
+		}
+
+		// Spawn tutorial pickaxe.
+		if (TutorialPickaxeClass && !SpawnedTutorialPickaxe)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+			SpawnedTutorialPickaxe = GetWorld()->SpawnActor<AToolBase>(
+				TutorialPickaxeClass,
+				CachedPlayer->GetActorLocation(),
+				CachedPlayer->GetActorRotation(),
+				Params);
+
+			if (SpawnedTutorialPickaxe)
+			{
+				SpawnedTutorialPickaxe->SetActorEnableCollision(false);
+				CachedPlayer->AddToolToInventory(SpawnedTutorialPickaxe);
+				CachedPlayer->StartWieldTool(0);
+			}
+		}
+
+		UE_LOG(LogTemp, Log,
+			TEXT("ATutorialDirector: Smooth transition complete. CraterPos=%s."),
+			*CraterStartPosition.ToString());
+
+		BP_OnIntroFinished();
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -114,46 +307,88 @@ void ATutorialDirector::OnIntroSequenceFinished()
 {
 	if (!CachedPlayer || !CachedPC) return;
 
-	CachedPC->SetViewTargetWithBlend(CachedPlayer, 0.0f);
-	FInputModeGameOnly GameMode;
-	CachedPC->SetInputMode(GameMode);
-	CachedPC->bShowMouseCursor = false;
-
-	CraterStartPosition = CachedPlayer->GetActorLocation();
-
-	if (AActor* BaseCampActor = FindBaseCamp())
+	// If no CineCamera or no blend time, fall back to the instant proxy swap.
+	if (!SequenceEndCameraRef || CutsceneTransitionBlendTime <= 0.0f)
 	{
-		if (ABaseCamp* BaseCamp = Cast<ABaseCamp>(BaseCampActor))
+		ExecuteProxySwap();
+
+		RestorePlayerMoveInput();
+		FInputModeGameOnly GameMode;
+		CachedPC->SetInputMode(GameMode);
+		CachedPC->bShowMouseCursor = false;
+
+		CraterStartPosition = CachedPlayer->GetActorLocation();
+
+		if (AActor* BaseCampActor = FindBaseCamp())
 		{
-			if (BaseCamp->OxygenSphere)
+			if (ABaseCamp* BaseCamp = Cast<ABaseCamp>(BaseCampActor))
 			{
-				BaseCamp->OxygenSphere->OnComponentEndOverlap.AddUniqueDynamic(
-					this, &ATutorialDirector::OnOxygenSphereEndOverlap);
-				UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: OxygenSphere boundary guard active."));
+				if (BaseCamp->OxygenSphere)
+				{
+					BaseCamp->OxygenSphere->OnComponentEndOverlap.AddUniqueDynamic(
+						this, &ATutorialDirector::OnOxygenSphereEndOverlap);
+				}
 			}
 		}
+
+		if (TutorialPickaxeClass && !SpawnedTutorialPickaxe)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+			SpawnedTutorialPickaxe = GetWorld()->SpawnActor<AToolBase>(
+				TutorialPickaxeClass,
+				CachedPlayer->GetActorLocation(),
+				CachedPlayer->GetActorRotation(),
+				Params);
+
+			if (SpawnedTutorialPickaxe)
+			{
+				SpawnedTutorialPickaxe->SetActorEnableCollision(false);
+				CachedPlayer->AddToolToInventory(SpawnedTutorialPickaxe);
+				CachedPlayer->StartWieldTool(0);
+			}
+		}
+
+		BP_OnIntroFinished();
+		return;
 	}
 
-	if (TutorialPickaxeClass && !SpawnedTutorialPickaxe)
-	{
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		SpawnedTutorialPickaxe = GetWorld()->SpawnActor<AToolBase>(
-			TutorialPickaxeClass, CachedPlayer->GetActorLocation(),
-			CachedPlayer->GetActorRotation(), Params);
+	// ── SMOOTH TRANSITION PATH ────────────────────────────────────────────────
+	// Record the camera's current world transform as the starting point.
+	TransitionStartLocation = SequenceEndCameraRef->GetActorLocation();
+	TransitionStartRotation = SequenceEndCameraRef->GetActorRotation();
 
-		if (SpawnedTutorialPickaxe)
+	// Sample the player head socket as the initial target.
+	if (USkeletalMeshComponent* Mesh = CachedPlayer->GetMesh())
+	{
+		FTransform HeadTransform = Mesh->GetSocketTransform(FName("head"), RTS_World);
+		TransitionTargetLocation = HeadTransform.GetLocation();
+		TransitionTargetRotation = HeadTransform.GetRotation().Rotator();
+	}
+	else
+	{
+		// Fallback: use the player camera component's world location.
+		if (CachedPlayer->FirstPersonCameraComponent)
 		{
-			SpawnedTutorialPickaxe->SetActorEnableCollision(false);
-			CachedPlayer->AddToolToInventory(SpawnedTutorialPickaxe);
-			CachedPlayer->StartWieldTool(0);
+			TransitionTargetLocation = CachedPlayer->FirstPersonCameraComponent->GetComponentLocation();
+			TransitionTargetRotation = CachedPlayer->FirstPersonCameraComponent->GetComponentRotation();
 		}
 	}
 
-	UE_LOG(LogTemp, Log,
-		TEXT("ATutorialDirector: Intro finished. CraterPos=%s."), *CraterStartPosition.ToString());
+	TransitionElapsed  = 0.0f;
+	bTransitionActive  = true;
 
-	BP_OnIntroFinished();
+	// Keep SequenceEndCameraRef as the view target so the player sees
+	// the CineCamera moving smoothly into the head position.
+	CachedPC->SetViewTargetWithBlend(SequenceEndCameraRef, 0.0f);
+
+	// Enable tick for the smooth lerp.
+	SetActorTickEnabled(true);
+
+	UE_LOG(LogTemp, Log,
+		TEXT("ATutorialDirector: Smooth camera transition started. Blend time=%.2fs."),
+		CutsceneTransitionBlendTime);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -186,7 +421,8 @@ void ATutorialDirector::ExecuteTeleportToCrater()
 void ATutorialDirector::OnTeleportReadyToMove()
 {
 	if (!CachedPlayer || !CachedPC) return;
-	CachedPlayer->SetActorLocation(CraterStartPosition, false, nullptr, ETeleportType::TeleportPhysics);
+	CachedPlayer->SetActorLocation(
+		CraterStartPosition, false, nullptr, ETeleportType::TeleportPhysics);
 	if (APlayerCameraManager* Cam = CachedPC->PlayerCameraManager)
 		Cam->StartCameraFade(1.f, 0.f, 1.0f, FLinearColor::Black, false, false);
 	GetWorldTimerManager().SetTimer(TeleportFadeInHandle,
@@ -211,6 +447,7 @@ void ATutorialDirector::ClearTutorialPickaxe()
 	{
 		CachedPlayer->CurrentTool     = nullptr;
 		CachedPlayer->ActiveToolIndex = -1;
+		CachedPlayer->PendingToolIndex = -1;
 	}
 	SpawnedTutorialPickaxe->Destroy();
 	SpawnedTutorialPickaxe = nullptr;
@@ -221,13 +458,6 @@ void ATutorialDirector::ClearTutorialPickaxe()
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Skull interaction sequence
-//
-// Full timeline:
-//   t + 0.0 s  OnSkullInteracted():      flicker starts, spell SFX. Player FREE.
-//   t + 5.5 s  OnSpellDurationComplete(): skull StopAndReset — stands still. Player FREE.
-//   t + 6.0 s  OnSkullPausedBeforeBlack(): input locked, black screen.
-//   t + 7.0 s  OnPostBlackDelay():        explosion SFX.
-//   t + 10.0 s OnLevelSwapReady():        Tutorial→Main.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::OnSkullInteracted()
@@ -244,31 +474,19 @@ void ATutorialDirector::OnSkullInteracted()
 
 	GetWorldTimerManager().SetTimer(SpellDurationHandle,
 		this, &ATutorialDirector::OnSpellDurationComplete, 5.5f, false);
-
-	UE_LOG(LogTemp, Log,
-		TEXT("ATutorialDirector: Skull interaction started. Player free for 5.5s."));
 }
 
 void ATutorialDirector::OnSpellDurationComplete()
 {
-	// Stop the flicker — skull snaps to home position, fully visible.
-	// Player can still move and look at the still skull for 0.5 s.
 	if (SkullRef) SkullRef->StopAndReset();
-
 	GetWorldTimerManager().SetTimer(SkullPauseHandle,
 		this, &ATutorialDirector::OnSkullPausedBeforeBlack, 0.5f, false);
-
-	UE_LOG(LogTemp, Log,
-		TEXT("ATutorialDirector: Skull stopped. 0.5s pause before black screen."));
 }
 
 void ATutorialDirector::OnSkullPausedBeforeBlack()
 {
-	// Player has seen the skull standing still for 0.5 s.
-	// Now lock input and show the black screen.
 	LockPlayerInputFull();
 	BP_ShowInstantBlack();
-
 	GetWorldTimerManager().SetTimer(PostBlackSoundHandle,
 		this, &ATutorialDirector::OnPostBlackDelay, 1.0f, false);
 }
@@ -285,9 +503,7 @@ void ATutorialDirector::OnLevelSwapReady()
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (UAlphaStreamingSubsystem* SS = GI->GetSubsystem<UAlphaStreamingSubsystem>())
-		{
 			SS->HandleTutorialCompletion();
-		}
 	}
 }
 
@@ -303,7 +519,7 @@ void ATutorialDirector::SuppressPlayerMoveInput()
 void ATutorialDirector::RestorePlayerMoveInput()
 {
 	if (!CachedPC) return;
-	CachedPC->SetIgnoreMoveInput(false);
+	CachedPC->ResetIgnoreMoveInput();
 	if (CachedPlayer)
 	{
 		if (UCharacterMovementComponent* Mv = CachedPlayer->GetCharacterMovement())
@@ -330,7 +546,8 @@ void ATutorialDirector::LockPlayerInputFull()
 
 AAlphaExilemetCharacter* ATutorialDirector::GetTutorialPlayer() const
 {
-	return Cast<AAlphaExilemetCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
+	return Cast<AAlphaExilemetCharacter>(
+		UGameplayStatics::GetPlayerCharacter(this, 0));
 }
 
 AActor* ATutorialDirector::FindBaseCamp() const

@@ -11,26 +11,25 @@ class AToolBase;
 class ASkullProp;
 class APlayerController;
 class UCharacterMovementComponent;
+class USkeletalMeshComponent;
+class ACameraActor;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ATutorialDirector  v14
+// ATutorialDirector  v16
 //
-// Changes from v13:
-//   - Skull sequence timing fixed:
-//       OnSpellDurationComplete:  StopAndReset skull → 0.5 s pause (player sees it still)
-//       OnSkullPausedBeforeBlack: LockInput → BP_ShowInstantBlack → 1.0 s
-//       OnPostBlackDelay:         BP_PlayExplosionSequence → 3.0 s
-//       OnLevelSwapReady:         HandleTutorialCompletion
+// Changes from v15:
+//   - SmoothCutsceneTransition system added.
+//     The intro cutscene ends with a CineCamera positioned at the player's
+//     head socket. Instead of an instant snap, we:
+//       1. Keep the CineCamera as the view target after the sequence ends.
+//       2. Move the CineCamera smoothly toward the real player's head socket
+//          over CutsceneTransitionBlendTime seconds using a tick-based lerp.
+//       3. Once the CineCamera is close enough (< 2 cm), we hide the proxy,
+//          unhide the player, switch view target to the player, and give input.
+//     This makes the cutscene-to-gameplay transition invisible.
 //
-//   - SkullPauseHandle added.
-//   - OnSkullPausedBeforeBlack added (private).
-//
-// Sequence intent:
-//   Player watches skull flicker for 5.5 s.
-//   Skull snaps to home and stands still for 0.5 s — player sees it stop.
-//   Input locks + black screen appears.
-//   Explosion SFX plays under black.
-//   Level swaps.
+//   - WakeUpDirector gets the same system (same parameters, separate flow).
+//   - ProxySwap is now deferred until SmoothCutsceneTransition completes.
 // ─────────────────────────────────────────────────────────────────────────────
 
 UCLASS(Abstract, Blueprintable)
@@ -43,30 +42,55 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
 
 public:
-	// ── LEVEL REFERENCES — assign in the placed instance Details panel ────────
+	// ── LEVEL REFERENCES ──────────────────────────────────────────────────────
 
-	/**
-	 * The LevelSequenceActor for the intro cutscene.
-	 * Assign by selecting the placed BP_TutorialDirector → Details
-	 *   → Tutorial|Config → Intro Sequence → drag Cutscene1 from Outliner.
-	 */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Config",
 		meta = (DisplayName = "Intro Sequence"))
 	ALevelSequenceActor* IntroSequenceRef = nullptr;
 
-	/**
-	 * Optional cinecam actor. View snaps here before sequence plays to avoid
-	 * 1-frame first-person flash. Leave null if the Camera Cut track handles it.
-	 */
+	/** The CineCamera actor that the sequence ends on. The smooth transition
+	 *  will move this camera into the player head socket position, then swap.
+	 *  Must be the SAME CineCamera that is the last active cut in the sequence.
+	 *  Assign in the placed BP_TutorialDirector instance Details panel. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Config",
-		meta = (DisplayName = "Cinecam Actor"))
+		meta = (DisplayName = "Sequence End CineCamera"))
+	AActor* SequenceEndCameraRef = nullptr;
+
+	/** Optional: camera actor for the cinematic view before sequence plays. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Config",
+		meta = (DisplayName = "Cinecam Actor (Pre-Play)"))
 	AActor* TutorialCineCamRef = nullptr;
 
 	/** BP_Pickaxe class to spawn when the cutscene ends. Set in Class Defaults. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config")
 	TSubclassOf<AToolBase> TutorialPickaxeClass;
+
+	/** Actor tag identifying the proxy skeletal mesh inside the Level Sequence. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config",
+		meta = (DisplayName = "Proxy Character Tag"))
+	FName ProxyCharacterTag = FName("CutsceneProxy");
+
+	/**
+	 * Time in seconds for the CineCamera to smoothly move into the player's
+	 * head socket before the view target switches to the player.
+	 * 0.0 = instant snap (same as old behaviour).
+	 * 0.3–0.6 = recommended for a smooth, invisible handoff.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config",
+		meta = (DisplayName = "Cutscene Transition Blend Time"))
+	float CutsceneTransitionBlendTime = 0.5f;
+
+	/**
+	 * Distance threshold (cm) at which the CineCamera is considered "at" the
+	 * player head socket. When the camera gets closer than this, the swap fires.
+	 * Default 3.0 cm is essentially invisible at normal play speeds.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config",
+		meta = (DisplayName = "Transition Snap Distance (cm)"))
+	float TransitionSnapDistance = 3.0f;
 
 	// ── RUNTIME STATE ─────────────────────────────────────────────────────────
 
@@ -76,18 +100,12 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tutorial|Runtime")
 	FVector CraterStartPosition = FVector::ZeroVector;
 
-	/**
-	 * Cached in InitializeTutorial() — guaranteed non-null at that point.
-	 * GM calls InitializeTutorial() after the pawn is spawned and possessed.
-	 * NEVER cache the player in BP BeginPlay.
-	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tutorial|Runtime")
 	AAlphaExilemetCharacter* CachedPlayer = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tutorial|Runtime")
 	APlayerController* CachedPC = nullptr;
 
-	/** Set in BP BeginPlay via GetActorOfClass(ASkullProp) → SET SkullRef. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Tutorial|Skull")
 	ASkullProp* SkullRef = nullptr;
 
@@ -96,20 +114,9 @@ public:
 
 	// ── PUBLIC INTERFACE ──────────────────────────────────────────────────────
 
-	/** Called by GM after player is spawned + possessed. */
 	UFUNCTION(BlueprintCallable, Category = "Tutorial")
 	void InitializeTutorial();
 
-	/**
-	 * Called by ASkullProp::HandleInteract().
-	 *
-	 * Full timing (all driven by C++ timers — no BP delays):
-	 *   0.0 s  skull flicker starts, spell SFX — player FREE TO MOVE & LOOK
-	 *   5.5 s  skull snaps to home (StopAndReset), player still free
-	 *   6.0 s  (+0.5s pause) input locked + black screen
-	 *   7.0 s  (+1.0s under black) explosion SFX
-	 *  10.0 s  (+3.0s) Tutorial→Main level swap
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Tutorial|Skull")
 	void OnSkullInteracted();
 
@@ -119,52 +126,67 @@ public:
 protected:
 	// ── BLUEPRINT IMPLEMENTABLE EVENTS ────────────────────────────────────────
 
-	/**
-	 * Called at the END of C++ BeginPlay.
-	 * Push self-reference to the GM so it can call InitializeTutorial()
-	 * without a GetAllActorsOfClass search (eliminates the race condition).
-	 *
-	 *   [Event BP_RegisterWithGameMode]
-	 *     → [Get Game Mode → Cast To GM_SimulatorGamemode]
-	 *     → [SET TutorialDirectorRef  (Value = Self)]
-	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Events")
 	void BP_RegisterWithGameMode();
 
-	/** Hide player's main HUD. Use CachedPlayer (BlueprintReadOnly). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Events")
 	void BP_HideHUD();
 
-	/** Cutscene finished. Create + Add WBP_TutorialOverlay to Viewport. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Events")
 	void BP_OnIntroFinished();
 
-	/** Play spell SFX (Play Sound 2D). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Skull")
 	void BP_PlayMagicSpellSound();
 
-	/**
-	 * Create WBP_TutorialBlackout → Add to Viewport (ZOrder 99).
-	 * Called AFTER the 0.5 s skull-visible pause, so the player has already
-	 * seen the skull standing still.
-	 *
-	 * Two-node BP implementation:
-	 *   [Event BP_ShowInstantBlack]
-	 *     → [Create WB Tutorial Blackout Widget (Owning Player = Get Player Controller)]
-	 *     → [Add to Viewport  ZOrder = 99]
-	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Skull")
 	void BP_ShowInstantBlack();
 
-	/** Play explosion SFX at ship location. Guard with IsValid(ExplosionSpawnRef). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Skull")
 	void BP_PlayExplosionSequence();
 
 private:
+	// ── PROXY SWAP ────────────────────────────────────────────────────────────
+
+	void HidePlayerForCutscene();
+	AActor* FindCutsceneProxy() const;
+
+	/**
+	 * The deferred proxy swap. Called once the smooth camera transition
+	 * completes (or immediately if CutsceneTransitionBlendTime == 0).
+	 * Teleports the player to the proxy's last position, unhides the player,
+	 * hides the proxy, and gives camera + input back to the player.
+	 */
+	void ExecuteProxySwap();
+
+	// ── SMOOTH TRANSITION STATE ───────────────────────────────────────────────
+
+	/** True while the CineCamera is lerping toward the player head socket. */
+	bool bTransitionActive = false;
+
+	/** Elapsed time since the smooth transition started. */
+	float TransitionElapsed = 0.0f;
+
+	/** World position of the player head socket captured at sequence end. */
+	FVector TransitionTargetLocation = FVector::ZeroVector;
+
+	/** World rotation of the player's first-person camera at sequence end. */
+	FRotator TransitionTargetRotation = FRotator::ZeroRotator;
+
+	/** World location of the CineCamera at the moment the sequence ended. */
+	FVector TransitionStartLocation = FVector::ZeroVector;
+
+	/** Rotation of the CineCamera at the moment the sequence ended. */
+	FRotator TransitionStartRotation = FRotator::ZeroRotator;
+
+	/**
+	 * Tick-based smooth lerp of SequenceEndCameraRef toward the player head socket.
+	 * Fires ExecuteProxySwap when within TransitionSnapDistance.
+	 */
+	void TickSmoothTransition(float DeltaTime);
+
 	// ── SEQUENCE CALLBACKS ────────────────────────────────────────────────────
 
-	UFUNCTION()
-	void OnIntroSequenceFinished();
+	UFUNCTION() void OnIntroSequenceFinished();
 
 	UFUNCTION()
 	void OnOxygenSphereEndOverlap(
@@ -177,11 +199,10 @@ private:
 	void OnTeleportReadyToMove();
 	void OnTeleportComplete();
 
-	// Skull sequence — four stages
-	void OnSpellDurationComplete();   // 5.5s: skull stops, 0.5s pause begins
-	void OnSkullPausedBeforeBlack();  // 0.5s: player saw skull still → lock + black
-	void OnPostBlackDelay();          // 1.0s under black: explosion SFX
-	void OnLevelSwapReady();          // 3.0s: Tutorial→Main swap
+	void OnSpellDurationComplete();
+	void OnSkullPausedBeforeBlack();
+	void OnPostBlackDelay();
+	void OnLevelSwapReady();
 
 	// ── INPUT HELPERS ─────────────────────────────────────────────────────────
 
@@ -189,7 +210,7 @@ private:
 	void RestorePlayerMoveInput();
 	void LockPlayerInputFull();
 
-	// ── HELPERS ───────────────────────────────────────────────────────────────
+	// ── MISC HELPERS ──────────────────────────────────────────────────────────
 
 	AAlphaExilemetCharacter* GetTutorialPlayer() const;
 	AActor*                  FindBaseCamp() const;
@@ -198,10 +219,10 @@ private:
 
 	FTimerHandle TeleportFadeOutHandle;
 	FTimerHandle TeleportFadeInHandle;
-	FTimerHandle SpellDurationHandle;    // 5.5s spell → skull stops
-	FTimerHandle SkullPauseHandle;       // 0.5s skull visible still → black screen
-	FTimerHandle PostBlackSoundHandle;   // 1.0s under black → explosion
-	FTimerHandle LevelSwapHandle;        // 3.0s → level swap
+	FTimerHandle SpellDurationHandle;
+	FTimerHandle SkullPauseHandle;
+	FTimerHandle PostBlackSoundHandle;
+	FTimerHandle LevelSwapHandle;
 
 	UPROPERTY()
 	AToolBase* SpawnedTutorialPickaxe = nullptr;

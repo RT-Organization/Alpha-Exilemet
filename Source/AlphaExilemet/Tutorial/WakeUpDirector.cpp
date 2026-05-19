@@ -9,23 +9,33 @@
 
 #include "AlphaExilemet/AlphaExilemetCharacter.h"
 #include "AlphaExilemet/Core/AlphaStreamingSubsystem.h"
+#include "Camera/CameraComponent.h"
 
 AWakeUpDirector::AWakeUpDirector()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	// Tick needed for the smooth CineCamera→Player transition.
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false; // only enabled during transition
 }
 
 void AWakeUpDirector::BeginPlay()
 {
 	Super::BeginPlay();
-	// Push self-reference to GM so GM doesn't need GetAllActorsOfClass.
 	BP_RegisterWithGameMode();
+}
+
+void AWakeUpDirector::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (bTransitionActive)
+	{
+		TickSmoothTransition(DeltaTime);
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // InitializeWakeUp
-// Called by GM_SimulatorGamemode inside SpawnNewGamePlayer,
-// only when transitioning from Tutorial (GamePhase == NewGame_Tutorial).
 // ─────────────────────────────────────────────────────────────────────────────
 
 void AWakeUpDirector::InitializeWakeUp()
@@ -41,12 +51,11 @@ void AWakeUpDirector::InitializeWakeUp()
 	{
 		UE_LOG(LogTemp, Error,
 			TEXT("AWakeUpDirector::InitializeWakeUp — Player pawn not found."));
-		// Still broadcast ready so the blackout widget doesn't get stuck.
+
+		// Safety: broadcast ready so the blackout widget doesn't get stuck.
 		if (UGameInstance* GI = GetGameInstance())
-		{
 			if (UAlphaStreamingSubsystem* SS = GI->GetSubsystem<UAlphaStreamingSubsystem>())
 				SS->OnTutorialPlayerReady.Broadcast();
-		}
 		return;
 	}
 
@@ -62,21 +71,15 @@ void AWakeUpDirector::InitializeWakeUp()
 	if (!WakeUpSequenceRef)
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("AWakeUpDirector::InitializeWakeUp — WakeUpSequenceRef is null. "
-			     "Assign it in the placed BP_WakeUpDirector instance Details panel. "
-			     "Skipping cutscene — enabling player directly."));
+			TEXT("AWakeUpDirector::InitializeWakeUp — WakeUpSequenceRef null. Enabling directly."));
 
-		// No cutscene assigned yet — enable everything immediately.
 		CachedPlayer->bIsSurvivalActive = true;
 		FInputModeGameOnly GameMode;
 		CachedPC->SetInputMode(GameMode);
 
-		// Signal blackout widget to remove itself.
 		if (UGameInstance* GI = GetGameInstance())
-		{
 			if (UAlphaStreamingSubsystem* SS = GI->GetSubsystem<UAlphaStreamingSubsystem>())
 				SS->OnTutorialPlayerReady.Broadcast();
-		}
 
 		BP_OnWakeUpComplete();
 		return;
@@ -89,23 +92,17 @@ void AWakeUpDirector::InitializeWakeUp()
 		return;
 	}
 
-	// ── 3. LOCK INPUT FOR CUTSCENE ───────────────────────────────────────────
-	// Player arrives with UI-only input from the TutorialDirector — keep it
-	// locked until the wake-up cutscene finishes.
+	// ── 3. LOCK INPUT ─────────────────────────────────────────────────────────
 	{
 		FInputModeUIOnly UIMode;
 		CachedPC->SetInputMode(UIMode);
 		CachedPC->bShowMouseCursor = false;
 	}
 
-	// Make sure movement is still disabled (it was locked at black-screen time).
 	if (UCharacterMovementComponent* Mv = CachedPlayer->GetCharacterMovement())
 	{
 		if (Mv->MovementMode != MOVE_None)
-		{
-			// In case something re-enabled it during the level swap, re-lock it.
 			Mv->DisableMovement();
-		}
 	}
 
 	// ── 4. OPTIONAL CINECAM ──────────────────────────────────────────────────
@@ -131,27 +128,116 @@ void AWakeUpDirector::OnWakeUpSequenceFinished()
 {
 	if (!CachedPlayer || !CachedPC) return;
 
-	// ── 1. RETURN CAMERA + INPUT TO PLAYER ───────────────────────────────────
+	// If no CineCamera ref or no blend time, fall back to instant hand-back.
+	if (!SequenceEndCameraRef || WakeUpTransitionBlendTime <= 0.0f)
+	{
+		OnTransitionComplete();
+		return;
+	}
+
+	// ── SMOOTH TRANSITION PATH ────────────────────────────────────────────────
+	// Record where the CineCamera is now as the starting point.
+	TransitionStartLocation = SequenceEndCameraRef->GetActorLocation();
+	TransitionStartRotation = SequenceEndCameraRef->GetActorRotation();
+
+	// Sample player head socket as target.
+	if (USkeletalMeshComponent* Mesh = CachedPlayer->GetMesh())
+	{
+		FTransform HeadTransform = Mesh->GetSocketTransform(FName("head"), RTS_World);
+		TransitionTargetLocation = HeadTransform.GetLocation();
+		TransitionTargetRotation = HeadTransform.GetRotation().Rotator();
+	}
+	else if (CachedPlayer->FirstPersonCameraComponent)
+	{
+		TransitionTargetLocation = CachedPlayer->FirstPersonCameraComponent->GetComponentLocation();
+		TransitionTargetRotation = CachedPlayer->FirstPersonCameraComponent->GetComponentRotation();
+	}
+
+	TransitionElapsed = 0.0f;
+	bTransitionActive = true;
+
+	// Keep the CineCamera as view target so the player sees the lerp.
+	CachedPC->SetViewTargetWithBlend(SequenceEndCameraRef, 0.0f);
+
+	// Enable tick for the smooth lerp.
+	SetActorTickEnabled(true);
+
+	UE_LOG(LogTemp, Log,
+		TEXT("AWakeUpDirector: Smooth wake-up transition started. Blend time=%.2fs."),
+		WakeUpTransitionBlendTime);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SMOOTH TRANSITION TICK
+// ─────────────────────────────────────────────────────────────────────────────
+
+void AWakeUpDirector::TickSmoothTransition(float DeltaTime)
+{
+	if (!SequenceEndCameraRef || !CachedPlayer) return;
+
+	TransitionElapsed += DeltaTime;
+
+	// Resample head socket every tick.
+	if (USkeletalMeshComponent* Mesh = CachedPlayer->GetMesh())
+	{
+		FTransform HeadTransform = Mesh->GetSocketTransform(FName("head"), RTS_World);
+		TransitionTargetLocation = HeadTransform.GetLocation();
+		TransitionTargetRotation = HeadTransform.GetRotation().Rotator();
+	}
+
+	float Alpha = (WakeUpTransitionBlendTime > 0.0f)
+		? FMath::Clamp(TransitionElapsed / WakeUpTransitionBlendTime, 0.0f, 1.0f)
+		: 1.0f;
+
+	float SmoothedAlpha = FMath::SmoothStep(0.0f, 1.0f, Alpha);
+
+	FVector  NewLoc = FMath::Lerp(TransitionStartLocation, TransitionTargetLocation, SmoothedAlpha);
+	FRotator NewRot = FMath::Lerp(TransitionStartRotation, TransitionTargetRotation, SmoothedAlpha);
+
+	SequenceEndCameraRef->SetActorLocationAndRotation(NewLoc, NewRot);
+
+	float Dist = FVector::Dist(NewLoc, TransitionTargetLocation);
+	if (Dist <= TransitionSnapDistance || Alpha >= 1.0f)
+	{
+		bTransitionActive = false;
+		SetActorTickEnabled(false);
+
+		// Snap exactly to the head socket.
+		SequenceEndCameraRef->SetActorLocationAndRotation(
+			TransitionTargetLocation, TransitionTargetRotation);
+
+		OnTransitionComplete();
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OnTransitionComplete — fires after smooth lerp OR immediately on instant swap
+// ─────────────────────────────────────────────────────────────────────────────
+
+void AWakeUpDirector::OnTransitionComplete()
+{
+	if (!CachedPlayer || !CachedPC) return;
+
+	// ── 1. RETURN CAMERA TO PLAYER ───────────────────────────────────────────
+	// Instant snap — the CineCamera is already at the head socket position.
 	CachedPC->SetViewTargetWithBlend(CachedPlayer, 0.0f);
 
+	// ── 2. RESTORE INPUT ─────────────────────────────────────────────────────
 	FInputModeGameOnly GameMode;
 	CachedPC->SetInputMode(GameMode);
-	CachedPC->bShowMouseCursor   = false;
+	CachedPC->bShowMouseCursor = false;
 	CachedPC->ResetIgnoreMoveInput();
 
-	// ── 2. RE-ENABLE MOVEMENT ────────────────────────────────────────────────
+	// ── 3. RE-ENABLE MOVEMENT ────────────────────────────────────────────────
 	if (UCharacterMovementComponent* Mv = CachedPlayer->GetCharacterMovement())
 	{
 		Mv->SetMovementMode(MOVE_Walking);
 	}
 
-	// ── 3. ENABLE SURVIVAL ───────────────────────────────────────────────────
+	// ── 4. ENABLE SURVIVAL ───────────────────────────────────────────────────
 	CachedPlayer->bIsSurvivalActive = true;
 
-	// ── 4. SIGNAL BLACKOUT WIDGET ────────────────────────────────────────────
-	// WB_TutorialBlackout binds to OnTutorialPlayerReady in Event Construct.
-	// When this fires, the widget plays its fade-out and removes itself.
-	// The widget never calls anything on the GM or the Director.
+	// ── 5. SIGNAL BLACKOUT WIDGET ────────────────────────────────────────────
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (UAlphaStreamingSubsystem* SS = GI->GetSubsystem<UAlphaStreamingSubsystem>())
@@ -162,7 +248,6 @@ void AWakeUpDirector::OnWakeUpSequenceFinished()
 
 	UE_LOG(LogTemp, Log, TEXT("AWakeUpDirector: Wake-up complete. Player has full control."));
 
-	// ── 5. OPTIONAL BP POLISH ────────────────────────────────────────────────
-	// Show HUD, play ambient sounds, trigger ship terminal warning, etc.
+	// ── 6. OPTIONAL BP POLISH ────────────────────────────────────────────────
 	BP_OnWakeUpComplete();
 }
