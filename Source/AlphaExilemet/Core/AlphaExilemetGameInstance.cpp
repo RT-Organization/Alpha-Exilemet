@@ -14,7 +14,8 @@ bool UAlphaExilemetGameInstance::IsPortalLevel(const FName& LevelName) const
 {
 	return !LevelName.IsNone()
 		&& LevelName != FName("Tutorial")
-		&& LevelName != FName("Main");
+		&& LevelName != FName("Main")
+		&& LevelName != FName("MainMenu");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -44,12 +45,6 @@ void UAlphaExilemetGameInstance::CreateNewGame(FString SlotName)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SavePlayerData
-//
-// TUTORIAL GUARD: Never writes saves while in Tutorial. Quitting restarts it.
-//
-// PORTAL: Saves the portal level name as-is so loading brings the player
-// back to the portal start. The challenge restarts from scratch (no mid-
-// challenge state is saved — only position, health, tools, currency).
 // ─────────────────────────────────────────────────────────────────────────────
 
 void UAlphaExilemetGameInstance::SavePlayerData()
@@ -60,18 +55,13 @@ void UAlphaExilemetGameInstance::SavePlayerData()
 		return;
 	}
 
-	// ── TUTORIAL GUARD ───────────────────────────────────────────────────────
+	// Tutorial guard — Tutorial saves are no-ops.
 	if (LocalSaveRef->CurrentLevelName == FName("Tutorial"))
 	{
-		UE_LOG(LogTemp, Log,
-			TEXT("SavePlayerData: Skipped — Tutorial saves are intentionally no-ops. "
-			     "Tutorial restarts on next load."));
+		UE_LOG(LogTemp, Log, TEXT("SavePlayerData: Skipped — Tutorial."));
 		return;
 	}
 
-	// ── ACTUAL SAVE ──────────────────────────────────────────────────────────
-	// Portal levels are saved as-is. On load, LoadSaveAndStream will load
-	// the portal level directly and restart the challenge.
 	PlayerRef = Cast<AAlphaExilemetCharacter>(
 		UGameplayStatics::GetPlayerCharacter(this, 0));
 
@@ -94,8 +84,7 @@ void UAlphaExilemetGameInstance::SavePlayerData()
 	PlayerRef->SaveToolDataToSaveObject(LocalSaveRef);
 	LocalSaveRef->bHasValidTransform = true;
 
-	UE_LOG(LogTemp, Log,
-		TEXT("SavePlayerData: Saved. Level='%s'"),
+	UE_LOG(LogTemp, Log, TEXT("SavePlayerData: Saved. Level='%s'"),
 		*LocalSaveRef->CurrentLevelName.ToString());
 }
 
@@ -165,15 +154,22 @@ void UAlphaExilemetGameInstance::SetupLoadedGame()
 // ─────────────────────────────────────────────────────────────────────────────
 // LoadSaveAndStream
 //
-// Single C++ entry point called from WB_LoadMenu after the loading screen
-// is already visible and LoadingScreenRef is set on the GM.
+// IMPORTANT — L_Persistent problem:
+//
+// L_Persistent::BeginPlay always calls LoadStreamLevel("MainMenu"). By the
+// time WB_LoadMenu calls LoadSaveAndStream, MainMenu is already loaded.
+// CurrentActiveLevel may still be NAME_None if InitializeInstance hasn't
+// finished yet (it depends on timing).
+//
+// Fix: we ALWAYS unload MainMenu explicitly when loading a game, regardless
+// of what CurrentActiveLevel says. We know MainMenu is loaded because
+// L_Persistent loads it unconditionally on startup.
 //
 // ROUTING TABLE:
-//   "Tutorial"   → NewGame_Tutorial → stream Tutorial, unload Main
-//   portal name  → InPortal         → stream portal directly, unload Main
-//                                     (challenge restarts, position in save ignored)
-//   "Main"       → LoadedGame       → stream Main
-//   none / empty → NewGame_Tutorial → Tutorial restart
+//   "Tutorial"   → NewGame_Tutorial → stream Tutorial, unload MainMenu
+//   portal name  → InPortal         → stream portal, unload MainMenu
+//   "Main"       → LoadedGame       → stream Main, unload MainMenu
+//   none/empty   → NewGame_Tutorial → Tutorial restart, unload MainMenu
 // ─────────────────────────────────────────────────────────────────────────────
 
 void UAlphaExilemetGameInstance::LoadSaveAndStream(FString SlotName)
@@ -193,68 +189,70 @@ void UAlphaExilemetGameInstance::LoadSaveAndStream(FString SlotName)
 	if (!LocalSaveRef)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("LoadSaveAndStream: Failed to cast save object for slot '%s'."), *SlotName);
+			TEXT("LoadSaveAndStream: Failed to cast save for slot '%s'."), *SlotName);
 		return;
 	}
 
-	// ── 2. READ SAVED LEVEL ──────────────────────────────────────────────────
+	// ── 2. GET SUBSYSTEM ─────────────────────────────────────────────────────
+	UAlphaStreamingSubsystem* SS = GetSubsystem<UAlphaStreamingSubsystem>();
+	if (!SS)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LoadSaveAndStream: AlphaStreamingSubsystem not found."));
+		return;
+	}
+
+	// ── 3. DETERMINE WHAT TO LOAD ────────────────────────────────────────────
 	const FName SavedLevel = LocalSaveRef->CurrentLevelName;
 	FName LevelToLoad;
-	FName LevelToUnload;
 
 	if (SavedLevel == FName("Tutorial") || SavedLevel.IsNone())
 	{
-		// Tutorial save (or corrupt) → restart Tutorial from scratch.
 		LocalSaveRef->bHasValidTransform = false;
-		CurrentPhase  = EGamePhase::NewGame_Tutorial;
-		LevelToLoad   = FName("Tutorial");
-		LevelToUnload = FName("Main");
+		CurrentPhase = EGamePhase::NewGame_Tutorial;
+		LevelToLoad  = FName("Tutorial");
+
+		// Tell the subsystem the active level is now Tutorial.
+		SS->SetCurrentActiveLevel(FName("Tutorial"));
 
 		UE_LOG(LogTemp, Log,
 			TEXT("LoadSaveAndStream: Tutorial/empty save → restarting Tutorial."));
 	}
 	else if (IsPortalLevel(SavedLevel))
 	{
-		// Portal save → load the portal directly.
-		// GM switch will hit InPortal → TeleportPlayerToPortalStart → restart challenge.
-		// bHasValidTransform is intentionally NOT reset: if the portal has a
-		// PlayerStart, TeleportPlayerToPortalStart() ignores it anyway.
-		CurrentPhase  = EGamePhase::InPortal;
-		LevelToLoad   = SavedLevel;
-		LevelToUnload = FName("Main");
+		CurrentPhase = EGamePhase::InPortal;
+		LevelToLoad  = SavedLevel;
 
-		// Tell the streaming subsystem which portal is active so
-		// TeleportPlayerToPortalStart can find it.
-		if (UAlphaStreamingSubsystem* SS = GetSubsystem<UAlphaStreamingSubsystem>())
-		{
-			SS->SetActivePortalName(SavedLevel);
-		}
+		SS->SetActivePortalName(SavedLevel);
+		SS->SetCurrentActiveLevel(SavedLevel);
 
 		UE_LOG(LogTemp, Log,
-			TEXT("LoadSaveAndStream: Portal save '%s' → loading portal, restarting challenge."),
+			TEXT("LoadSaveAndStream: Portal save '%s' → loading portal."),
 			*SavedLevel.ToString());
 	}
 	else
 	{
-		// "Main" or any named main-gameplay level → normal loaded game.
-		CurrentPhase  = EGamePhase::LoadedGame;
-		LevelToLoad   = FName("Main");
-		LevelToUnload = NAME_None;
+		// "Main" or any named main-gameplay level.
+		CurrentPhase = EGamePhase::LoadedGame;
+		LevelToLoad  = FName("Main");
 
-		UE_LOG(LogTemp, Log,
-			TEXT("LoadSaveAndStream: Main save → LoadedGame."));
+		SS->SetCurrentActiveLevel(FName("Main"));
+
+		UE_LOG(LogTemp, Log, TEXT("LoadSaveAndStream: Main save → LoadedGame."));
 	}
 
-	// ── 3. STREAM ────────────────────────────────────────────────────────────
-	UAlphaStreamingSubsystem* SS = GetSubsystem<UAlphaStreamingSubsystem>();
-	if (!SS)
-	{
-		UE_LOG(LogTemp, Error,
-			TEXT("LoadSaveAndStream: AlphaStreamingSubsystem not found."));
-		return;
-	}
+	// ── 4. STREAM ────────────────────────────────────────────────────────────
+	// We ALWAYS unload MainMenu here because L_Persistent::BeginPlay always
+	// loads it unconditionally. Even if CurrentActiveLevel was NAME_None,
+	// MainMenu is guaranteed to be in memory at this point.
+	//
+	// NOTE: We call StreamLevel directly (not SS->StreamLevel through the
+	// Tutorial path) because bTutorialTransition must NOT be set here —
+	// this is a load-from-save path, not a Tutorial completion path.
+	SS->StreamLevel(LevelToLoad, FName("MainMenu"));
 
-	SS->StreamLevel(LevelToLoad, LevelToUnload);
+	UE_LOG(LogTemp, Log,
+		TEXT("LoadSaveAndStream: loading '%s', unloading 'MainMenu'."),
+		*LevelToLoad.ToString());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
