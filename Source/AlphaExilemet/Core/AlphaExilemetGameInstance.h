@@ -65,16 +65,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void CreateNewGame(FString SlotName);
 
-	/**
-	 * Saves player state to disk.
-	 *
-	 * TUTORIAL GUARD: No-op when CurrentLevelName == "Tutorial".
-	 *   Tutorial always restarts — progress is never persisted.
-	 *
-	 * PORTAL: Saves the portal level name as-is.
-	 *   On load, the player is streamed into the portal and the challenge
-	 *   restarts from scratch. Only stats/tools are restored, not challenge state.
-	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void SavePlayerData();
 
@@ -91,21 +81,19 @@ public:
 	void SetupLoadedGame();
 
 	/**
-	 * Single entry point for the Load Menu.
-	 * Must be called AFTER the loading screen is visible AND
-	 * GM.LoadingScreenRef has been set.
-	 *
-	 * Routing:
-	 *   "Tutorial" / none → NewGame_Tutorial → stream Tutorial
-	 *   portal name       → InPortal         → stream portal, restart challenge
-	 *   "Main"            → LoadedGame        → stream Main normally
-	 *
-	 * WB_LoadMenu Load Slot chain (minimal):
-	 *   [Create Loading Screen → Add to Viewport → SET Ref Loading]
-	 *   [Get Game Mode → Cast → SET LoadingScreenRef]
-	 *   [Get Game Instance → Cast → LoadSaveAndStream(Slot Save)]
+	 * PRIMARY LOAD ENTRY POINT.
+	 * Delegates to LevelStreamingManager::LoadSavedGame().
+	 * Call from WB_LoadMenu Load Slot button — then Remove from Parent.
+	 * Everything else (loading screen, unload, load, phase, delegates) is handled internally.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
+	void LoadSavedGame(FString SlotName);
+
+	/**
+	 * @deprecated Use LoadSavedGame(). Kept for BP backward compatibility.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad",
+		meta = (DeprecatedFunction, DeprecationMessage = "Use LoadSavedGame() instead."))
 	void LoadSaveAndStream(FString SlotName);
 
 	// ── PROGRESSION FUNCTIONS ────────────────────────────────────────────────
@@ -118,7 +106,4 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Progression")
 	void SaveProgressionData();
-
-private:
-	bool IsPortalLevel(const FName& LevelName) const;
 };
