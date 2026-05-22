@@ -311,6 +311,46 @@ void AAlphaExilemetCharacter::SnapCurrentToolToHolster()
 }
 
 // -------------------------------------------------------------------------
+// LEVEL TRANSITION CLEANUP
+// -------------------------------------------------------------------------
+
+void AAlphaExilemetCharacter::CleanupForLevelTransition()
+{
+	// 1. Stop all survival ticking.
+	bIsSurvivalActive = false;
+	bIsInSafeZone     = false;
+	bIsSprinting      = false;
+
+	// 2. Clear every timer set on this actor — prevents stale callbacks
+	//    (breathing audio, regen timers, etc.) from firing after destruction.
+	GetWorldTimerManager().ClearAllTimersForObject(this);
+
+	// 3. Stop audio.
+	if (BreathingAudioComponent && BreathingAudioComponent->IsPlaying())
+		BreathingAudioComponent->Stop();
+
+	// 4. Destroy all tools.
+	for (AToolBase* Tool : OwnedTools)
+		if (Tool) Tool->Destroy();
+
+	OwnedTools.Empty();
+	CurrentTool      = nullptr;
+	ActiveToolIndex  = -1;
+	PendingToolIndex = -1;
+
+	// Notify delegates — any widget bound to inventory/tool events will clear itself.
+	OnInventoryUpdated.Broadcast();
+	OnToolWielded.Broadcast(-1);
+
+	// 5. Ask BP_Player to Remove from Parent on every widget it owns:
+	//    HUD, Tutorial Overlay, Death Screen, Pause Menu, etc.
+	//    This fires BEFORE Destroy Actor so widgets are not orphaned.
+	BP_OnCleanupForLevelTransition();
+
+	UE_LOG(LogTemp, Log, TEXT("AAlphaExilemetCharacter::CleanupForLevelTransition — complete."));
+}
+
+// -------------------------------------------------------------------------
 // ECONOMY & SELLING
 // -------------------------------------------------------------------------
 

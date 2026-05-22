@@ -313,14 +313,22 @@ void ULevelStreamingManager::BeginTransition(EGameLevel NewLevel, EGameLevel Old
 		*LevelToName(OldLevel).ToString(), *LevelToName(NewLevel).ToString(),
 		bSeamless ? TEXT(" [SEAMLESS]") : TEXT(""));
 
-	// 1. Notify GM to clean up BEFORE any I/O.
+	// 1. UNPAUSE THE GAME.
+	// The player may have opened the Pause menu before clicking "Main Menu".
+	// SetTimer (and LoadStreamLevel latent actions) use game time by default —
+	// they NEVER fire while the game is paused. Unpausing here before any I/O
+	// ensures timers and streaming callbacks tick correctly.
+	UGameplayStatics::SetGamePaused(GetWorld(), false);
+
+	// 2. Notify GM to clean up BEFORE any I/O.
 	OnLevelTransitionStarted.Broadcast(OldLevel, NewLevel);
 
-	// 2. Loading screen (skipped in seamless mode).
+	// 3. Loading screen (skipped in seamless mode).
 	if (!bSeamless)
 	{
 		ShowLoadingScreen();
 
+		// Now that the game is unpaused, this timer will tick correctly.
 		GetWorld()->GetTimerManager().SetTimer(
 			MinTimeHandle,
 			this,
@@ -337,7 +345,7 @@ void ULevelStreamingManager::BeginTransition(EGameLevel NewLevel, EGameLevel Old
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	// 3. Unload old level.
+	// 4. Unload old level.
 	FName OldName = LevelToName(OldLevel);
 	if (!OldName.IsNone())
 	{
@@ -349,7 +357,7 @@ void ULevelStreamingManager::BeginTransition(EGameLevel NewLevel, EGameLevel Old
 		UGameplayStatics::UnloadStreamLevel(World, OldName, UnloadInfo, false);
 	}
 
-	// 4. Load new level.
+	// 5. Load new level.
 	FName NewName = LevelToName(NewLevel);
 	if (!NewName.IsNone())
 	{

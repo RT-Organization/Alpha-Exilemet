@@ -106,4 +106,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Progression")
 	void SaveProgressionData();
+	
+	
+	
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
+	void SyncSaveDataBeforeManualSave();
 };

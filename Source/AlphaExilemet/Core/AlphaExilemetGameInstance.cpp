@@ -206,3 +206,21 @@ void UAlphaExilemetGameInstance::SaveProgressionData()
 	if (!ProgressionManager || !LocalSaveRef) return;
 	ProgressionManager->SaveToSaveObject(LocalSaveRef);
 }
+
+
+void UAlphaExilemetGameInstance::SyncSaveDataBeforeManualSave()
+{
+	if (!LocalSaveRef) return;
+
+	// Get the current level from LevelStreamingManager (authoritative source)
+	if (ULevelStreamingManager* M = GetSubsystem<ULevelStreamingManager>())
+	{
+		LocalSaveRef->CurrentLevelName = ULevelStreamingManager::LevelToName(M->CurrentLevel);
+	}
+
+	// Also sync the pre-portal transform if currently in a portal
+	if (PlayerRef)
+	{
+		LocalSaveRef->PrePortalTransform = LocalSaveRef->PrePortalTransform; // already set
+	}
+}

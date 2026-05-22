@@ -68,6 +68,42 @@ public:
 	USphereComponent* ScannerSphere;
 
 	// -------------------------------------------------------------------------
+	// LEVEL TRANSITION CLEANUP
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Called by GM_SimulatorGamemode's OnLevelTransitionStarted_Handler
+	 * BEFORE Destroy Actor fires.
+	 *
+	 * Does in order:
+	 *   1. Stops survival and all ticking damage/regen.
+	 *   2. Destroys every tool actor in OwnedTools and empties the array.
+	 *   3. Clears all pending timers (breathing, etc.).
+	 *   4. Calls BP_OnCleanupForLevelTransition so BP_Player can
+	 *      Remove from Parent on: HUD widget, pause widget, death screen,
+	 *      tutorial overlay, any other player-owned widget.
+	 *
+	 * After this returns, the GM calls Destroy Actor — which is safe
+	 * because all BP widget references are already cleared.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Cleanup")
+	void CleanupForLevelTransition();
+
+	/**
+	 * Implement in BP_Player.
+	 * Remove from Parent every widget that was created by this pawn:
+	 *   - Player HUD Ref → Remove from Parent
+	 *   - Tutorial Overlay Ref (if valid) → Remove from Parent
+	 *   - Death Screen (if valid) → Remove from Parent
+	 *   - Pause Menu Ref (if valid) → Remove from Parent
+	 *   - Any other widget stored on this pawn
+	 *
+	 * After this fires the pawn will be destroyed — do NOT cache anything.
+	 */
+	UFUNCTION(BlueprintImplementableEvent, Category = "AlphaExilemet|Cleanup")
+	void BP_OnCleanupForLevelTransition();
+
+	// -------------------------------------------------------------------------
 	// PROGRESSION & STATS CONFIGURATION
 	// -------------------------------------------------------------------------
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Progression|Levels")
@@ -223,19 +259,12 @@ public:
 	// -------------------------------------------------------------------------
 	// ECONOMY & SELLING
 	// -------------------------------------------------------------------------
-
-	// Returns the total amount of a resource held across ALL tools.
-	// Used by BaseTransactionWidget::CanAfford to check material requirements.
 	UFUNCTION(BlueprintPure, Category = "AlphaExilemet|Economy")
 	int32 GetTotalResourceAmount(FName ResourceID) const;
 
-	// Deducts a resource from OwnedTools in order until the required amount is met.
-	// Used by BaseTransactionWidget::DeductCost to consume upgrade materials.
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Economy")
 	void DeductResourceFromTools(FName ResourceID, int32 Amount);
 
-	// Returns a merged map of every resource currently held across all tools.
-	// Use this in the Inspect Inventory widget to display a combined overview.
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Economy")
 	TMap<FName, int32> GetAllResourcesFromTools() const;
 
@@ -280,26 +309,18 @@ public:
 	// -------------------------------------------------------------------------
 	// INSPECT INVENTORY SYSTEM
 	// -------------------------------------------------------------------------
-
-	// Whether the player is currently in inspect mode (used to gate input / animations in BP).
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AlphaExilemet|Inspection")
 	bool bIsInspecting = false;
 
-	// Call from your Input Binding (or BP) to start inspecting the currently held tool.
-	// Fires BP_OnInspectToolStarted with the tool and its assigned InventoryWidgetClass.
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Inspection")
 	void StartInspectCurrentTool();
 
-	// Call from your Input Binding or from the widget's close button to stop inspecting.
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|Inspection")
 	void StopInspectCurrentTool();
 
-	// Implement in Blueprint: play the inspect animation and create the widget.
-	// WidgetClass is the one assigned in the tool's Blueprint CDO (InventoryWidgetClass).
 	UFUNCTION(BlueprintImplementableEvent, Category = "AlphaExilemet|Events")
 	void BP_OnInspectToolStarted(AToolBase* ToolToInspect, TSubclassOf<UUserWidget> WidgetClass);
 
-	// Implement in Blueprint: play the close animation and destroy the widget.
 	UFUNCTION(BlueprintImplementableEvent, Category = "AlphaExilemet|Events")
 	void BP_OnInspectToolStopped();
 
