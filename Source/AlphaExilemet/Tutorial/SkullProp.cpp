@@ -1,5 +1,5 @@
 #include "SkullProp.h"
-#include "TutorialDirector.h"
+#include "AlphaExilemet/Tutorial/CutsceneManagers/TutorialDirector.h"
 
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"

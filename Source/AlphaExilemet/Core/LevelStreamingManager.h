@@ -268,8 +268,15 @@ private:
 	int32 LoadLatentUUID        = 0;
 	int32 UnloadLatentUUID      = 1000;
 
-	UPROPERTY()
-	UUserWidget* ActiveLoadingScreen = nullptr;
+	/**
+	 * Weak pointer to the active loading screen widget.
+	 * TWeakObjectPtr is used instead of a raw UPROPERTY pointer so that
+	 * HideLoadingScreen() can null our reference while the widget itself
+	 * remains alive in UMG memory to complete its fade-out animation and
+	 * call Remove from Parent. A raw UPROPERTY pointer would keep the widget
+	 * alive even after Remove from Parent, preventing GC.
+	 */
+	TWeakObjectPtr<UUserWidget> ActiveLoadingScreen;
 
 	// ── INTERNAL TRANSITION PIPELINE ──────────────────────────────────────────
 
