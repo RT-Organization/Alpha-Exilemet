@@ -203,12 +203,27 @@ public:
 	// ── SETUP ─────────────────────────────────────────────────────────────────
 
 	/**
-	 * Called from GM InitializeInstance.
-	 * Tells the manager that the game started on MainMenu (L_Persistent already loaded it).
+	 * Called from GM InitializeInstance when PIE starts on L_Persistent.
+	 * Tells the manager that the game started on MainMenu.
 	 * Also passes the loading screen class if not set in CDO.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
 	void InitializeAtMainMenu(TSubclassOf<UUserWidget> InLoadingScreenClass);
+
+	/**
+	 * Called from GM InitializeInstance when PIE starts on ANY level
+	 * that is NOT L_Persistent (direct developer play).
+	 *
+	 * Does NOT show any loading screen. Does NOT stream anything.
+	 * Sets CurrentLevel = Main so the GM switch routes to the Main path,
+	 * then fires OnLevelTransitionComplete after one frame so all
+	 * GM bindings are registered first.
+	 *
+	 * The GM will spawn the player at PlayerStart and call SetupPlayerGame.
+	 * Since CurrentPhase stays EGamePhase::None, survival is NOT activated.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "LevelStreaming|Debug")
+	void InitializeForDirectPlay();
 
 	// ── PORTAL HELPERS (called by subsystem for backward compat) ─────────────
 
@@ -307,6 +322,17 @@ private:
 	void OnBothConditionsMet(); // called when loaded AND min time elapsed
 
 	FTimerHandle MinTimeHandle;
+
+	/**
+	 * Timer handle for the one-frame delay in InitializeForDirectPlay.
+	 * Ensures OnLevelTransitionComplete fires AFTER InitializeInstance
+	 * finishes binding all event handlers.
+	 */
+	FTimerHandle DirectPlayTimerHandle;
+
+	/** Callback fired by DirectPlayTimerHandle. Broadcasts OnLevelTransitionComplete. */
+	UFUNCTION()
+	void DirectPlayTimerCallback();
 
 	// Player cleanup helpers
 	void DestroyPlayerPawn();

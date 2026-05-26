@@ -111,4 +111,8 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = "AlphaExilemet|SaveLoad")
 	void SyncSaveDataBeforeManualSave();
+	
+	/** True after WakeUp sequence has played once. Prevents replay on portal exit. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "AlphaExilemet|Phase")
+	bool bWakeUpSequencePlayed = false;
 };

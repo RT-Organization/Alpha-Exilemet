@@ -1,6 +1,5 @@
 #include "WakeUpDirector.h"
 #include "AlphaExilemet/Tutorial/CutsceneHelpers/CinematicHandoffComponent.h"
-#include "AlphaExilemet/Tutorial/CutsceneHelpers/PlayerSpawnMarker.h"
 
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
@@ -44,14 +43,11 @@ void AWakeUpDirector::InitializeWakeUp()
 	if (!CachedPlayer)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("AWakeUpDirector::InitializeWakeUp — Player pawn not found. "
-			     "Broadcasting OnTutorialPlayerReady as fallback."));
+			TEXT("AWakeUpDirector::InitializeWakeUp — Player not found. Signalling ready."));
 
 		if (UGameInstance* GI = GetGameInstance())
-		{
 			if (UAlphaStreamingSubsystem* SS = GI->GetSubsystem<UAlphaStreamingSubsystem>())
 				SS->OnTutorialPlayerReady.Broadcast();
-		}
 		return;
 	}
 
@@ -67,19 +63,14 @@ void AWakeUpDirector::InitializeWakeUp()
 	if (!WakeUpSequenceRef)
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("AWakeUpDirector::InitializeWakeUp — WakeUpSequenceRef is null. "
-			     "Assign it in the placed BP_WakeUpDirector instance Details panel. "
-			     "Enabling player directly (no cutscene)."));
+			TEXT("AWakeUpDirector::InitializeWakeUp — WakeUpSequenceRef null. Enabling player directly."));
 
 		CachedPlayer->bIsSurvivalActive = true;
-		FInputModeGameOnly GameMode;
-		CachedPC->SetInputMode(GameMode);
+		CachedPC->SetInputMode(FInputModeGameOnly());
 
 		if (UGameInstance* GI = GetGameInstance())
-		{
 			if (UAlphaStreamingSubsystem* SS = GI->GetSubsystem<UAlphaStreamingSubsystem>())
 				SS->OnTutorialPlayerReady.Broadcast();
-		}
 
 		BP_OnWakeUpComplete();
 		return;
@@ -88,21 +79,16 @@ void AWakeUpDirector::InitializeWakeUp()
 	WakeUpSequencePlayer = WakeUpSequenceRef->GetSequencePlayer();
 	if (!WakeUpSequencePlayer)
 	{
-		UE_LOG(LogTemp, Error,
-			TEXT("AWakeUpDirector — WakeUpSequenceRef has no SequencePlayer."));
+		UE_LOG(LogTemp, Error, TEXT("AWakeUpDirector — WakeUpSequenceRef has no SequencePlayer."));
 		return;
 	}
 
 	// ── 3. HIDE PLAYER FOR CUTSCENE ──────────────────────────────────────────
-	// The animator's SK handles the visuals during the cutscene.
 	CachedPlayer->SetActorHiddenInGame(true);
 	if (USkeletalMeshComponent* Mesh = CachedPlayer->GetMesh())
-	{
 		Mesh->SetVisibility(false, true);
-	}
 
 	// ── 4. LOCK INPUT ────────────────────────────────────────────────────────
-	// Player arrives with UI-only input from the TutorialDirector — keep locked.
 	{
 		FInputModeUIOnly UIMode;
 		CachedPC->SetInputMode(UIMode);
@@ -110,18 +96,12 @@ void AWakeUpDirector::InitializeWakeUp()
 	}
 
 	if (UCharacterMovementComponent* Mv = CachedPlayer->GetCharacterMovement())
-	{
 		if (Mv->MovementMode != MOVE_None)
-		{
 			Mv->DisableMovement();
-		}
-	}
 
 	// ── 5. OPTIONAL PRE-SEQUENCE CINECAM ─────────────────────────────────────
 	if (WakeUpCineCamRef)
-	{
 		CachedPC->SetViewTargetWithBlend(WakeUpCineCamRef, 0.0f);
-	}
 
 	// ── 6. BIND + PLAY ───────────────────────────────────────────────────────
 	WakeUpSequencePlayer->OnStop.AddUniqueDynamic(
@@ -129,94 +109,153 @@ void AWakeUpDirector::InitializeWakeUp()
 
 	WakeUpSequencePlayer->Play();
 
+	// Dismiss WB_TutorialBlackout the moment the WakeUp sequence starts.
+	// The sequence owns the visuals from here — the blackout is no longer needed.
+	if (UGameInstance* GI = GetGameInstance())
+		if (UAlphaStreamingSubsystem* SS = GI->GetSubsystem<UAlphaStreamingSubsystem>())
+			SS->OnTutorialPlayerReady.Broadcast();
+
 	UE_LOG(LogTemp, Log, TEXT("AWakeUpDirector: Wake-up cutscene playing."));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OnWakeUpSequenceFinished
+// Same bone-based logic as TutorialDirector::OnIntroSequenceFinished.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void AWakeUpDirector::OnWakeUpSequenceFinished()
 {
 	if (!CachedPlayer || !CachedPC) return;
 
-	// ── 1. DETERMINE PLAYER SPAWN TRANSFORM ───────────────────────────────────
-	//
-	// Priority:
-	//   (a) WakeUpPlayerSpawnMarker — manually placed at SK's feet on last frame.
-	//   (b) Player's current transform — fallback (will look wrong, spawn at PlayerStart).
-	FTransform SpawnTransform;
+	// ── A. GHOST CAMERA START ─────────────────────────────────────────────────
+	FVector  GhostStartLocation;
+	FRotator GhostStartRotation;
 
-	if (WakeUpPlayerSpawnMarker)
+	if (LastWakeUpCineCamera)
 	{
-		SpawnTransform = WakeUpPlayerSpawnMarker->GetSpawnTransform();
+		GhostStartLocation = LastWakeUpCineCamera->GetActorLocation();
+		GhostStartRotation = LastWakeUpCineCamera->GetActorRotation();
+	}
+	else if (AActor* ViewTarget = CachedPC->GetViewTarget())
+	{
+		GhostStartLocation = ViewTarget->GetActorLocation();
+		GhostStartRotation = ViewTarget->GetActorRotation();
 		UE_LOG(LogTemp, Log,
-			TEXT("AWakeUpDirector: Using WakeUpPlayerSpawnMarker at %s."),
-			*SpawnTransform.GetLocation().ToString());
+			TEXT("AWakeUpDirector: Ghost start auto-detected from ViewTarget '%s'."),
+			*ViewTarget->GetName());
 	}
 	else
 	{
-		SpawnTransform = CachedPlayer->GetActorTransform();
+		GhostStartLocation = CachedPlayer->GetActorLocation();
+		GhostStartRotation = CachedPlayer->GetActorRotation();
 		UE_LOG(LogTemp, Warning,
-			TEXT("AWakeUpDirector::OnWakeUpSequenceFinished — WakeUpPlayerSpawnMarker is null. "
-			     "Player will appear at PlayerStart. Place a BP_PlayerSpawnMarker at the "
-			     "SK's feet on the last frame of the wake-up cutscene and assign it here."));
+			TEXT("AWakeUpDirector: No CineCamera found. Assign LastWakeUpCineCamera."));
 	}
 
-	// ── 2. BIND HANDOFF CALLBACK ──────────────────────────────────────────────
+	// ── B. FIND SK PROXY BY TAG ───────────────────────────────────────────────
+	USkeletalMeshComponent* ProxyMesh  = nullptr;
+	AActor*                 ProxyActor = nullptr;
+
+	if (!ProxySkeletonTag.IsNone())
+	{
+		TArray<AActor*> Tagged;
+		UGameplayStatics::GetAllActorsWithTag(GetWorld(), ProxySkeletonTag, Tagged);
+
+		if (Tagged.Num() > 0)
+		{
+			ProxyActor = Tagged[0];
+			ProxyMesh  = ProxyActor->FindComponentByClass<USkeletalMeshComponent>();
+			UE_LOG(LogTemp, Log,
+				TEXT("AWakeUpDirector: Found proxy SK '%s'."), *ProxyActor->GetName());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("AWakeUpDirector: No actor tagged '%s'. "
+				     "Set the SK_Manny Spawnable Actor Tag and When Finished = Keep State."),
+				*ProxySkeletonTag.ToString());
+		}
+	}
+
+	// ── C. CAMERA TRAVEL TARGET (head bone) ──────────────────────────────────
+	FVector CameraTarget;
+
+	if (ProxyMesh && ProxyMesh->DoesSocketExist(HeadBoneName))
+	{
+		CameraTarget = ProxyMesh->GetBoneLocation(HeadBoneName);
+	}
+	else if (ProxyActor)
+	{
+		CameraTarget = ProxyActor->GetActorLocation()
+		             + FVector(0.f, 0.f, CachedPlayer->BaseEyeHeight);
+		UE_LOG(LogTemp, Warning,
+			TEXT("AWakeUpDirector: Head bone '%s' not found. Using actor loc + EyeHeight."),
+			*HeadBoneName.ToString());
+	}
+	else
+	{
+		CameraTarget = GhostStartLocation;
+	}
+
+	// ── D. PLAYER SPAWN TRANSFORM (root bone) ────────────────────────────────
+	FTransform PlayerSpawnTransform;
+
+	if (ProxyMesh && ProxyMesh->DoesSocketExist(RootBoneName))
+	{
+		FVector RootLoc  = ProxyMesh->GetBoneLocation(RootBoneName);
+		FRotator SpawnRot(0.f, ProxyActor->GetActorRotation().Yaw, 0.f);
+		PlayerSpawnTransform = FTransform(SpawnRot, RootLoc, FVector::OneVector);
+	}
+	else if (ProxyActor)
+	{
+		FRotator SpawnRot(0.f, ProxyActor->GetActorRotation().Yaw, 0.f);
+		PlayerSpawnTransform = FTransform(SpawnRot, ProxyActor->GetActorLocation());
+	}
+	else
+	{
+		PlayerSpawnTransform = CachedPlayer->GetActorTransform();
+		UE_LOG(LogTemp, Warning,
+			TEXT("AWakeUpDirector: No proxy. Player will appear at PlayerStart."));
+	}
+
+	// ── E. BIND HANDOFF CALLBACK ──────────────────────────────────────────────
 	CinematicHandoff->OnHandoffComplete.AddUniqueDynamic(
 		this, &AWakeUpDirector::OnWakeUpHandoffComplete);
 
-	// ── 3. BEGIN HANDOFF ──────────────────────────────────────────────────────
-	//
-	// Ghost camera placed at LastWakeUpCineCamera's world transform → view freezes.
-	// Player teleported to SpawnTransform (still hidden → unhide → blend → done.
+	// ── F. BEGIN HANDOFF ──────────────────────────────────────────────────────
 	CinematicHandoff->BeginHandoff(
-		LastWakeUpCineCamera,
 		CachedPlayer,
 		CachedPC,
-		SpawnTransform);
+		GhostStartLocation,
+		GhostStartRotation,
+		CameraTarget,
+		PlayerSpawnTransform,
+		ProxyActor);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OnWakeUpHandoffComplete
-// Called after the camera blend finishes — player has full camera control.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void AWakeUpDirector::OnWakeUpHandoffComplete()
 {
 	if (!CachedPlayer || !CachedPC) return;
 
-	// ── 1. RETURN INPUT TO PLAYER ─────────────────────────────────────────────
+	// Restore input.
 	FInputModeGameOnly GameMode;
 	CachedPC->SetInputMode(GameMode);
 	CachedPC->bShowMouseCursor  = false;
 	CachedPC->ResetIgnoreMoveInput();
 
-	// ── 2. RE-ENABLE MOVEMENT ────────────────────────────────────────────────
+	// Re-enable movement.
 	if (UCharacterMovementComponent* Mv = CachedPlayer->GetCharacterMovement())
-	{
 		Mv->SetMovementMode(MOVE_Walking);
-	}
 
-	// ── 3. ENABLE SURVIVAL ───────────────────────────────────────────────────
+	// Enable survival — oxygen starts draining from this moment.
 	CachedPlayer->bIsSurvivalActive = true;
 
-	// ── 4. SIGNAL BLACKOUT WIDGET ────────────────────────────────────────────
-	// WB_TutorialBlackout binds to OnTutorialPlayerReady in Event Construct.
-	// When this fires, the widget plays its fade-out and removes itself.
-	if (UGameInstance* GI = GetGameInstance())
-	{
-		if (UAlphaStreamingSubsystem* SS = GI->GetSubsystem<UAlphaStreamingSubsystem>())
-		{
-			SS->OnTutorialPlayerReady.Broadcast();
-		}
-	}
+	UE_LOG(LogTemp, Log, TEXT("AWakeUpDirector: Handoff complete. Player has full control. Survival ON."));
 
-	UE_LOG(LogTemp, Log,
-		TEXT("AWakeUpDirector: Handoff complete. Player has full control. Survival ON."));
-
-	// ── 5. OPTIONAL BP POLISH ────────────────────────────────────────────────
-	// Show HUD, play ambient sounds, trigger ship terminal warning, etc.
+	// Show HUD, play ambience, trigger ship terminal warning, etc.
 	BP_OnWakeUpComplete();
 }

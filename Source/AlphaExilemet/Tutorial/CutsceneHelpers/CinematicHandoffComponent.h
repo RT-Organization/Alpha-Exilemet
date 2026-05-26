@@ -14,44 +14,51 @@ class ACameraActor;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCinematicHandoffComplete);
 
 /**
- * UCinematicHandoffComponent
+ * UCinematicHandoffComponent  v2
  *
- * Add this component to any Director actor (TutorialDirector, WakeUpDirector)
- * that needs to perform a smooth cutscene → gameplay camera transition.
- *
- * ──────────────────────────────────────────────────────────────────────
- * THE PROBLEM THIS SOLVES
- * ──────────────────────────────────────────────────────────────────────
- * When a Level Sequence ends:
- *   - The Camera Cut track releases control → view snaps back to the player
- *   - The player pawn is hidden at PlayerStart, far from the SK proxy
- *   - Result: a jarring 1-frame flicker
+ * Handles the cutscene → gameplay camera transition.
  *
  * ──────────────────────────────────────────────────────────────────────
- * HOW IT WORKS (frame timeline)
+ * WHAT IT DOES (frame timeline)
  * ──────────────────────────────────────────────────────────────────────
- *   Frame 0 – Sequence OnStop fires. Last CineCamera is still in the world.
- *   Frame 0 – Ghost ACameraActor spawned at the EXACT CineCamera world transform.
- *   Frame 0 – PC view target = Ghost (zero-time snap — invisible).
- *   Frame 0 – Player pawn teleported to PlayerSpawnTransform (still hidden).
- *   Frame 0 – Player pawn unhidden (camera is still at Ghost, player not visible).
- *   Frame 0 – SetViewTargetWithBlend(Player, BlendTime) starts.
- *   Frame N – Blend finishes. Ghost destroyed. OnHandoffComplete fires.
+ *
+ *  Frame 0  – Sequence OnStop fires. Last CineCamera is at its final position.
+ *  Frame 0  – Ghost ACameraActor spawned at LastCineCamera's EXACT world transform.
+ *  Frame 0  – PC view snaps to Ghost (zero time — image is identical to last seq frame).
+ *
+ *  Frames 1…N  – Ghost camera SMOOTHLY TRAVELS (ticked every frame) from the
+ *                LastCineCamera position toward the SK proxy's HEAD BONE world position.
+ *                Player pawn is still hidden at PlayerStart — nobody sees it.
+ *
+ *  Frame N  – Ghost has arrived at the head bone.
+ *  Frame N  – BP_Player is teleported to the SK proxy's ROOT BONE position (still hidden).
+ *  Frame N  – BP_Player is unhidden (camera is AT the head — no visible pop).
+ *  Frame N  – PC view target snapped to BP_Player (instant — ghost and player FP cam
+ *             are at the same world location → seamless).
+ *  Frame N  – Ghost destroyed. OnHandoffComplete fires.
+ *
+ * ──────────────────────────────────────────────────────────────────────
+ * WHY BONE POSITIONS (not actor location / PlayerSpawnMarker)
+ * ──────────────────────────────────────────────────────────────────────
+ *  The animator's Spawnable SK often has an incorrect pivot (actor origin ≠
+ *  character root). Using bone queries solves this completely:
+ *    GetBoneLocation("head")  → exact world position of the head joint
+ *    GetBoneLocation("root")  → exact world position of the foot joint
+ *  Both are independent of the actor's pivot offset.
  *
  * ──────────────────────────────────────────────────────────────────────
  * USAGE
  * ──────────────────────────────────────────────────────────────────────
- *   1. Add this component to BP_TutorialDirector / BP_WakeUpDirector.
- *   2. Call BeginHandoff() from the C++ OnStop callback.
- *   3. Bind OnHandoffComplete to restore input, show HUD, etc.
+ *  1. Component is created in TutorialDirector / WakeUpDirector constructor.
+ *  2. Director calls BeginHandoff() from its OnSequenceFinished callback.
+ *  3. Bind OnHandoffComplete to restore input, show HUD, spawn pickaxe, etc.
  *
  * ──────────────────────────────────────────────────────────────────────
- * SPAWN MARKER
+ * SEQUENCER REQUIREMENT (one-time per sequence)
  * ──────────────────────────────────────────────────────────────────────
- *   Because animator SK proxies often have incorrect pivot points, the
- *   caller must supply the PlayerSpawnTransform explicitly.
- *   Use APlayerSpawnMarker placed at the SK's feet on the last frame,
- *   or supply a manually crafted FTransform.
+ *  The SK_Manny Spawnable track MUST have "When Finished = Keep State".
+ *  This keeps the actor alive when OnStop fires so we can query bone positions.
+ *  After BeginHandoff captures the positions, it destroys the SK itself.
  */
 UCLASS(ClassGroup=(AlphaExilemet), meta=(BlueprintSpawnableComponent),
        DisplayName = "Cinematic Handoff")
@@ -65,89 +72,113 @@ public:
 	// ── CONFIGURATION ─────────────────────────────────────────────────────────
 
 	/**
-	 * Duration of the camera blend from ghost → player camera.
-	 * 0.0  = instant snap (use if CineCamera ends exactly at player head).
-	 * 0.4–0.8 = recommended for most transitions.
-	 * Set in BP_TutorialDirector Class Defaults → Cinematic Handoff.
+	 * Total seconds for the ghost camera to travel from the last CineCamera
+	 * position to the SK proxy's head bone.
+	 *
+	 * Recommended values:
+	 *   0.8 – 1.5s  general travel
+	 *   0.3 – 0.6s  if the sequence camera already ends close to the head
+	 *
+	 * Set in the Director's Class Defaults → Cinematic Handoff → Camera Travel Time.
 	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Handoff|Config")
-	float CameraBlendTime = 0.5f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Handoff|Config",
+		meta = (ClampMin = "0.1", UIMin = "0.1"))
+	float CameraBlendTime = 1.0f;
 
 	/**
-	 * Blend function for the camera transition.
-	 * VTBlend_EaseInOut gives the most natural, cinematic feel.
+	 * Optional extra blend from ghost → player FP cam at the very end.
+	 *
+	 * Keep at 0 when the sequence camera ends close to the head (seamless snap).
+	 * Set to 0.1 – 0.2 only if there is a visible pop at the moment of player
+	 * appearance (usually caused by a large discrepancy between the ghost's
+	 * final position and the player FP camera socket position).
 	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Handoff|Config")
-	TEnumAsByte<EViewTargetBlendFunction> BlendFunction =
-		EViewTargetBlendFunction::VTBlend_EaseInOut;
-
-	/**
-	 * Exponent for EaseIn/EaseOut blend functions.
-	 * 2.0 = smooth; higher values = sharper ease.
-	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Handoff|Config")
-	float BlendExponent = 2.0f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Handoff|Config",
+		meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float FinalSnapBlendTime = 0.0f;
 
 	// ── EVENTS ────────────────────────────────────────────────────────────────
 
 	/**
-	 * Fires when the camera blend finishes and the player has full visual control.
-	 * Bind here to: restore movement input, show HUD, enable survival, etc.
+	 * Fires when the ghost camera reaches the head bone AND the player has
+	 * been placed and given camera control.
 	 *
-	 * In TutorialDirector → bind to OnCinematicHandoffComplete (C++ UFUNCTION).
-	 * In WakeUpDirector   → bind to OnWakeUpHandoffComplete    (C++ UFUNCTION).
+	 * Bind here to: restore movement input, show HUD, spawn pickaxe, enable
+	 * survival, wire boundary guard, etc.
 	 */
 	UPROPERTY(BlueprintAssignable, Category = "Handoff|Events")
 	FOnCinematicHandoffComplete OnHandoffComplete;
 
 	// ── RUNTIME STATE ─────────────────────────────────────────────────────────
 
-	/** True while the blend is in progress. */
+	/** True while the ghost is travelling or the final blend is in progress. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Handoff|Runtime")
 	bool bHandoffInProgress = false;
 
 	// ── PUBLIC API ────────────────────────────────────────────────────────────
 
 	/**
-	 * Begin the cutscene → gameplay camera handoff.
+	 * Begin the cutscene → gameplay handoff.
 	 *
-	 * Call this immediately from the Level Sequence OnStop callback.
-	 *
-	 * @param LastCineCamera       The CineCameraActor that was active on the
-	 *                              sequence's last frame. Assign in the Director's
-	 *                              Details panel ("Last Sequence CineCamera").
-	 *                              If null, falls back to the player's camera position.
+	 * Call immediately from the Level Sequence's OnStop callback.
 	 *
 	 * @param Player               The hidden BP_Player pawn.
-	 *
 	 * @param PC                   The owning PlayerController.
-	 *
-	 * @param PlayerSpawnTransform World transform where the player pawn should
-	 *                              appear. Use APlayerSpawnMarker::GetSpawnTransform()
-	 *                              or supply the proxy's root transform manually.
+	 * @param GhostStartLocation   World location of the last-active CineCamera.
+	 *                             Pass LastTutorialCineCamera->GetActorLocation().
+	 * @param GhostStartRotation   World rotation of the last-active CineCamera.
+	 * @param CameraTargetLocation World location to travel toward (SK head bone).
+	 *                             Computed from SkMesh->GetBoneLocation(HeadBoneName).
+	 * @param PlayerSpawnTransform FTransform at which to place BP_Player.
+	 *                             Computed from root bone location + proxy yaw.
+	 *                             Player is teleported here when the ghost arrives
+	 *                             at CameraTargetLocation — still hidden, no pop.
+	 * @param ProxyActorToDestroy  Optional: the SK proxy actor. If valid, it is
+	 *                             destroyed after player placement so the two
+	 *                             meshes never overlap visually.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Handoff")
 	void BeginHandoff(
-		AActor*                  LastCineCamera,
 		AAlphaExilemetCharacter* Player,
 		APlayerController*       PC,
-		FTransform               PlayerSpawnTransform);
+		FVector                  GhostStartLocation,
+		FRotator                 GhostStartRotation,
+		FVector                  CameraTargetLocation,
+		FTransform               PlayerSpawnTransform,
+		AActor*                  ProxyActorToDestroy = nullptr);
 
-	/**
-	 * Abort a running handoff (e.g. if the level is about to change).
-	 * OnHandoffComplete will NOT fire after Cancel.
-	 */
+	/** Abort. OnHandoffComplete will NOT fire. */
 	UFUNCTION(BlueprintCallable, Category = "Handoff")
 	void CancelHandoff();
 
+	// Tick-enabled conditionally (only while bHandoffInProgress).
+	virtual void TickComponent(
+		float DeltaTime,
+		ELevelTick TickType,
+		FActorComponentTickFunction* ThisTickFunction) override;
+
 private:
+	// Travel state
+	FVector  TravelStartPos;
+	FVector  TravelEndPos;
+	FQuat    TravelStartQuat;
+	FQuat    TravelEndQuat;
+	float    TravelElapsed = 0.0f;
+
+	FTransform PendingPlayerSpawn;
+
 	UPROPERTY()
-	ACameraActor* GhostCamera = nullptr;
+	AAlphaExilemetCharacter* CachedPlayer = nullptr;
 
 	UPROPERTY()
 	APlayerController* CachedPC = nullptr;
 
-	FTimerHandle BlendCompleteHandle;
+	UPROPERTY()
+	ACameraActor* GhostCamera = nullptr;
 
-	void OnBlendComplete();
+	UPROPERTY()
+	AActor* PendingProxyToDestroy = nullptr;
+
+	// Called when travel alpha reaches 1.0
+	void OnArrivalAtTarget();
 };

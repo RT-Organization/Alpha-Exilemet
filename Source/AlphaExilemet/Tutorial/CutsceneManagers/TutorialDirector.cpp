@@ -1,7 +1,6 @@
 #include "TutorialDirector.h"
 #include "AlphaExilemet/Tutorial/SkullProp.h"
 #include "AlphaExilemet/Tutorial/CutsceneHelpers/CinematicHandoffComponent.h"
-#include "AlphaExilemet/Tutorial/CutsceneHelpers/PlayerSpawnMarker.h"
 
 #include "Kismet/GameplayStatics.h"
 #include "Components/SphereComponent.h"
@@ -23,8 +22,6 @@ ATutorialDirector::ATutorialDirector()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	// Create the handoff component so BP_TutorialDirector can configure it
-	// via Class Defaults (CameraBlendTime, BlendFunction, BlendExponent).
 	CinematicHandoff = CreateDefaultSubobject<UCinematicHandoffComponent>(
 		TEXT("CinematicHandoff"));
 }
@@ -78,8 +75,7 @@ void ATutorialDirector::InitializeTutorial()
 	if (!IntroSequenceRef)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("ATutorialDirector::InitializeTutorial — IntroSequenceRef is null. "
-			     "Assign it in the placed instance Details panel → Tutorial|Config."));
+			TEXT("ATutorialDirector::InitializeTutorial — IntroSequenceRef is null."));
 		return;
 	}
 
@@ -92,9 +88,6 @@ void ATutorialDirector::InitializeTutorial()
 	}
 
 	// ── 6. HIDE REAL PLAYER ───────────────────────────────────────────────────
-	// The animator's Spawnable SK acts as the player during the cutscene.
-	// The real pawn is hidden so it doesn't clip through the world or cast
-	// an unexpected shadow.
 	HidePlayerForCutscene();
 
 	// ── 7. LOCK ALL INPUT ────────────────────────────────────────────────────
@@ -104,9 +97,8 @@ void ATutorialDirector::InitializeTutorial()
 	IntroSequencePlayer->OnStop.AddUniqueDynamic(
 		this, &ATutorialDirector::OnIntroSequenceFinished);
 
-	// ── 9. OPTIONAL: SNAP TO CINECAM BEFORE PLAY ─────────────────────────────
-	// Prevents a 1-frame flash of the player's FP camera before the sequence
-	// Camera Cut track takes over.
+	// ── 9. SNAP TO FIRST CINECAM BEFORE PLAY ─────────────────────────────────
+	// Prevents a 1-frame FP-camera flash before the Camera Cut track takes over.
 	if (TutorialCineCamRef)
 	{
 		CachedPC->SetViewTargetWithBlend(TutorialCineCamRef, 0.0f);
@@ -128,135 +120,243 @@ void ATutorialDirector::HidePlayerForCutscene()
 	CachedPlayer->SetActorHiddenInGame(true);
 
 	if (USkeletalMeshComponent* Mesh = CachedPlayer->GetMesh())
-	{
 		Mesh->SetVisibility(false, true);
-	}
 
 	UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: Real player hidden for cutscene."));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FindCutsceneProxy — fallback when no PlayerSpawnMarker is assigned
-// ─────────────────────────────────────────────────────────────────────────────
-
-AActor* ATutorialDirector::FindCutsceneProxy() const
-{
-	if (ProxyCharacterTag.IsNone())
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("ATutorialDirector::FindCutsceneProxy — ProxyCharacterTag is empty."));
-		return nullptr;
-	}
-
-	TArray<AActor*> Tagged;
-	UGameplayStatics::GetAllActorsWithTag(GetWorld(), ProxyCharacterTag, Tagged);
-
-	if (Tagged.Num() == 0)
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("ATutorialDirector::FindCutsceneProxy — No actor tagged '%s'."),
-			*ProxyCharacterTag.ToString());
-		return nullptr;
-	}
-
-	return Tagged[0];
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // OnIntroSequenceFinished
+//
+// This is where all the "figure out positions from the live sequence data"
+// logic lives. We query bone positions directly from the Spawnable SK,
+// then hand everything to CinematicHandoffComponent.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::OnIntroSequenceFinished()
 {
 	if (!CachedPlayer || !CachedPC) return;
 
-	// ── 1. DETERMINE PLAYER SPAWN TRANSFORM ───────────────────────────────────
+	// ── A. FIND THE GHOST CAMERA START POSITION ──────────────────────────────
 	//
 	// Priority:
-	//   (a) TutorialPlayerSpawnMarker — placed manually at SK's feet on last frame.
-	//       This is the correct production setup.
-	//   (b) Proxy SK by tag — fallback if no marker (old behavior, prone to pivot error).
-	//   (c) Player's current transform — last resort, will look wrong.
-	FTransform SpawnTransform;
+	//   (1) LastTutorialCineCamera — assigned in the instance Details panel.
+	//   (2) PC current view target  — auto-detected at the moment OnStop fires.
+	//       Reliable if the Camera Cut track has not yet released the camera.
+	//   (3) Player actor location   — last resort, will look wrong.
+	FVector  GhostStartLocation;
+	FRotator GhostStartRotation;
 
-	if (TutorialPlayerSpawnMarker)
+	if (LastTutorialCineCamera)
 	{
-		SpawnTransform = TutorialPlayerSpawnMarker->GetSpawnTransform();
+		GhostStartLocation = LastTutorialCineCamera->GetActorLocation();
+		GhostStartRotation = LastTutorialCineCamera->GetActorRotation();
 		UE_LOG(LogTemp, Log,
-			TEXT("ATutorialDirector: Using PlayerSpawnMarker at %s."),
-			*SpawnTransform.GetLocation().ToString());
+			TEXT("ATutorialDirector: Ghost start from assigned LastTutorialCineCamera at %s."),
+			*GhostStartLocation.ToString());
+	}
+	else if (AActor* ViewTarget = CachedPC->GetViewTarget())
+	{
+		GhostStartLocation = ViewTarget->GetActorLocation();
+		GhostStartRotation = ViewTarget->GetActorRotation();
+		UE_LOG(LogTemp, Log,
+			TEXT("ATutorialDirector: Ghost start auto-detected from PC ViewTarget (%s) at %s."),
+			*ViewTarget->GetName(), *GhostStartLocation.ToString());
 	}
 	else
 	{
+		GhostStartLocation = CachedPlayer->GetActorLocation();
+		GhostStartRotation = CachedPlayer->GetActorRotation();
 		UE_LOG(LogTemp, Warning,
-			TEXT("ATutorialDirector::OnIntroSequenceFinished — TutorialPlayerSpawnMarker is null. "
-			     "Falling back to proxy tag '%s'. Place a BP_PlayerSpawnMarker in the level "
-			     "for a correct result."),
-			*ProxyCharacterTag.ToString());
+			TEXT("ATutorialDirector: No CineCamera found. Ghost starts at player location. "
+			     "Assign LastTutorialCineCamera in the instance Details panel for best results."));
+	}
 
-		AActor* Proxy = FindCutsceneProxy();
-		if (Proxy)
+	// ── B. FIND THE SK_MANNY PROXY BY TAG ────────────────────────────────────
+	//
+	// The Spawnable SK must have:
+	//   1. Actor Tag = ProxySkeletonTag (default "SKM_Manny")
+	//   2. When Finished = Keep State
+	// This keeps it alive after OnStop so we can query its bones.
+	USkeletalMeshComponent* ProxyMesh   = nullptr;
+	AActor*                 ProxyActor  = nullptr;
+
+	if (!ProxySkeletonTag.IsNone())
+	{
+		TArray<AActor*> Tagged;
+		UGameplayStatics::GetAllActorsWithTag(GetWorld(), ProxySkeletonTag, Tagged);
+
+		if (Tagged.Num() > 0)
 		{
-			SpawnTransform = FTransform(Proxy->GetActorRotation(), Proxy->GetActorLocation());
-			Proxy->SetActorHiddenInGame(true); // hide proxy before player appears
+			ProxyActor = Tagged[0];
+			ProxyMesh  = ProxyActor->FindComponentByClass<USkeletalMeshComponent>();
+
+			UE_LOG(LogTemp, Log,
+				TEXT("ATutorialDirector: Found proxy SK '%s'."), *ProxyActor->GetName());
 		}
 		else
 		{
-			SpawnTransform = CachedPlayer->GetActorTransform();
 			UE_LOG(LogTemp, Warning,
-				TEXT("ATutorialDirector — No proxy found either. Player stays at spawn location."));
+				TEXT("ATutorialDirector::OnIntroSequenceFinished — No actor tagged '%s'. "
+				     "Camera will travel to its current position. "
+				     "Verify the Spawnable SK_Manny track has this Actor Tag in Sequencer "
+				     "AND that When Finished is set to Keep State."),
+				*ProxySkeletonTag.ToString());
 		}
 	}
 
-	// ── 2. BIND HANDOFF CALLBACK ──────────────────────────────────────────────
+	// ── C. DETERMINE CAMERA TRAVEL TARGET (head bone) ────────────────────────
 	//
-	// OnCinematicHandoffComplete fires AFTER the blend finishes. Everything
-	// that used to happen after ExecuteProxySwap() now goes in there.
+	// The ghost camera will smoothly travel to this world position over
+	// CameraBlendTime seconds. Using the head bone makes the transition
+	// arrive at the character's eyes regardless of the SK's actor pivot.
+	FVector CameraTarget;
+
+	if (ProxyMesh && ProxyMesh->DoesSocketExist(HeadBoneName))
+	{
+		CameraTarget = ProxyMesh->GetBoneLocation(HeadBoneName);
+		UE_LOG(LogTemp, Log,
+			TEXT("ATutorialDirector: Camera target = head bone '%s' at %s."),
+			*HeadBoneName.ToString(), *CameraTarget.ToString());
+	}
+	else if (ProxyActor)
+	{
+		// SK has no readable head bone — fall back to the actor's eye height.
+		CameraTarget = ProxyActor->GetActorLocation()
+		             + FVector(0.f, 0.f, CachedPlayer->BaseEyeHeight);
+		UE_LOG(LogTemp, Warning,
+			TEXT("ATutorialDirector: Head bone '%s' not found. "
+			     "Using proxy actor location + EyeHeight as fallback."),
+			*HeadBoneName.ToString());
+	}
+	else
+	{
+		// No proxy at all — camera arrives at its own current position (no travel).
+		CameraTarget = GhostStartLocation;
+		UE_LOG(LogTemp, Warning,
+			TEXT("ATutorialDirector: No proxy mesh found. Camera will not travel."));
+	}
+
+	// ── D. DETERMINE PLAYER SPAWN TRANSFORM (root bone) ──────────────────────
+	//
+	// The player pawn's actor origin sits at the capsule base (floor level).
+	// The root bone of the Manny skeleton is also at floor level.
+	// This gives us the correct foot position independent of the actor pivot.
+	FTransform PlayerSpawnTransform;
+
+	if (ProxyMesh && ProxyMesh->DoesSocketExist(RootBoneName))
+	{
+		FVector RootLoc = ProxyMesh->GetBoneLocation(RootBoneName);
+
+		// Use the proxy actor's yaw for the player's facing direction.
+		// Keep pitch and roll at 0 — the player should always start level.
+		FRotator SpawnRot(0.f, ProxyActor->GetActorRotation().Yaw, 0.f);
+
+		PlayerSpawnTransform = FTransform(SpawnRot, RootLoc, FVector::OneVector);
+
+		UE_LOG(LogTemp, Log,
+			TEXT("ATutorialDirector: Player spawn = root bone '%s' at %s, yaw %.1f."),
+			*RootBoneName.ToString(), *RootLoc.ToString(), SpawnRot.Yaw);
+	}
+	else if (ProxyActor)
+	{
+		// No root bone — use the actor's location with its yaw.
+		FRotator SpawnRot(0.f, ProxyActor->GetActorRotation().Yaw, 0.f);
+		PlayerSpawnTransform = FTransform(SpawnRot, ProxyActor->GetActorLocation());
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("ATutorialDirector: Root bone '%s' not found. Using proxy actor location."),
+			*RootBoneName.ToString());
+	}
+	else
+	{
+		// No proxy — player stays at their current (hidden) transform.
+		PlayerSpawnTransform = CachedPlayer->GetActorTransform();
+		UE_LOG(LogTemp, Warning,
+			TEXT("ATutorialDirector: No proxy found. Player will appear at PlayerStart."));
+	}
+
+	// ── E. REVEAL PERSISTENT SHIP ACTOR ──────────────────────────────────────
+	//
+	// The SHIP_1 Spawnable disappears when the sequence ends (Sequencer destroys it).
+	// We copy its final world transform to PersistentShipActor and show it,
+	// so the ship appears to stay in the world seamlessly.
+	if (PersistentShipActor)
+	{
+		// Try to copy the Spawnable ship's transform if it is still alive.
+		if (!CutsceneShipTag.IsNone())
+		{
+			TArray<AActor*> ShipActors;
+			UGameplayStatics::GetAllActorsWithTag(GetWorld(), CutsceneShipTag, ShipActors);
+
+			if (ShipActors.Num() > 0 && IsValid(ShipActors[0]))
+			{
+				PersistentShipActor->SetActorTransform(
+					ShipActors[0]->GetActorTransform(),
+					false, nullptr, ETeleportType::TeleportPhysics);
+
+				UE_LOG(LogTemp, Log,
+					TEXT("ATutorialDirector: PersistentShipActor placed at Spawnable ship transform."));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("ATutorialDirector: No actor tagged '%s'. PersistentShipActor stays at its "
+					     "level position. Place the ship manually or tag the Spawnable."),
+					*CutsceneShipTag.ToString());
+			}
+		}
+
+		PersistentShipActor->SetActorHiddenInGame(false);
+		PersistentShipActor->SetActorEnableCollision(true);
+		UE_LOG(LogTemp, Log, TEXT("ATutorialDirector: PersistentShipActor revealed."));
+	}
+
+	// ── F. BIND HANDOFF CALLBACK ──────────────────────────────────────────────
 	CinematicHandoff->OnHandoffComplete.AddUniqueDynamic(
 		this, &ATutorialDirector::OnCinematicHandoffComplete);
 
-	// ── 3. BEGIN HANDOFF ──────────────────────────────────────────────────────
+	// ── G. BEGIN HANDOFF ──────────────────────────────────────────────────────
 	//
-	// The component:
-	//   (a) Spawns a ghost camera at LastTutorialCineCamera's world transform.
-	//   (b) Snaps view to ghost (zero time — invisible).
-	//   (c) Teleports player to SpawnTransform (still hidden).
-	//   (d) Unhides player.
-	//   (e) Blends view from ghost → player over CameraBlendTime seconds.
-	//   (f) Destroys ghost. Fires OnHandoffComplete.
+	// The component will:
+	//   1. Spawn a Ghost ACameraActor at GhostStartLocation (= last CineCamera).
+	//   2. Snap PC view to ghost (zero time — image unchanged).
+	//   3. Tick every frame: travel ghost from GhostStart → CameraTarget (head bone).
+	//      Smooth-step easing, duration = CinematicHandoff->CameraBlendTime.
+	//   4. On arrival: teleport player to PlayerSpawnTransform (still hidden).
+	//      Destroy SK proxy. Unhide player. Snap PC view to player. Destroy ghost.
+	//   5. Fire OnHandoffComplete → OnCinematicHandoffComplete().
 	CinematicHandoff->BeginHandoff(
-		LastTutorialCineCamera,
 		CachedPlayer,
 		CachedPC,
-		SpawnTransform);
+		GhostStartLocation,
+		GhostStartRotation,
+		CameraTarget,
+		PlayerSpawnTransform,
+		ProxyActor);       // proxy is destroyed when ghost arrives at target
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OnCinematicHandoffComplete
-// Called after the camera blend finishes — player has full camera control.
+// Ghost reached the head bone. Player has camera control. Safe to restore input.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::OnCinematicHandoffComplete()
 {
 	if (!CachedPlayer || !CachedPC) return;
 
-	// ── 1. RESTORE MOVEMENT INPUT (soft) ──────────────────────────────────────
-	// Player can now move and look around. Survival stays off.
+	// ── 1. RESTORE MOVEMENT INPUT ─────────────────────────────────────────────
 	RestorePlayerMoveInput();
 
-	// ── 2. SWITCH TO GAME INPUT MODE ──────────────────────────────────────────
+	// ── 2. GAME INPUT MODE ───────────────────────────────────────────────────
 	FInputModeGameOnly GameMode;
 	CachedPC->SetInputMode(GameMode);
 	CachedPC->bShowMouseCursor = false;
 
 	// ── 3. SAVE CRATER TRANSFORM (position + rotation) ────────────────────────
-	//
-	// This is the transform the player starts gameplay with.
-	// We save it HERE (after handoff) so it reflects the correct spawn position
-	// from the marker, not the old PlayerStart position.
-	// The OxygenSphere boundary guard uses this to teleport the player back
-	// if they walk out of the tutorial area — restoring BOTH position AND
-	// facing direction (fixes the "wrong rotation" teleport bug).
+	// Player is now at the correct gameplay start position and facing direction.
+	// Store both so the OxygenSphere boundary guard can fully restore the player
+	// (position AND facing) if they wander outside the tutorial area.
 	CraterStartTransform = CachedPlayer->GetActorTransform();
 
 	// ── 4. WIRE BOUNDARY GUARD ────────────────────────────────────────────────
@@ -295,8 +395,7 @@ void ATutorialDirector::OnCinematicHandoffComplete()
 	}
 
 	UE_LOG(LogTemp, Log,
-		TEXT("ATutorialDirector: Intro handoff complete. "
-		     "CraterPos=%s CraterRot=%s."),
+		TEXT("ATutorialDirector: Intro handoff complete. Crater=%s Rot=%s."),
 		*CraterStartTransform.GetLocation().ToString(),
 		*CraterStartTransform.GetRotation().Rotator().ToString());
 
@@ -339,16 +438,12 @@ void ATutorialDirector::OnTeleportReadyToMove()
 {
 	if (!CachedPlayer || !CachedPC) return;
 
-	// Restore BOTH position AND rotation — fixes the "wrong facing" bug.
+	// Restore BOTH position AND rotation. Fixes the old "wrong facing" bug.
 	CachedPlayer->SetActorLocationAndRotation(
 		CraterStartTransform.GetLocation(),
 		CraterStartTransform.GetRotation().Rotator(),
-		false,
-		nullptr,
-		ETeleportType::TeleportPhysics);
+		false, nullptr, ETeleportType::TeleportPhysics);
 
-	// Also restore the control rotation so the first-person camera faces
-	// the same direction as when gameplay began.
 	CachedPC->SetControlRotation(CraterStartTransform.GetRotation().Rotator());
 
 	if (APlayerCameraManager* Cam = CachedPC->PlayerCameraManager)
@@ -477,12 +572,6 @@ void ATutorialDirector::LockPlayerInputFull()
 // ─────────────────────────────────────────────────────────────────────────────
 // Misc helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-AAlphaExilemetCharacter* ATutorialDirector::GetTutorialPlayer() const
-{
-	return Cast<AAlphaExilemetCharacter>(
-		UGameplayStatics::GetPlayerCharacter(this, 0));
-}
 
 AActor* ATutorialDirector::FindBaseCamp() const
 {

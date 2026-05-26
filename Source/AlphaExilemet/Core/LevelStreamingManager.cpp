@@ -70,6 +70,35 @@ void ULevelStreamingManager::InitializeAtMainMenu(TSubclassOf<UUserWidget> InLoa
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DIRECT PLAY (Developer PIE into any sublevel)
+//
+// Called from GM InitializeInstance when the current level is NOT L_Persistent.
+// No loading screen. No streaming. No phase set (stays EGamePhase::None).
+// Fires OnLevelTransitionComplete(Main) after one frame so all GM bindings
+// registered in InitializeInstance are already live when the event arrives.
+//
+// Result in GM:
+//   Switch on EGameLevel → Main pin → SpawnNewGamePlayer
+//   → InitializePlayer (spawns at PlayerStart, possesses)
+//   → SetupPlayerGame (creates HUD etc.)
+//   Since CurrentPhase == None, the survival SET node is skipped.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void ULevelStreamingManager::InitializeForDirectPlay()
+{
+	CurrentLevel          = EGameLevel::Main;
+	bTransitionInProgress = false;
+
+	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager: InitializeForDirectPlay — direct PIE detected. Survival will stay OFF."));
+}
+
+void ULevelStreamingManager::DirectPlayTimerCallback()
+{
+	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager: DirectPlayTimerCallback — broadcasting OnLevelTransitionComplete(Main)."));
+	OnLevelTransitionComplete.Broadcast(EGameLevel::Main);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // START NEW GAME
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -157,10 +186,12 @@ void ULevelStreamingManager::LoadSavedGame(const FString& SlotName)
 // ─────────────────────────────────────────────────────────────────────────────
 // RETURN TO MAIN MENU
 //
-// BUG FIX: Tutorial→MainMenu was showing loading screen unnecessarily because
-// the Tutorial's skull sequence already shows a black screen. We use a seamless
-// transition FROM Tutorial so no loading screen appears — the black screen IS
-// the visual cover.  From Main and portals we show the loading screen normally.
+// ALWAYS shows the loading screen regardless of which level we are leaving.
+// The loading screen appears the moment the button is pressed, covers the
+// entire level swap, and fades out once MainMenu is loaded.
+//
+// NOTE: The skull sequence black screen in Tutorial fires and FINISHES before
+// ReturnToMainMenu is ever called — there is no overlap.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ULevelStreamingManager::ReturnToMainMenu()
@@ -173,15 +204,12 @@ void ULevelStreamingManager::ReturnToMainMenu()
 
 	EGameLevel FromLevel = CurrentLevel;
 
-	// Tutorial→MainMenu: the skull black screen covers the transition.
-	// Use seamless so no second loading screen appears on top of it.
-	// Main/Portal→MainMenu: use normal loading screen.
-	bool bUseSeamless = (FromLevel == EGameLevel::Tutorial);
+	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager::ReturnToMainMenu — from '%s'."),
+		*LevelToName(FromLevel).ToString());
 
-	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager::ReturnToMainMenu — from '%s' seamless=%s."),
-		*LevelToName(FromLevel).ToString(), bUseSeamless ? TEXT("true") : TEXT("false"));
-
-	BeginTransition(EGameLevel::MainMenu, FromLevel, bUseSeamless);
+	// Always use a loading screen (bSeamless = false).
+	// This covers the camera transition and level swap from any level.
+	BeginTransition(EGameLevel::MainMenu, FromLevel, false);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -206,20 +234,20 @@ void ULevelStreamingManager::CompleteTutorialAndLoadMain()
 		Player->OnToolWielded.Broadcast(-1);
 	}
 
-	// Set phase = Main BEFORE streaming so SpawnNewGamePlayer reads it correctly.
+	// Set phase = NewGame_Tutorial BEFORE streaming so SpawnNewGamePlayer reads it correctly.
 	if (UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance()))
 	{
-		GI->CurrentPhase = EGamePhase::Main;
+		GI->CurrentPhase = EGamePhase::NewGame_Tutorial;
 		if (GI->LocalSaveRef)
 			GI->LocalSaveRef->CurrentLevelName = FName("Main");
 		GI->SavePlayerData();
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager::CompleteTutorialAndLoadMain. Phase=Main."));
+	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager::CompleteTutorialAndLoadMain. Phase=NewGame_Tutorial."));
 
 	// Tutorial→Main always shows the loading screen (covers the level swap).
 	// The skull black screen has already faded BEFORE this is called.
-	BeginTransition(EGameLevel::Main, EGameLevel::Tutorial, false);
+	BeginTransition(EGameLevel::Main, EGameLevel::Tutorial, true);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -4,9 +4,6 @@
 #include "GameFramework/Actor.h"
 #include "TutorialDirector.generated.h"
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FORWARD DECLARATIONS
-// ─────────────────────────────────────────────────────────────────────────────
 class ULevelSequencePlayer;
 class ALevelSequenceActor;
 class AAlphaExilemetCharacter;
@@ -16,33 +13,28 @@ class APlayerController;
 class UCharacterMovementComponent;
 class USkeletalMeshComponent;
 class UCinematicHandoffComponent;
-class APlayerSpawnMarker;
 class ACameraActor;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ATutorialDirector  v16
+// ATutorialDirector  v17
 //
-// Changes from v15:
-//   - CinematicHandoffComponent added.
-//     Replaces the old proxy-swap logic with a proper ghost-camera blend.
-//     The animator NO LONGER needs to position the CineCamera at the exact
-//     player head position — the component handles the blend automatically.
-//
-//   - LastTutorialCineCamera property added.
-//     Assign this to the CineCamera that is active on the sequence's LAST FRAME.
-//     The handoff component spawns a ghost camera at that exact world transform.
-//
-//   - TutorialPlayerSpawnMarker property added.
-//     A BP_PlayerSpawnMarker placed in the level at the SK's foot position on
-//     the last frame. Solves the "wrong SK pivot" problem completely.
-//
-//   - CraterStartPosition (FVector) replaced by CraterStartTransform (FTransform).
-//     Fixes the bug where the player was teleported back to the crater but
-//     faced the wrong direction because only position was saved.
-//
-//   - OnCinematicHandoffComplete() added as private callback.
-//     Everything that previously happened after ExecuteProxySwap() now runs
-//     here, after the camera blend finishes.
+// Changes from v16:
+//   - PlayerSpawnMarker REMOVED. No manual marker placement needed.
+//   - Bone-based player positioning:
+//       * SK_Manny is found by ProxySkeletonTag after sequence stops.
+//       * GetBoneLocation(HeadBoneName) → camera travel destination.
+//       * GetBoneLocation(RootBoneName) → player spawn position.
+//       Both are independent of the SK's (wrong) actor pivot.
+//   - PersistentShipActor + CutsceneShipTag added.
+//       The SHIP_1 Spawnable's transform is copied to PersistentShipActor
+//       the frame the sequence ends, then PersistentShipActor is shown.
+//       This seamlessly replaces the disappearing Spawnable ship.
+//   - CinematicHandoffComponent now travels the ghost camera FROM the last
+//       CineCamera position TOWARD the head bone (not toward the player's
+//       FP cam position). At arrival the player is placed and control is returned.
+//   - Auto-detection of last CineCamera added:
+//       If LastTutorialCineCamera is null, the component tries PC->GetViewTarget()
+//       at the moment OnStop fires.
 // ─────────────────────────────────────────────────────────────────────────────
 
 UCLASS(Abstract, Blueprintable)
@@ -62,83 +54,119 @@ public:
 	// ═════════════════════════════════════════════════════════════════════════
 
 	/**
-	 * Handles the ghost-camera blend from the sequence's last CineCamera
-	 * position to the BP_Player's FirstPersonCamera after the intro ends.
+	 * Handles the ghost-camera travel from the last CineCamera toward the
+	 * SK_Manny head bone, and the subsequent player swap.
 	 *
 	 * Configure in BP_TutorialDirector Class Defaults → Cinematic Handoff:
-	 *   CameraBlendTime  — seconds to blend (0.4–0.8 recommended)
-	 *   BlendFunction    — VTBlend_EaseInOut for most transitions
+	 *   Camera Blend Time    – seconds to travel (0.8–1.5 recommended)
+	 *   Final Snap Blend Time – 0 = instant snap at destination (preferred)
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tutorial|Components")
 	UCinematicHandoffComponent* CinematicHandoff;
 
 	// ═════════════════════════════════════════════════════════════════════════
-	// LEVEL REFERENCES — assign in the placed INSTANCE Details panel
+	// INSTANCE REFERENCES  (assign in placed Details panel — one-time setup)
 	// ═════════════════════════════════════════════════════════════════════════
 
-	/**
-	 * The LevelSequenceActor for the intro cutscene.
-	 * Assign: placed BP_TutorialDirector → Details → Tutorial|Config.
-	 */
+	/** The LevelSequenceActor for the Tutorial intro cutscene. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Config",
 		meta = (DisplayName = "Intro Sequence"))
 	ALevelSequenceActor* IntroSequenceRef = nullptr;
 
 	/**
-	 * The CineCameraActor that is ACTIVE ON THE LAST FRAME of the intro sequence.
+	 * The CineCameraActor active on LS_Tutorial's LAST FRAME.
 	 *
-	 * HOW TO FIND IT:
-	 *   1. Open LS_Tutorial in Sequencer.
-	 *   2. Scrub to the very last frame.
-	 *   3. Look at the Camera Cuts track — whichever camera is highlighted is the one.
-	 *   4. Drag it from the Outliner into this slot.
+	 * How to find it:
+	 *   Open LS_Tutorial → Sequencer. Scrub to the last frame.
+	 *   The camera highlighted in the Camera Cuts track is this one.
+	 *   Drag it from the Outliner into this slot.
 	 *
-	 * The handoff component spawns a ghost camera at this actor's EXACT world
-	 * transform, so the view is frozen seamlessly when the sequence ends.
+	 * If left null, the component tries to auto-detect via PC->GetViewTarget()
+	 * at the time OnStop fires (reliable only if the sequence hasn't released
+	 * the camera yet — assign manually for guaranteed results).
 	 */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Config",
 		meta = (DisplayName = "Last Sequence CineCamera"))
 	ACameraActor* LastTutorialCineCamera = nullptr;
 
 	/**
-	 * An APlayerSpawnMarker placed at the SK proxy's FEET on the last frame.
+	 * Level-placed persistent ship actor (hidden by default, shown when the
+	 * sequence ends to replace the disappearing SHIP_1 Spawnable).
 	 *
-	 * WHY: The animator's Spawnable SK often has an incorrect pivot point, so
-	 * we cannot derive the player's root position from the SK's actor location.
-	 * The marker is placed manually at the correct foot position.
-	 *
-	 * HOW TO PLACE:
-	 *   1. Scrub LS_Tutorial to the last frame in Sequencer.
-	 *   2. In the viewport, identify where the SK character's feet touch the ground.
-	 *   3. Place BP_PlayerSpawnMarker at that position, facing the look direction.
-	 *   4. Drag it into this slot.
-	 *
-	 * If null, falls back to the CutsceneProxy actor's transform (old behavior).
+	 * Setup:
+	 *   1. Duplicate or re-create the ship in the level at the same position
+	 *      as SHIP_1 inside the sequence — OR leave it anywhere and the script
+	 *      will copy the Spawnable's transform automatically at sequence end
+	 *      (requires CutsceneShipTag to be set on the Spawnable).
+	 *   2. Set the actor Hidden In Game in the Details panel (ticked by default).
+	 *   3. Drag it into this slot.
 	 */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Config",
-		meta = (DisplayName = "Tutorial Player Spawn Marker"))
-	APlayerSpawnMarker* TutorialPlayerSpawnMarker = nullptr;
+		meta = (DisplayName = "Persistent Ship Actor"))
+	AActor* PersistentShipActor = nullptr;
 
 	/**
-	 * Optional cinecam actor to snap to BEFORE the sequence plays, to avoid
-	 * a 1-frame first-person flash. Leave null if the Camera Cut track handles it.
+	 * Optional cinecam to snap to BEFORE the sequence plays, preventing a
+	 * 1-frame FP-camera flash. Leave null if the Camera Cuts track handles it.
 	 */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Config",
-		meta = (DisplayName = "Cinecam Actor (Pre-Sequence)"))
+		meta = (DisplayName = "Pre-Sequence Cinecam"))
 	AActor* TutorialCineCamRef = nullptr;
 
-	/** BP_Pickaxe class to spawn when the handoff finishes. Set in Class Defaults. */
+	// ═════════════════════════════════════════════════════════════════════════
+	// CLASS DEFAULTS  (set once in BP_TutorialDirector Class Defaults)
+	// ═════════════════════════════════════════════════════════════════════════
+
+	/** BP_Pickaxe class to spawn when the handoff finishes. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config")
 	TSubclassOf<AToolBase> TutorialPickaxeClass;
 
 	/**
-	 * Actor tag used to find the animator's Spawnable proxy SK in the sequence.
-	 * Only used as a FALLBACK if TutorialPlayerSpawnMarker is null.
-	 * Default: "CutsceneProxy".
+	 * Actor tag on the SKM_Manny Spawnable in the Tutorial sequence.
+	 *
+	 * REQUIRED SETUP (one-time, done in Sequencer):
+	 *   1. In LS_Tutorial, select the SKM_Manny track header.
+	 *   2. In the Details panel, expand "Actor Tags" and add: "SKM_Manny"
+	 *      (or whatever value you set here).
+	 *   3. Also set "When Finished" to "Keep State" on that track.
+	 *      This keeps the actor alive when OnStop fires so we can query bones.
+	 *
+	 * Default: "SKM_Manny"
 	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config",
-		meta = (DisplayName = "Proxy Character Tag (Fallback)"))
-	FName ProxyCharacterTag = FName("CutsceneProxy");
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config|Tags",
+		meta = (DisplayName = "Proxy Skeleton Tag"))
+	FName ProxySkeletonTag = FName("SKM_Manny");
+
+	/**
+	 * Actor tag on the SHIP_1 Spawnable in the Tutorial sequence.
+	 * Used to copy its world transform to PersistentShipActor at sequence end.
+	 *
+	 * If no tag is found the PersistentShipActor is shown at its current
+	 * level position (you must place it manually in that case).
+	 *
+	 * Default: "CutsceneShip"
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config|Tags",
+		meta = (DisplayName = "Cutscene Ship Tag"))
+	FName CutsceneShipTag = FName("CutsceneShip");
+
+	/**
+	 * Name of the head bone in the proxy SK.
+	 * The ghost camera travels to this bone's world position.
+	 * Standard Manny skeleton: "head"
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config|Bones",
+		meta = (DisplayName = "Head Bone Name"))
+	FName HeadBoneName = FName("head");
+
+	/**
+	 * Name of the root/feet bone in the proxy SK.
+	 * The player pawn is placed at this bone's world position.
+	 * Standard Manny skeleton: "root"  (sits at floor level)
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial|Config|Bones",
+		meta = (DisplayName = "Root Bone Name"))
+	FName RootBoneName = FName("root");
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// RUNTIME STATE
@@ -148,14 +176,10 @@ public:
 	ULevelSequencePlayer* IntroSequencePlayer = nullptr;
 
 	/**
-	 * Player's world transform at the moment gameplay begins after the intro.
-	 * Saved AFTER the handoff blend completes so it includes position + rotation.
-	 *
-	 * Used by the OxygenSphere boundary guard: if the player exits the safe zone
-	 * they are teleported back HERE (position AND facing direction restored).
-	 *
-	 * Replaces the old CraterStartPosition (FVector) — fixes the bug where the
-	 * player was teleported back facing the wrong direction.
+	 * Player's world transform at the start of gameplay (after handoff).
+	 * Stored as FTransform so BOTH position AND facing direction are saved.
+	 * The OxygenSphere boundary guard teleports the player here (with rotation)
+	 * if they walk too far — fixes the old "wrong facing" bug.
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tutorial|Runtime")
 	FTransform CraterStartTransform;
@@ -167,7 +191,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tutorial|Runtime")
 	APlayerController* CachedPC = nullptr;
 
-	/** Set in BP BeginPlay via GetActorOfClass(ASkullProp) → SET SkullRef. */
+	/** Set in BP BeginPlay via GetActorOfClass(ASkullProp). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Tutorial|Skull")
 	ASkullProp* SkullRef = nullptr;
 
@@ -184,7 +208,7 @@ public:
 
 	/**
 	 * Called by ASkullProp::HandleInteract().
-	 * Timing: 0.0s flicker + SFX → 5.5s skull stops → 6.0s input lock + black
+	 * 0.0s flicker + SFX → 5.5s skull stops → 6.0s input lock + black
 	 * → 7.0s explosion SFX → 10.0s Tutorial→Main swap.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Tutorial|Skull")
@@ -198,15 +222,15 @@ protected:
 	// BLUEPRINT IMPLEMENTABLE EVENTS
 	// ═════════════════════════════════════════════════════════════════════════
 
-	/** Called at END of C++ BeginPlay. Push self-reference to GM. */
+	/** Push self-reference to GM (called at end of C++ BeginPlay). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Events")
 	void BP_RegisterWithGameMode();
 
-	/** Hide player's main HUD. */
+	/** Hide player's main HUD widget. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Events")
 	void BP_HideHUD();
 
-	/** Handoff blend finished. Create + Add WBP_TutorialOverlay to viewport. */
+	/** Handoff complete. Create + Add WBP_TutorialOverlay to viewport. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Events")
 	void BP_OnIntroFinished();
 
@@ -214,41 +238,25 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Skull")
 	void BP_PlayMagicSpellSound();
 
-	/**
-	 * Create WBP_TutorialBlackout → Add to Viewport (ZOrder 99).
-	 * Two nodes: Create widget → Add to Viewport.
-	 */
+	/** Create WBP_TutorialBlackout → Add to Viewport (ZOrder 99). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Skull")
 	void BP_ShowInstantBlack();
 
-	/** Play explosion SFX at ship location. Guard with IsValid(ExplosionSpawnRef). */
+	/** Play explosion SFX. Guard with IsValid(ExplosionSpawnRef). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tutorial|Skull")
 	void BP_PlayExplosionSequence();
 
 private:
-	// ═════════════════════════════════════════════════════════════════════════
-	// INTERNAL HELPERS
-	// ═════════════════════════════════════════════════════════════════════════
-
-	// -- Cutscene setup --
+	// ── Cutscene ──────────────────────────────────────────────────────────────
 	void HidePlayerForCutscene();
 
-	// -- Cutscene end --
 	UFUNCTION()
 	void OnIntroSequenceFinished();
 
-	/**
-	 * Called by CinematicHandoff::OnHandoffComplete after the camera blend ends.
-	 * This is where everything that used to follow ExecuteProxySwap() now lives:
-	 * restore input, save crater transform, wire boundary, spawn pickaxe, show UI.
-	 */
 	UFUNCTION()
 	void OnCinematicHandoffComplete();
 
-	// -- Fallback proxy handling (used only when TutorialPlayerSpawnMarker is null) --
-	AActor* FindCutsceneProxy() const;
-
-	// -- Boundary guard --
+	// ── Boundary guard ────────────────────────────────────────────────────────
 	UFUNCTION()
 	void OnOxygenSphereEndOverlap(
 		UPrimitiveComponent* OverlappedComp,
@@ -256,27 +264,25 @@ private:
 		UPrimitiveComponent* OtherComp,
 		int32                OtherBodyIndex);
 
-	// -- Teleport sequence (boundary violation) --
 	void ExecuteTeleportToCrater();
 	void OnTeleportReadyToMove();
 	void OnTeleportComplete();
 
-	// -- Skull sequence --
+	// ── Skull sequence ────────────────────────────────────────────────────────
 	void OnSpellDurationComplete();
 	void OnSkullPausedBeforeBlack();
 	void OnPostBlackDelay();
 	void OnLevelSwapReady();
 
-	// -- Input --
+	// ── Input ─────────────────────────────────────────────────────────────────
 	void SuppressPlayerMoveInput();
 	void RestorePlayerMoveInput();
 	void LockPlayerInputFull();
 
-	// -- Misc --
-	AAlphaExilemetCharacter* GetTutorialPlayer() const;
+	// ── Misc ──────────────────────────────────────────────────────────────────
 	AActor*                  FindBaseCamp() const;
 
-	// -- Timer handles --
+	// ── Timers ────────────────────────────────────────────────────────────────
 	FTimerHandle TeleportFadeOutHandle;
 	FTimerHandle TeleportFadeInHandle;
 	FTimerHandle SpellDurationHandle;

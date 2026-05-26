@@ -22,8 +22,9 @@ bool UAlphaExilemetGameInstance::DoesSaveExist(FString SlotName)
 
 void UAlphaExilemetGameInstance::CreateNewGame(FString SlotName)
 {
-	CurrentSaveSlot = SlotName;
-	CurrentPhase    = EGamePhase::NewGame_Tutorial;
+	CurrentSaveSlot         = SlotName;
+	CurrentPhase            = EGamePhase::NewGame_Tutorial;
+	bWakeUpSequencePlayed   = false;
 
 	LocalSaveRef = Cast<UAlphaExilemetSaveGame>(
 		UGameplayStatics::CreateSaveGameObject(UAlphaExilemetSaveGame::StaticClass()));

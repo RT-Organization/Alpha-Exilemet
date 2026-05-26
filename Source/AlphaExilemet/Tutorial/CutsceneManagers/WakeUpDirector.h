@@ -9,26 +9,16 @@ class ALevelSequenceActor;
 class AAlphaExilemetCharacter;
 class APlayerController;
 class UCinematicHandoffComponent;
-class APlayerSpawnMarker;
 class ACameraActor;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AWakeUpDirector  v2
+// AWakeUpDirector  v3
 //
-// Changes from v1:
-//   - CinematicHandoffComponent added (same component as TutorialDirector).
-//     The old instant camera handoff in OnWakeUpSequenceFinished() is replaced
-//     by the ghost-camera blend system for a seamless transition.
-//
-//   - LastWakeUpCineCamera property added.
-//     Assign the CineCamera active on the wake-up sequence's last frame.
-//
-//   - WakeUpPlayerSpawnMarker property added.
-//     A BP_PlayerSpawnMarker placed at the SK's feet on the last frame of the
-//     wake-up cutscene. Solves the same SK pivot-offset problem as Tutorial.
-//
-//   - OnWakeUpHandoffComplete() added as the callback that fires when the blend
-//     finishes. Survival, input, and HUD are enabled from there.
+// Changes from v2:
+//   - PlayerSpawnMarker REMOVED. Uses bone-based positioning (same as TutorialDirector v17).
+//   - ProxySkeletonTag + HeadBoneName + RootBoneName added.
+//   - CinematicHandoffComponent now travels ghost FROM last CineCamera TO head bone.
+//   - LastWakeUpCineCamera auto-detected via PC->GetViewTarget() if not assigned.
 // ─────────────────────────────────────────────────────────────────────────────
 
 UCLASS(Abstract, Blueprintable)
@@ -47,68 +37,67 @@ public:
 	// COMPONENTS
 	// ═════════════════════════════════════════════════════════════════════════
 
-	/**
-	 * Handles the ghost-camera blend from the wake-up sequence's last CineCamera
-	 * position to the BP_Player's FirstPersonCamera.
-	 *
-	 * Configure in BP_WakeUpDirector Class Defaults → Cinematic Handoff:
-	 *   CameraBlendTime  — seconds to blend (0.4–0.8 recommended)
-	 *   BlendFunction    — VTBlend_EaseInOut for most transitions
-	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WakeUp|Components")
 	UCinematicHandoffComponent* CinematicHandoff;
 
 	// ═════════════════════════════════════════════════════════════════════════
-	// LEVEL REFERENCES — assign in the placed INSTANCE Details panel
+	// INSTANCE REFERENCES  (assign in placed Details panel)
 	// ═════════════════════════════════════════════════════════════════════════
 
-	/**
-	 * The LevelSequenceActor for the wake-up cutscene in the Main level.
-	 * Assign once: select placed BP_WakeUpDirector → Details → WakeUp|Config.
-	 */
+	/** The LevelSequenceActor for the wake-up cutscene in the Main level. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
 		meta = (DisplayName = "Wake Up Sequence"))
 	ALevelSequenceActor* WakeUpSequenceRef = nullptr;
 
 	/**
-	 * The CineCameraActor active on the LAST FRAME of the wake-up sequence.
-	 *
-	 * HOW TO FIND IT:
-	 *   1. Open the wake-up LevelSequence in Sequencer.
-	 *   2. Scrub to the last frame.
-	 *   3. The camera highlighted in the Camera Cuts track is the one.
-	 *   4. Drag it here from the Outliner.
-	 *
-	 * The handoff component spawns a ghost camera at this actor's exact world
-	 * transform so the view is frozen seamlessly when the sequence ends.
+	 * The CineCameraActor active on the wake-up sequence's LAST FRAME.
+	 * If null, auto-detected from PC->GetViewTarget() when OnStop fires.
 	 */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
 		meta = (DisplayName = "Last Sequence CineCamera"))
 	ACameraActor* LastWakeUpCineCamera = nullptr;
 
 	/**
-	 * A BP_PlayerSpawnMarker placed at the SK proxy's FEET on the last frame
-	 * of the wake-up cutscene.
-	 *
-	 * Same placement workflow as TutorialDirector:
-	 *   1. Scrub the wake-up sequence to the last frame.
-	 *   2. Place the marker at the SK's foot contact point on the ground.
-	 *   3. Rotate the forward arrow toward where the player should look.
-	 *   4. Drag it here.
-	 *
-	 * If null, falls back to the current player transform (will look wrong).
+	 * Optional cinecam to snap to BEFORE the sequence plays.
+	 * Leave null if the Camera Cuts track handles the first frame.
 	 */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
-		meta = (DisplayName = "Wake Up Player Spawn Marker"))
-	APlayerSpawnMarker* WakeUpPlayerSpawnMarker = nullptr;
+		meta = (DisplayName = "Pre-Sequence Cinecam"))
+	AActor* WakeUpCineCamRef = nullptr;
+
+	// ═════════════════════════════════════════════════════════════════════════
+	// CLASS DEFAULTS  (set once in BP_WakeUpDirector Class Defaults)
+	// ═════════════════════════════════════════════════════════════════════════
 
 	/**
-	 * Optional cinecam to snap to BEFORE the sequence plays, avoiding a
-	 * 1-frame FP flash. Leave null if the Camera Cut track handles it.
+	 * Actor tag on the SK_Manny Spawnable in the wake-up sequence.
+	 *
+	 * REQUIRED SETUP (one-time):
+	 *   1. In the wake-up LevelSequence, select the SK_Manny track.
+	 *   2. Details → Actor Tags → add this tag (e.g. "SKM_WakeUp").
+	 *   3. Set "When Finished" to "Keep State" on that track.
+	 *
+	 * Default: "SKM_WakeUp"
 	 */
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
-		meta = (DisplayName = "Cinecam Actor (Pre-Sequence)"))
-	AActor* WakeUpCineCamRef = nullptr;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config|Tags",
+		meta = (DisplayName = "Proxy Skeleton Tag"))
+	FName ProxySkeletonTag = FName("SKM_WakeUp");
+
+	/**
+	 * Name of the head bone. Ghost camera travels to this bone's world position.
+	 * Standard Manny: "head"
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config|Bones",
+		meta = (DisplayName = "Head Bone Name"))
+	FName HeadBoneName = FName("head");
+
+	/**
+	 * Name of the root/feet bone. Player pawn is placed at this bone's world position.
+	 * Standard Manny: "root"
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config|Bones",
+		meta = (DisplayName = "Root Bone Name"))
+	FName RootBoneName = FName("root");
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// RUNTIME STATE
@@ -128,13 +117,8 @@ public:
 	// ═════════════════════════════════════════════════════════════════════════
 
 	/**
-	 * Called by GM_SimulatorGamemode inside SpawnNewGamePlayer,
-	 * ONLY when transitioning from Tutorial (CurrentLevel == Tutorial).
-	 *
-	 * GM BP check:
-	 *   [WakeUpDirectorRef → Is Valid]
-	 *     True  → [InitializeWakeUp (Target = WakeUpDirectorRef)]
-	 *     False → skip (loaded game)
+	 * Called by GM_SimulatorGamemode after the Tutorial→Main transition.
+	 * GM BP: [WakeUpDirectorRef → Is Valid] → [InitializeWakeUp]
 	 */
 	UFUNCTION(BlueprintCallable, Category = "WakeUp")
 	void InitializeWakeUp();
@@ -144,20 +128,14 @@ protected:
 	// BLUEPRINT IMPLEMENTABLE EVENTS
 	// ═════════════════════════════════════════════════════════════════════════
 
-	/**
-	 * Called at END of C++ BeginPlay. Push self-reference to GM.
-	 *
-	 *   [Event BP_RegisterWithGameMode]
-	 *     → [Get Game Mode → Cast To GM_SimulatorGamemode]
-	 *     → [SET WakeUpDirectorRef (Value = Self)]
-	 */
+	/** Push self-reference to GM. Called at end of C++ BeginPlay. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "WakeUp|Events")
 	void BP_RegisterWithGameMode();
 
 	/**
-	 * Called after the camera handoff blend finishes — player has full control.
-	 * Use to: show HUD, remove WB_TutorialBlackout, play ambient audio, etc.
-	 * Survival is already enabled by the time this fires.
+	 * Called after camera handoff blend completes.
+	 * Show HUD, play ambient audio, trigger ship terminal warning, etc.
+	 * Survival is already ON when this fires.
 	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "WakeUp|Events")
 	void BP_OnWakeUpComplete();
@@ -166,10 +144,6 @@ private:
 	UFUNCTION()
 	void OnWakeUpSequenceFinished();
 
-	/**
-	 * Fires when the CinematicHandoff blend completes.
-	 * Enables survival, restores input, signals the blackout widget, calls BP_OnWakeUpComplete.
-	 */
 	UFUNCTION()
 	void OnWakeUpHandoffComplete();
 };
