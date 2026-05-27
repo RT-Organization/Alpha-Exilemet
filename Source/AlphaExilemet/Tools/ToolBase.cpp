@@ -7,12 +7,13 @@
 AToolBase::AToolBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
+    
+	StaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+	RootComponent = StaticMeshComp;
+	Mesh = StaticMeshComp;
 	
-	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	RootComponent = Mesh;
-	
-	Mesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
-	Mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	StaticMeshComp->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+	StaticMeshComp->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 }
 
 void AToolBase::BeginPlay()
@@ -99,22 +100,22 @@ void AToolBase::StartMaterialize()
 	{
 		Mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
 	}
-
+	
 	TArray<UMeshComponent*> MeshComponents;
 	GetComponents<UMeshComponent>(MeshComponents);
-
+	
 	for (UMeshComponent* Comp : MeshComponents)
 	{
-		if (Comp)
+		// Skip the inactive component — it has no materials assigned and is hidden.
+		if (!Comp || Comp->bHiddenInGame) continue;
+		
+		FMaterialCache MatCache;
+		for (int32 i = 0; i < Comp->GetNumMaterials(); ++i)
 		{
-			FMaterialCache MatCache;
-			for (int32 i = 0; i < Comp->GetNumMaterials(); ++i)
-			{
-				MatCache.Materials.Add(Comp->GetMaterial(i));
-				Comp->SetMaterial(i, MaterializeMaterial);
-			}
-			CachedMaterials.Add(Comp, MatCache);
+			MatCache.Materials.Add(Comp->GetMaterial(i));
+			Comp->SetMaterial(i, MaterializeMaterial);
 		}
+		CachedMaterials.Add(Comp, MatCache);
 	}
 }
 
@@ -125,10 +126,8 @@ void AToolBase::UpdateMaterialize(float Alpha)
 	
 	for (UMeshComponent* Comp : MeshComponents)
 	{
-		if (Comp)
-		{
-			Comp->SetScalarParameterValueOnMaterials(FName("Disolve"), Alpha);
-		}
+		if (!Comp || Comp->bHiddenInGame) continue;
+		Comp->SetScalarParameterValueOnMaterials(FName("Disolve"), Alpha);
 	}
 }
 
@@ -138,7 +137,7 @@ void AToolBase::FinishMaterialize()
 	{
 		UMeshComponent* Comp = Pair.Key;
 		FMaterialCache& MatCache = Pair.Value;
-
+		
 		if (Comp)
 		{
 			for (int32 i = 0; i < MatCache.Materials.Num(); ++i)

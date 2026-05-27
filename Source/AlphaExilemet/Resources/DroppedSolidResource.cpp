@@ -4,6 +4,7 @@
 #include "AlphaExilemet/AlphaExilemetCharacter.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 
 ADroppedSolidResource::ADroppedSolidResource()
@@ -19,10 +20,19 @@ ADroppedSolidResource::ADroppedSolidResource()
 	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> Effect(
 		TEXT("/Game/AlphaExilemet/VFX/FXS_Warp.FXS_Warp")
 	);
-
+	
 	if (Effect.Succeeded())
 	{
 		ObtainEffect = Effect.Object;
+	}
+	
+	static ConstructorHelpers::FObjectFinder<USoundBase> Sound(
+		TEXT("/Game/AlphaExilemet/SFX/XFX/Base/Spatial/ElectricWarp.ElectricWarp")
+	);
+
+	if (Sound.Succeeded())
+	{
+		ObtainSound = Sound.Object;
 	}
 }
 
@@ -72,6 +82,15 @@ void ADroppedSolidResource::Interact_Implementation(AAlphaExilemetCharacter* Int
 					);
 				}
 			}
+		}
+		
+		if (ObtainSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(
+				this,
+				ObtainSound,
+				GetActorLocation()
+			);
 		}
 		
 		Destroy();

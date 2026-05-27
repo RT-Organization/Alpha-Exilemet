@@ -91,7 +91,7 @@ void AResourceBase::RegenerateResource()
 void AResourceBase::DepleteResource()
 {
 	bIsDepleted = true;
-		
+	
 	SetActorHiddenInGame(true);
 	SetActorEnableCollision(false);
 }

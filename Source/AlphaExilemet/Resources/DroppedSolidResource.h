@@ -5,6 +5,7 @@
 #include "Engine/DataTable.h"
 #include "AlphaExilemet/Interfaces/Interactable.h"
 #include "NiagaraSystem.h"
+#include "Sound/SoundBase.h"
 #include "DroppedSolidResource.generated.h"
 
 class AAlphaExilemetCharacter;
@@ -26,6 +27,9 @@ protected:
 	
 	UPROPERTY()
 	UNiagaraSystem* ObtainEffect;
+	
+	UPROPERTY()
+	USoundBase* ObtainSound;
 public:
 	void InitDroppedResource(UStaticMesh* InMesh, FDataTableRowHandle InID);
 
