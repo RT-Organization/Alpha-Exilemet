@@ -11,6 +11,9 @@
 #include "AlphaExilemet/AlphaExilemetCharacter.h"
 #include "AlphaExilemet/Tools/ToolBase.h"
 #include "AlphaExilemet/Core/AlphaExilemetSaveGame.h"
+#include "Camera/CameraActor.h"
+#include "Camera/PlayerCameraManager.h"
+#include "CineCameraActor.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UTILITY — Level Name Conversion
@@ -440,6 +443,20 @@ void ULevelStreamingManager::OnBothConditionsMet()
 		*LevelToName(CurrentLevel).ToString(),
 		bSeamlessTransition ? TEXT(" [SEAMLESS]") : TEXT(""));
 
+	// When returning to MainMenu, the PlayerCameraManager still has the stale
+	// first-person camera settings from the destroyed player pawn (FOV, rotation
+	// mode, etc.). Simply calling SetViewTarget is not enough — the camera manager
+	// continues to run in FPS mode and produces a black screen.
+	//
+	// Fix: reset the camera manager to a neutral state, then explicitly force the
+	// view target to the CineCameraActor placed in the MainMenu level. This must
+	// happen BEFORE HideLoadingScreen so the correct view is ready the instant the
+	// loading screen fades out.
+	if (CurrentLevel == EGameLevel::MainMenu)
+	{
+		ForceCameraToMainMenuCineCamera();
+	}
+
 	if (!bSeamlessTransition)
 		HideLoadingScreen();
 
@@ -447,6 +464,60 @@ void ULevelStreamingManager::OnBothConditionsMet()
 	bSeamlessTransition   = false;
 
 	OnLevelTransitionComplete.Broadcast(CurrentLevel);
+}
+
+void ULevelStreamingManager::ForceCameraToMainMenuCineCamera()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	if (!PC) return;
+
+	// Find the CineCameraActor in the loaded MainMenu level.
+	// It lives in the MainMenu sublevel, so we iterate streaming levels.
+	ACineCameraActor* CineCam = nullptr;
+
+	// First try GetActorOfClass — works if the actor is in the persistent level
+	// or if the level is already fully visible.
+	TArray<AActor*> FoundActors;
+	UGameplayStatics::GetAllActorsOfClass(World, ACineCameraActor::StaticClass(), FoundActors);
+	if (FoundActors.Num() > 0)
+	{
+		CineCam = Cast<ACineCameraActor>(FoundActors[0]);
+	}
+
+	if (!CineCam)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("LevelStreamingManager::ForceCameraToMainMenuCineCamera — no CineCameraActor found."));
+		return;
+	}
+
+	// 1. Reset the PlayerCameraManager to remove any stale FPS state.
+	//    SetViewTarget with a new actor triggers ApplyCameraModifiers and
+	//    resets the view info through the camera manager pipeline.
+	if (APlayerCameraManager* CamMgr = PC->PlayerCameraManager)
+	{
+		// Force-flush the camera manager's cached view by setting it to the
+		// CineCam location/rotation directly. This overwrites the stale FPS data.
+		FMinimalViewInfo ViewInfo;
+		ViewInfo.Location = CineCam->GetActorLocation();
+		ViewInfo.Rotation = CineCam->GetActorRotation();
+		ViewInfo.FOV      = 90.0f; // default — CineCam will override this next frame
+		CamMgr->SetDesiredColorScale(FVector(1, 1, 1), 0.0f);
+
+		// Lock the camera manager's last frame info to the CineCam position
+		// so there is no interpolation artefact on the first visible frame.
+		CamMgr->FillCameraCache(ViewInfo);
+	}
+
+	// 2. Set the actual view target — the camera manager will now follow CineCam.
+	PC->SetViewTargetWithBlend(CineCam, 0.0f);
+
+	UE_LOG(LogTemp, Log,
+		TEXT("LevelStreamingManager: camera forced to CineCameraActor '%s'."),
+		*CineCam->GetName());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -487,12 +558,9 @@ void ULevelStreamingManager::ShowLoadingScreen()
 		return;
 	}
 
-	UUserWidget* NewScreen = nullptr;
 	APlayerController* PC = World->GetFirstPlayerController();
-	if (PC)
-		NewScreen = CreateWidget<UUserWidget>(PC, LoadingScreenClass);
-	else
-		NewScreen = CreateWidget<UUserWidget>(World, LoadingScreenClass);
+	UUserWidget* NewScreen = PC ? CreateWidget<UUserWidget>(PC, LoadingScreenClass) 
+								: CreateWidget<UUserWidget>(World, LoadingScreenClass);
 
 	if (!NewScreen)
 	{

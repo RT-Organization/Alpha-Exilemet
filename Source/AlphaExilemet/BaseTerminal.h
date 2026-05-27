@@ -11,29 +11,37 @@ class UBoxComponent;
 // ABaseTerminal  v3
 //
 // Changes from v2:
-//   - Close-lock system added.
-//     When bRequiresConfirmation = true (set in subclass Class Defaults),
-//     the terminal CANNOT be closed until ConfirmAndCloseTerminal() is called.
 //
-//     BP_OnTerminalViewReady → WBP_ShipTerminal::CheckIfNewGame finds a new game
-//     → calls BlockTerminalClose() on the terminal → shows WB_ShipRepairWarning.
+//   CLOSE-LOCK SYSTEM:
+//     bCloseBlocked (bool) — set to true by BlockTerminalClose().
+//     TryStopTerminalInteraction() — the new close entry point called by BP_Player.
+//       • If bCloseBlocked → fires BP_OnClosureBlocked (denied SFX etc.), does nothing else.
+//       • If not blocked   → calls StopTerminalInteraction normally.
+//     BlockTerminalClose()         — called by WBP_ShipTerminal after showing warning.
+//     ConfirmAndCloseTerminal()    — called by WB_ShipRepairWarning OK button.
+//       • Clears bCloseBlocked.
+//       • Fires BP_OnConfirmationReceived (stop alarm in BP_ShipTerminal).
+//       • Starts the camera blend back (StopTerminalInteraction).
 //
-//     OK button on WB_ShipRepairWarning → calls ConfirmAndCloseTerminal() on the
-//     terminal → alarm stops → camera blends back → BP_OnTerminalClosed fires.
+//   BP_OnTerminalClosed (new BlueprintImplementableEvent):
+//     Fires in RestoreInput() — camera has FULLY returned, player has control.
+//     Implement in BP_BaseTerminal EventGraph to:
+//       • Remove Active Widget from parent.
+//       • SET Active Terminal = None on BP_Player.
+//       • Show Player HUD.
+//       • Set Input Mode Game Only.
+//     This REPLACES the old CloseTerminal custom event logic entirely.
 //
-//     If the player tries to close before confirming, TryStopTerminalInteraction()
-//     does NOT close and calls BP_OnClosureBlocked() so you can play a denied SFX
-//     or shake the UI.
+//   BP_Player INTERACT changes (see guide):
+//     OLD: Is Valid(ActiveTerminal) → True → CloseTerminal (custom event on terminal)
+//     NEW: Is Valid(ActiveTerminal) → True → TryStopTerminalInteraction(Self)
+//     The CloseTerminal custom event in BP_BaseTerminal can be DELETED.
 //
-//   - BP_OnTerminalClosed() added.
-//     Fires in RestoreInput() (after the blend-out finishes, player has full
-//     control again). Use this in WBP_ShipTerminal to Remove from Parent.
-//
-//   - AlarmControllerClass / AlarmControllerRef removed from here intentionally.
-//     The terminal does NOT know about alarms directly — it calls
-//     BP_OnConfirmationReceived() so the Blueprint subclass (BP_ShipTerminal)
-//     can grab the alarm controller from the GM and call StopAlarm().
-//     This keeps the base class clean and alarm-agnostic.
+// WHAT DOES NOT CHANGE (backward compat):
+//   • Interact_Implementation — identical.
+//   • StopTerminalInteraction — still exists and is the real camera-blend function.
+//   • BP_OnTerminalViewReady — identical.
+//   • OpenTerminalPanel function — no change needed (but see guide for TerminalRef).
 // ─────────────────────────────────────────────────────────────────────────────
 
 UCLASS()
@@ -57,7 +65,9 @@ protected:
 	class AAlphaExilemetCharacter* CurrentInteractor;
 	
 public:
-	// ── COMPONENTS ────────────────────────────────────────────────────────────
+	// ═════════════════════════════════════════════════════════════════════════
+	// COMPONENTS
+	// ═════════════════════════════════════════════════════════════════════════
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Terminal")
 	UBoxComponent* InteractionBox;
@@ -74,123 +84,148 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Terminal|Camera")
 	float CameraBlendTime = 0.5f;
 
-	// ── INTERACTION LOCK ──────────────────────────────────────────────────────
+	// ═════════════════════════════════════════════════════════════════════════
+	// INTERACTION LOCK
+	// ═════════════════════════════════════════════════════════════════════════
 
 	/**
 	 * True while the camera is blending in or out.
-	 * CanBeInteractedWith() returns false during this time.
-	 * Set true on interaction start, false on RestoreInput.
+	 * CanBeInteractedWith() returns false → interaction prompt hidden.
+	 * Set true on Interact_Implementation, false on RestoreInput.
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Terminal")
 	bool bIsInteracting = false;
 
-	// ── CONFIRMATION LOCK ─────────────────────────────────────────────────────
+	// ═════════════════════════════════════════════════════════════════════════
+	// CONFIRMATION LOCK
+	// ═════════════════════════════════════════════════════════════════════════
 
 	/**
-	 * Set this to TRUE in the Blueprint subclass (e.g. BP_ShipTerminal) Class Defaults
-	 * if this terminal requires a confirmation step before the player can close it.
-	 *
-	 * When true:
-	 *   - TryStopTerminalInteraction() will BLOCK closing and call BP_OnClosureBlocked().
-	 *   - Only ConfirmAndCloseTerminal() bypasses the lock and closes the terminal.
-	 *   - BlockTerminalClose() resets the per-session flag (call when the warning appears).
-	 *
-	 * When false (default):
-	 *   - TryStopTerminalInteraction() behaves exactly like StopTerminalInteraction().
-	 *   - No change to existing terminals.
+	 * Set TRUE in BP_ShipTerminal Class Defaults (the only terminal that
+	 * requires a confirmation before closing).
+	 * All other terminal subclasses leave this false — they close normally.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Terminal|Confirmation")
 	bool bRequiresConfirmation = false;
 
 	/**
-	 * Runtime flag — true while the terminal is waiting for the player to confirm.
-	 * Reset each time the terminal is opened (in OnBlendComplete).
+	 * Runtime flag — true while the terminal is waiting for the player to
+	 * click OK on the warning widget.
+	 * Set by BlockTerminalClose().
 	 * Cleared by ConfirmAndCloseTerminal().
+	 * Reset to false every time the camera blend completes (OnBlendComplete)
+	 * so a fresh open always starts unlocked.
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Terminal|Confirmation")
 	bool bCloseBlocked = false;
 
-	// ── INTERACTABLE INTERFACE ────────────────────────────────────────────────
+	// ═════════════════════════════════════════════════════════════════════════
+	// INTERACTABLE INTERFACE
+	// ═════════════════════════════════════════════════════════════════════════
 
 	virtual bool CanBeInteractedWith_Implementation() const override;
 	virtual void Interact_Implementation(class AAlphaExilemetCharacter* Interactor) override;
 
-	// ── PUBLIC INTERFACE ──────────────────────────────────────────────────────
+	// ═════════════════════════════════════════════════════════════════════════
+	// PUBLIC INTERFACE
+	// ═════════════════════════════════════════════════════════════════════════
 
 	/**
-	 * Call from WBP_ShipTerminal when the confirmation warning appears.
-	 * Sets bCloseBlocked = true so the back button is locked.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Terminal|Confirmation")
-	void BlockTerminalClose();
-
-	/**
-	 * The SAFE close function — use this everywhere instead of StopTerminalInteraction.
+	 * THE ONLY close function that should be called from BP_Player Interact.
 	 *
-	 * - If bRequiresConfirmation = false  →  closes normally (same as before).
-	 * - If bRequiresConfirmation = true AND bCloseBlocked = true
-	 *       →  does NOT close; calls BP_OnClosureBlocked() (play denied SFX here).
-	 * - If bRequiresConfirmation = true AND bCloseBlocked = false
-	 *       →  closes normally (confirmation was already given earlier this session).
+	 * If bRequiresConfirmation = false  →  closes normally (unchanged behavior).
+	 * If bRequiresConfirmation = true AND bCloseBlocked = true
+	 *     →  does NOT close; fires BP_OnClosureBlocked.
+	 * If bRequiresConfirmation = true AND bCloseBlocked = false
+	 *     →  closes normally (confirmation was already given).
 	 *
-	 * Wire this to your back/close button in WBP_ShipTerminal.
+	 * BP_Player wiring (replace old CloseTerminal call):
+	 *   Is Valid (ActiveTerminal)
+	 *     → True → TryStopTerminalInteraction (Target = ActiveTerminal, Interactor = Self)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Terminal|Interaction")
 	void TryStopTerminalInteraction(class AAlphaExilemetCharacter* Interactor);
 
 	/**
-	 * Called by WB_ShipRepairWarning OK button.
-	 * Clears the close block, fires BP_OnConfirmationReceived (stop alarm there),
-	 * then begins the camera blend back to the player.
+	 * Called by WBP_ShipTerminal::CheckIfNewGame after showing the warning widget.
+	 * Locks the terminal so TryStopTerminalInteraction is blocked.
 	 *
-	 * Wire: WB_ShipRepairWarning → On Clicked (OK Button)
-	 *         → Get Owning Actor → Cast To ABaseTerminal
-	 *         → ConfirmAndCloseTerminal(Interactor)
+	 * WBP_ShipTerminal wiring (in CheckIfNewGame, after Add to Viewport):
+	 *   GET TerminalRef → Cast to ABaseTerminal → BlockTerminalClose
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Terminal|Confirmation")
+	void BlockTerminalClose();
+
+	/**
+	 * Called by WB_ShipRepairWarning OK button.
+	 * Order of operations (all in one frame, before the blend timer):
+	 *   1. Clears bCloseBlocked.
+	 *   2. Fires BP_OnConfirmationReceived (stop alarm in BP_ShipTerminal).
+	 *   3. Starts the camera blend back to the player.
+	 *
+	 * WB_ShipRepairWarning OK button wiring:
+	 *   → Save Player Data (Game Instance)
+	 *   → Remove from Parent (self — warning widget only)
+	 *   → Get Owning Player Pawn → Cast to BP_Player → GET ActiveTerminal
+	 *   → Cast to ABaseTerminal
+	 *   → Get Owning Player Pawn → Cast to AAlphaExilemetCharacter (= Interactor)
+	 *   → ConfirmAndCloseTerminal (Target = terminal, Interactor = character)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Terminal|Confirmation")
 	void ConfirmAndCloseTerminal(class AAlphaExilemetCharacter* Interactor);
 
 	/**
-	 * Direct close — bypasses all locks.
-	 * Keep this for programmatic closes (level transition cleanup, death, etc.)
-	 * Do NOT wire this to UI buttons — use TryStopTerminalInteraction instead.
+	 * Direct / programmatic close — bypasses ALL locks.
+	 * Use ONLY for: level transitions, player death, emergency cleanup.
+	 * Do NOT wire this to any UI button.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Terminal|Interaction")
 	void StopTerminalInteraction(class AAlphaExilemetCharacter* Interactor);
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 
-	// ── BLUEPRINT EVENTS ──────────────────────────────────────────────────────
+	// ═════════════════════════════════════════════════════════════════════════
+	// BLUEPRINT IMPLEMENTABLE EVENTS
+	// ═════════════════════════════════════════════════════════════════════════
 
-	/** Camera blend-in done — show your UI here. */
+	/**
+	 * Camera blend-in complete — show terminal widget here.
+	 * Already wired in BP_BaseTerminal (calls OpenTerminalPanel).
+	 * No change needed.
+	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Terminal|Events")
 	void BP_OnTerminalViewReady(class AAlphaExilemetCharacter* Interactor);
 
 	/**
-	 * Player tried to close the terminal while bCloseBlocked = true.
-	 * Play a denied sound or shake the UI here.
-	 * Example: Play Sound 2D (SW_UI_Denied) or Play Animation (ShakeAnim).
+	 * Player tried to close while bCloseBlocked = true.
+	 * Implement in BP_ShipTerminal:
+	 *   → Play Sound 2D (SW_Invalid_Act)   ← you already have this
 	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Terminal|Events")
 	void BP_OnClosureBlocked();
 
 	/**
-	 * Fires when ConfirmAndCloseTerminal() is called — BEFORE the camera blends back.
-	 * Use this to: Stop the alarm, remove WB_ShipRepairWarning from parent, etc.
-	 *
-	 * Example BP implementation:
-	 *   [Get Game Mode → Cast → Get AlarmControllerRef → Is Valid]
-	 *     → True → [StopAlarm (Target = AlarmControllerRef)]
+	 * OK button was confirmed — fires BEFORE the camera starts blending back.
+	 * Implement in BP_ShipTerminal:
+	 *   → Get Game Mode → Cast → GET ShipRef → Is Valid → StopAlarm
+	 * You already have this wired correctly (Image 6). No change needed.
 	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Terminal|Events")
 	void BP_OnConfirmationReceived();
 
 	/**
-	 * Fires in RestoreInput() — camera has fully returned, player has full control.
-	 * Use this to Remove from Parent on the terminal UI widget.
+	 * Camera blend-out COMPLETE — player has full control again.
+	 * This fires at the SAFE moment to remove the terminal widget from viewport.
 	 *
-	 * Example BP implementation:
-	 *   [Remove from Parent (Target = TerminalWidgetRef)]
+	 * Implement in BP_BaseTerminal EventGraph (REPLACES the old CloseTerminal
+	 * custom event body):
+	 *   → Is Valid (ActiveWidget)
+	 *       → True → Remove from Parent (Target = ActiveWidget)
+	 *                SET ActiveWidget = None
+	 *   → SET Active Terminal = None     (on BP_Player via PlayerRef)
+	 *   → SetPlayerHUD (In Visibility = Visible)   ← your existing Macro
+	 *   → Set Input Mode Game Only
+	 *       (Get Player Controller → Player Controller pin)
 	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Terminal|Events")
 	void BP_OnTerminalClosed();

@@ -1,26 +1,42 @@
-#include "AlarmController.h"
+#include "ShipActor.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/LightComponent.h"
 #include "TimerManager.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Constructor / BeginPlay
+// Constructor
 // ─────────────────────────────────────────────────────────────────────────────
 
-AAlarmController::AAlarmController()
+AShipActor::AShipActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
+
+	// Exterior hull — skeletal for animations (hatch, struts, engine exhaust).
+	ExteriorMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("ExteriorMesh"));
+	RootComponent = ExteriorMesh;
+
+	// Interior — static mesh parented to the exterior so it moves with the ship.
+	InteriorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("InteriorMesh"));
+	InteriorMesh->SetupAttachment(RootComponent);
 }
 
-void AAlarmController::BeginPlay()
+// ─────────────────────────────────────────────────────────────────────────────
+// BeginPlay
+// ─────────────────────────────────────────────────────────────────────────────
+
+void AShipActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Make sure lights start OFF — the alarm hasn't been triggered yet.
-	// We also cache their original intensities here so StopAlarm can restore them.
+	// Cache original light intensities BEFORE we turn them off.
+	// This guarantees StopAlarm restores the exact designer-set values.
 	CacheOriginalIntensities();
+
+	// Lights start OFF — alarm hasn't been triggered yet.
 	SetAllLightsIntensity(0.f);
 
-	// Register self with the GameMode so it can hold AlarmControllerRef.
+	// Register with GameMode so GM.ShipRef is valid immediately.
 	BP_RegisterWithGameMode();
 }
 
@@ -28,62 +44,71 @@ void AAlarmController::BeginPlay()
 // StartAlarm
 // ─────────────────────────────────────────────────────────────────────────────
 
-void AAlarmController::StartAlarm()
+void AShipActor::StartAlarm()
 {
-	if (bAlarmActive) return; // already running — ignore double calls
+	if (bAlarmActive)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("AShipActor [%s]::StartAlarm — already active, ignored."), *GetName());
+		return;
+	}
+
 	bAlarmActive = true;
 
-	UE_LOG(LogTemp, Log, TEXT("AAlarmController::StartAlarm — alarm pulse started."));
-
-	// Start with the light ON so the player sees it immediately.
+	// First pulse is ON so the player sees the light immediately.
 	PulseOn();
 
 	BP_OnAlarmStarted();
+
+	UE_LOG(LogTemp, Log, TEXT("AShipActor [%s]: alarm started."), *GetName());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // StopAlarm
 // ─────────────────────────────────────────────────────────────────────────────
 
-void AAlarmController::StopAlarm()
+void AShipActor::StopAlarm()
 {
-	if (!bAlarmActive) return; // nothing to stop
-	bAlarmActive      = false;
-	bAlarmEverStopped = true;
+	if (!bAlarmActive)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("AShipActor [%s]::StopAlarm — alarm was not active, ignored."), *GetName());
+		return;
+	}
 
-	// Kill any pending pulse timer.
+	bAlarmActive = false;
+
+	// Kill the pending pulse timer — no more flashes.
 	GetWorld()->GetTimerManager().ClearTimer(PulseTimerHandle);
 
-	// Restore lights to their original intensities (as set by the designer).
-	for (int32 i = 0; i < AlarmActors.Num(); ++i)
+	// Restore every light to its original designer-set intensity.
+	for (int32 i = 0; i < AlarmLights.Num(); ++i)
 	{
-		if (!AlarmActors[i]) continue;
-		if (ULightComponent* LC = AlarmActors[i]->FindComponentByClass<ULightComponent>())
+		if (!AlarmLights[i]) continue;
+		if (ULightComponent* LC = AlarmLights[i]->FindComponentByClass<ULightComponent>())
 		{
-			LC->SetIntensity(OriginalIntensities.IsValidIndex(i)
+			const float RestoreIntensity = OriginalIntensities.IsValidIndex(i)
 				? OriginalIntensities[i]
-				: 0.f);
+				: 0.f;
+			LC->SetIntensity(RestoreIntensity);
 		}
 	}
 
-	bLightsCurrentlyOn = false;
-
-	UE_LOG(LogTemp, Log, TEXT("AAlarmController::StopAlarm — alarm stopped, lights restored."));
-
 	BP_OnAlarmStopped();
+
+	UE_LOG(LogTemp, Log, TEXT("AShipActor [%s]: alarm stopped, lights restored."), *GetName());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CacheOriginalIntensities
-// Called once in BeginPlay before we turn lights off.
+// CacheOriginalIntensities — called once in BeginPlay
 // ─────────────────────────────────────────────────────────────────────────────
 
-void AAlarmController::CacheOriginalIntensities()
+void AShipActor::CacheOriginalIntensities()
 {
 	OriginalIntensities.Empty();
-	OriginalIntensities.Reserve(AlarmActors.Num());
+	OriginalIntensities.Reserve(AlarmLights.Num());
 
-	for (AActor* Actor : AlarmActors)
+	for (AActor* Actor : AlarmLights)
 	{
 		float Intensity = 0.f;
 		if (Actor)
@@ -99,45 +124,37 @@ void AAlarmController::CacheOriginalIntensities()
 // Pulse helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-void AAlarmController::PulseOn()
+void AShipActor::PulseOn()
 {
 	if (!bAlarmActive) return;
 
 	SetAllLightsIntensity(AlarmIntensity);
-	bLightsCurrentlyOn = true;
 
-	// Schedule the OFF phase.
 	GetWorld()->GetTimerManager().SetTimer(
 		PulseTimerHandle,
 		this,
-		&AAlarmController::PulseOff,
+		&AShipActor::PulseOff,
 		PulseOnTime,
 		false);
 }
 
-void AAlarmController::PulseOff()
+void AShipActor::PulseOff()
 {
 	if (!bAlarmActive) return;
 
 	SetAllLightsIntensity(0.f);
-	bLightsCurrentlyOn = false;
 
-	// Schedule the ON phase.
 	GetWorld()->GetTimerManager().SetTimer(
 		PulseTimerHandle,
 		this,
-		&AAlarmController::PulseOn,
+		&AShipActor::PulseOn,
 		PulseOffTime,
 		false);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SetAllLightsIntensity
-// ─────────────────────────────────────────────────────────────────────────────
-
-void AAlarmController::SetAllLightsIntensity(float Intensity)
+void AShipActor::SetAllLightsIntensity(float Intensity)
 {
-	for (AActor* Actor : AlarmActors)
+	for (AActor* Actor : AlarmLights)
 	{
 		if (!Actor) continue;
 		if (ULightComponent* LC = Actor->FindComponentByClass<ULightComponent>())

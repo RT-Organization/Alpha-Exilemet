@@ -1,7 +1,6 @@
 #include "BaseTerminal.h"
 #include "Components/BoxComponent.h"
 #include "Camera/CameraComponent.h"
-#include "Camera/PlayerCameraManager.h"
 #include "TimerManager.h"
 #include "AlphaExilemetCharacter.h"
 
@@ -30,7 +29,7 @@ void ABaseTerminal::BeginPlay()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CanBeInteractedWith
+// CanBeInteractedWith — hides prompt during camera blend
 // ─────────────────────────────────────────────────────────────────────────────
 
 bool ABaseTerminal::CanBeInteractedWith_Implementation() const
@@ -69,47 +68,48 @@ void ABaseTerminal::Interact_Implementation(AAlphaExilemetCharacter* Interactor)
 
 void ABaseTerminal::OnBlendComplete()
 {
-	// Reset the close block each time the terminal is freshly opened.
-	// This ensures a clean state if the player somehow re-enters.
-	if (bRequiresConfirmation)
-		bCloseBlocked = false;
+	// Always reset the close block on a fresh open so there's no stale state
+	// if the player somehow re-enters (e.g. after a non-confirmation close).
+	bCloseBlocked = false;
 
 	BP_OnTerminalViewReady(CurrentInteractor);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BlockTerminalClose
-// Call from WBP_ShipTerminal when the warning widget is shown.
+// Called by WBP_ShipTerminal after showing the warning widget.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ABaseTerminal::BlockTerminalClose()
 {
 	bCloseBlocked = true;
-	UE_LOG(LogTemp, Log, TEXT("ABaseTerminal [%s]: close blocked — waiting for confirmation."),
+	UE_LOG(LogTemp, Log,
+		TEXT("ABaseTerminal [%s]: close blocked — waiting for player confirmation."),
 		*GetName());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TryStopTerminalInteraction
-// The SAFE close — use on every UI back/close button.
+// Called by BP_Player when the Interact key is pressed and ActiveTerminal is valid.
+// Replaces the old "CloseTerminal" custom event call from BP_Player.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ABaseTerminal::TryStopTerminalInteraction(AAlphaExilemetCharacter* Interactor)
 {
-	// If this terminal doesn't require confirmation, behave exactly as before.
+	// Terminals that don't need confirmation always close freely.
 	if (!bRequiresConfirmation)
 	{
 		StopTerminalInteraction(Interactor);
 		return;
 	}
 
-	// Requires confirmation — check if we're still blocked.
+	// Needs confirmation — check if still blocked.
 	if (bCloseBlocked)
 	{
-		// Tell the BP it was denied — play a sound, shake the UI, etc.
+		// Tell BP to play a denied sound, shake UI, etc.
 		BP_OnClosureBlocked();
 		UE_LOG(LogTemp, Log,
-			TEXT("ABaseTerminal [%s]: close attempt BLOCKED — player must confirm warning first."),
+			TEXT("ABaseTerminal [%s]: close DENIED — warning not confirmed yet."),
 			*GetName());
 		return;
 	}
@@ -120,28 +120,27 @@ void ABaseTerminal::TryStopTerminalInteraction(AAlphaExilemetCharacter* Interact
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ConfirmAndCloseTerminal
-// Called by WB_ShipRepairWarning OK button.
+// Called by WB_ShipRepairWarning OK button via BP_Player.ActiveTerminal.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ABaseTerminal::ConfirmAndCloseTerminal(AAlphaExilemetCharacter* Interactor)
 {
-	// Clear the lock — confirmation has been given.
+	// 1. Clear the lock.
 	bCloseBlocked = false;
 
-	UE_LOG(LogTemp, Log,
-		TEXT("ABaseTerminal [%s]: confirmation received — closing terminal."),
-		*GetName());
-
-	// Tell BP to stop the alarm, remove the warning widget, etc.
-	// This fires BEFORE the camera starts blending so BP can clean up UI first.
+	// 2. Notify BP — stop alarm here (BP_ShipTerminal already has this wired).
 	BP_OnConfirmationReceived();
 
-	// Now begin the camera blend back to the player.
+	// 3. Begin camera blend back. RestoreInput fires at the end, then
+	//    BP_OnTerminalClosed fires to safely remove the widget.
 	StopTerminalInteraction(Interactor);
+
+	UE_LOG(LogTemp, Log,
+		TEXT("ABaseTerminal [%s]: confirmed — starting close sequence."), *GetName());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// StopTerminalInteraction  (direct / programmatic close — unchanged from v2)
+// StopTerminalInteraction — starts camera blend back to player
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ABaseTerminal::StopTerminalInteraction(AAlphaExilemetCharacter* Interactor)
@@ -163,6 +162,10 @@ void ABaseTerminal::StopTerminalInteraction(AAlphaExilemetCharacter* Interactor)
 	}
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RestoreInput — fires after blend-out completes
+// ─────────────────────────────────────────────────────────────────────────────
+
 void ABaseTerminal::RestoreInput()
 {
 	if (!CurrentInteractor) return;
@@ -174,9 +177,11 @@ void ABaseTerminal::RestoreInput()
 		PC->SetIgnoreLookInput(false);
 	}
 
+	// Unlock interaction prompt.
 	bIsInteracting = false;
 
-	// Camera is fully back — player has control — safe to remove UI.
+	// Camera is fully back — safe to remove widgets now.
+	// BP_BaseTerminal EventGraph implements this (replaces CloseTerminal custom event body).
 	BP_OnTerminalClosed();
 }
 

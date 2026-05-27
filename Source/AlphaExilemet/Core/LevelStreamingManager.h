@@ -336,5 +336,13 @@ private:
 
 	// Player cleanup helpers
 	void DestroyPlayerPawn();
+
+	/**
+	 * Forces the PlayerController's view target to the CineCameraActor in the
+	 * MainMenu level and resets the PlayerCameraManager's stale FPS state.
+	 * Called from OnBothConditionsMet when CurrentLevel == MainMenu.
+	 * This is the fix for the black screen when returning from Tutorial→MainMenu.
+	 */
+	void ForceCameraToMainMenuCineCamera();
 	class AAlphaExilemetCharacter* GetLocalPlayer() const;
 };
