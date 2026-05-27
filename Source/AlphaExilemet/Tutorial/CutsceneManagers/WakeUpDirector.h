@@ -12,13 +12,12 @@ class UCinematicHandoffComponent;
 class ACameraActor;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AWakeUpDirector  v3
+// AWakeUpDirector  v4 — identical pattern to TutorialDirector v18
 //
-// Changes from v2:
-//   - PlayerSpawnMarker REMOVED. Uses bone-based positioning (same as TutorialDirector v17).
-//   - ProxySkeletonTag + HeadBoneName + RootBoneName added.
-//   - CinematicHandoffComponent now travels ghost FROM last CineCamera TO head bone.
-//   - LastWakeUpCineCamera auto-detected via PC->GetViewTarget() if not assigned.
+// - No Actor Tags, no Sequencer Binding Tags.
+// - Proxy found via GetBoundObjects() + ProxyMeshNameHint.
+// - OnStop deferred by one tick to let Sequencer finish teardown.
+// - Black bars cleared by CinematicHandoffComponent.
 // ─────────────────────────────────────────────────────────────────────────────
 
 UCLASS(Abstract, Blueprintable)
@@ -33,75 +32,41 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
-	// ═════════════════════════════════════════════════════════════════════════
-	// COMPONENTS
-	// ═════════════════════════════════════════════════════════════════════════
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WakeUp|Components")
 	UCinematicHandoffComponent* CinematicHandoff;
 
-	// ═════════════════════════════════════════════════════════════════════════
-	// INSTANCE REFERENCES  (assign in placed Details panel)
-	// ═════════════════════════════════════════════════════════════════════════
+	// ── INSTANCE REFERENCES ───────────────────────────────────────────────────
 
-	/** The LevelSequenceActor for the wake-up cutscene in the Main level. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
 		meta = (DisplayName = "Wake Up Sequence"))
 	ALevelSequenceActor* WakeUpSequenceRef = nullptr;
 
-	/**
-	 * The CineCameraActor active on the wake-up sequence's LAST FRAME.
-	 * If null, auto-detected from PC->GetViewTarget() when OnStop fires.
-	 */
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
-		meta = (DisplayName = "Last Sequence CineCamera"))
-	ACameraActor* LastWakeUpCineCamera = nullptr;
-
-	/**
-	 * Optional cinecam to snap to BEFORE the sequence plays.
-	 * Leave null if the Camera Cuts track handles the first frame.
-	 */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
 		meta = (DisplayName = "Pre-Sequence Cinecam"))
 	AActor* WakeUpCineCamRef = nullptr;
 
-	// ═════════════════════════════════════════════════════════════════════════
-	// CLASS DEFAULTS  (set once in BP_WakeUpDirector Class Defaults)
-	// ═════════════════════════════════════════════════════════════════════════
+	// ── CLASS DEFAULTS ────────────────────────────────────────────────────────
 
 	/**
-	 * Actor tag on the SK_Manny Spawnable in the wake-up sequence.
-	 *
-	 * REQUIRED SETUP (one-time):
-	 *   1. In the wake-up LevelSequence, select the SK_Manny track.
-	 *   2. Details → Actor Tags → add this tag (e.g. "SKM_WakeUp").
-	 *   3. Set "When Finished" to "Keep State" on that track.
-	 *
-	 * Default: "SKM_WakeUp"
+	 * Partial name used to find the SK_Manny Spawnable via GetBoundObjects().
+	 * No tags required. Leave empty to use the first bound SK actor found.
+	 * Default: "SKM_Manny"
 	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config|Tags",
-		meta = (DisplayName = "Proxy Skeleton Tag"))
-	FName ProxySkeletonTag = FName("SKM_WakeUp");
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config",
+		meta = (DisplayName = "Proxy Mesh Name Hint"))
+	FString ProxyMeshNameHint = TEXT("SKM_Manny");
 
-	/**
-	 * Name of the head bone. Ghost camera travels to this bone's world position.
-	 * Standard Manny: "head"
-	 */
+	/** Head bone — ghost camera travels here. Standard Manny: "head" */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config|Bones",
 		meta = (DisplayName = "Head Bone Name"))
 	FName HeadBoneName = FName("head");
 
-	/**
-	 * Name of the root/feet bone. Player pawn is placed at this bone's world position.
-	 * Standard Manny: "root"
-	 */
+	/** Root bone — player pawn placed here. Standard Manny: "root" */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config|Bones",
 		meta = (DisplayName = "Root Bone Name"))
 	FName RootBoneName = FName("root");
 
-	// ═════════════════════════════════════════════════════════════════════════
-	// RUNTIME STATE
-	// ═════════════════════════════════════════════════════════════════════════
+	// ── RUNTIME STATE ─────────────────────────────────────────────────────────
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WakeUp|Runtime")
 	ULevelSequencePlayer* WakeUpSequencePlayer = nullptr;
@@ -112,38 +77,24 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WakeUp|Runtime")
 	APlayerController* CachedPC = nullptr;
 
-	// ═════════════════════════════════════════════════════════════════════════
-	// PUBLIC INTERFACE
-	// ═════════════════════════════════════════════════════════════════════════
+	// ── PUBLIC INTERFACE ──────────────────────────────────────────────────────
 
-	/**
-	 * Called by GM_SimulatorGamemode after the Tutorial→Main transition.
-	 * GM BP: [WakeUpDirectorRef → Is Valid] → [InitializeWakeUp]
-	 */
 	UFUNCTION(BlueprintCallable, Category = "WakeUp")
 	void InitializeWakeUp();
 
 protected:
-	// ═════════════════════════════════════════════════════════════════════════
-	// BLUEPRINT IMPLEMENTABLE EVENTS
-	// ═════════════════════════════════════════════════════════════════════════
-
-	/** Push self-reference to GM. Called at end of C++ BeginPlay. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "WakeUp|Events")
 	void BP_RegisterWithGameMode();
 
-	/**
-	 * Called after camera handoff blend completes.
-	 * Show HUD, play ambient audio, trigger ship terminal warning, etc.
-	 * Survival is already ON when this fires.
-	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "WakeUp|Events")
 	void BP_OnWakeUpComplete();
 
 private:
-	UFUNCTION()
-	void OnWakeUpSequenceFinished();
+	UFUNCTION() void OnWakeUpSequenceFinished();
+	void             OnWakeUpSequenceFinishedDeferred();
+	UFUNCTION() void OnWakeUpHandoffComplete();
 
-	UFUNCTION()
-	void OnWakeUpHandoffComplete();
+	USkeletalMeshComponent* FindProxyMeshInSequence(AActor*& OutProxyActor) const;
+
+	FTimerHandle DeferredSequenceEndHandle;
 };

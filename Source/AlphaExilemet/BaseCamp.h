@@ -7,6 +7,13 @@
 
 class USphereComponent;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Delegates — fired when the player enters or exits the oxygen bubble.
+// ShipActor binds to these to drive its open/close animation.
+// ─────────────────────────────────────────────────────────────────────────────
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPlayerEnteredCamp);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPlayerExitedCamp);
+
 UCLASS()
 class ALPHAEXILEMET_API ABaseCamp : public AActor
 {
@@ -16,32 +23,40 @@ public:
 	ABaseCamp();
 	
 protected:
-	// -------------------------------------------------------------------------
-	// ENGINE OVERRIDES
-	// -------------------------------------------------------------------------
 	virtual void BeginPlay() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 public:
-	// -------------------------------------------------------------------------
-	// COMPONENTS
-	// -------------------------------------------------------------------------
-	// Sphere defining the oxygen regeneration area
+	// ── COMPONENTS ────────────────────────────────────────────────────────────
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Base|Components")
 	USphereComponent* OxygenSphere;
 
-	// Radius in world units for oxygen regeneration
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Base|Components")
 	float OxygenRegenRadius;
 
-	// -------------------------------------------------------------------------
-	// SHIP REPAIR PROGRESSION
-	// -------------------------------------------------------------------------
-	// Maps the Ship System to its current repair level
+	// ── PROXIMITY DELEGATES ───────────────────────────────────────────────────
+
+	/**
+	 * Fired when the player's capsule enters the OxygenSphere.
+	 * ShipActor binds to this in its BeginPlay to trigger the open animation.
+	 * You can also bind to this in BP for any other "player is home" logic.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "Base|Events")
+	FOnPlayerEnteredCamp OnPlayerEnteredCamp;
+
+	/**
+	 * Fired when the player's capsule exits the OxygenSphere.
+	 * ShipActor binds to this to trigger the close animation.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "Base|Events")
+	FOnPlayerExitedCamp OnPlayerExitedCamp;
+
+	// ── SHIP REPAIR PROGRESSION ───────────────────────────────────────────────
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Base|Ship Repairs")
 	TMap<EShipSystem, int32> ShipRepairLevels;
 
-	// Progression Structs for easy Editor tweaking
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Base|Ship Repairs|Progression")
 	FStatProgression ScrubberProgression;
 
@@ -57,7 +72,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Base|Ship Repairs|Progression")
 	FStatProgression RefinerProgression;
 
-	// Core Upgrade Methods
 	UFUNCTION(BlueprintPure, Category = "Base|Ship Repairs")
 	int32 GetShipSystemLevel(EShipSystem SystemID);
 
@@ -67,13 +81,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Base|Ship Repairs")
 	void ApplyShipUpgrades();
 	
-	// Called to sync the visual Forcefield with the physical sphere
 	UFUNCTION(BlueprintImplementableEvent, Category = "Base|Ship Repairs")
 	void BP_UpdateForcefieldRadius(float NewRadius);
 	
-	// -------------------------------------------------------------------------
-	// SHOP PROGRESSION / UNLOCKS
-	// -------------------------------------------------------------------------
+	// ── SHOP PROGRESSION / UNLOCKS ─────────────────────────────────────────
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Base|Shop Unlocks")
 	TArray<EToolType> UnlockedTools;
 
@@ -93,12 +105,12 @@ public:
 	void UnlockSpecialItem(ESpecialItem ItemID);
 
 protected:
-	// -------------------------------------------------------------------------
-	// EVENT HANDLERS
-	// -------------------------------------------------------------------------
 	UFUNCTION()
-	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
+		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+		bool bFromSweep, const FHitResult& SweepResult);
 
 	UFUNCTION()
-	void OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+	void OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
+		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 };

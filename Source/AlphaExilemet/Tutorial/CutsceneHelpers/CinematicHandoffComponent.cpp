@@ -6,10 +6,10 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "TimerManager.h"
 
 UCinematicHandoffComponent::UCinematicHandoffComponent()
 {
-	// Tick is OFF by default. Enabled only while the ghost is travelling.
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 }
@@ -37,42 +37,46 @@ void UCinematicHandoffComponent::BeginHandoff(
 	if (!Player || !PC)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("UCinematicHandoffComponent::BeginHandoff — Player or PC is null. "
+			TEXT("UCinematicHandoffComponent::BeginHandoff — Player or PC null. "
 			     "Firing OnHandoffComplete as immediate fallback."));
 		OnHandoffComplete.Broadcast();
 		return;
 	}
 
 	UWorld* World = GetWorld();
-	if (!World)
-	{
-		UE_LOG(LogTemp, Error, TEXT("UCinematicHandoffComponent::BeginHandoff — no World."));
-		return;
-	}
+	if (!World) return;
 
-	// ── CACHE STATE ───────────────────────────────────────────────────────────
-	bHandoffInProgress  = true;
-	CachedPlayer        = Player;
-	CachedPC            = PC;
-	PendingPlayerSpawn  = PlayerSpawnTransform;
-	PendingProxyToDestroy = ProxyActorToDestroy;
+	bHandoffInProgress      = true;
+	CachedPlayer            = Player;
+	CachedPC                = PC;
+	PendingPlayerSpawn      = PlayerSpawnTransform;
+	PendingProxyToDestroy   = ProxyActorToDestroy;
+	TravelElapsed           = 0.0f;
 
 	// ── TRAVEL PARAMETERS ─────────────────────────────────────────────────────
 	TravelStartPos  = GhostStartLocation;
 	TravelEndPos    = CameraTargetLocation;
 	TravelStartQuat = GhostStartRotation.Quaternion();
-	TravelElapsed   = 0.0f;
 
-	// The ghost's END rotation: look in the direction the player will face
-	// (yaw of PlayerSpawnTransform), pitch = 0 so the player starts looking level.
-	FRotator EndRot(0.0f, PlayerSpawnTransform.GetRotation().Rotator().Yaw, 0.0f);
+	// End rotation: look toward the player's intended facing direction, pitch=0.
+	FRotator EndRot(0.f, PlayerSpawnTransform.GetRotation().Rotator().Yaw, 0.f);
 	TravelEndQuat = EndRot.Quaternion();
 
+	// ── CLEAR SEQUENCER'S CINEMATIC BLACK BARS ─────────────────────────────────
+	// When the Level Sequence ends its CineCamera track, the player's FP camera
+	// still has bConstrainAspectRatio inherited from the CineCamera's post-process
+	// settings. This is what causes the black bars after the handoff.
+	// Clear it now before we switch view targets.
+	if (UCameraComponent* FPCam = Player->FindComponentByClass<UCameraComponent>())
+	{
+		FPCam->bConstrainAspectRatio = false;
+		FPCam->PostProcessSettings.bOverride_VignetteIntensity = false;
+	}
+
 	// ── SPAWN GHOST CAMERA AT LAST CINECAMERA POSITION ────────────────────────
-	//
-	// The ghost is placed at the exact world transform of the last-active
-	// CineCamera. Snapping the PC view target to it (zero blend time) is
-	// INVISIBLE because the image is identical to the sequence's last frame.
+	// The ghost sits at the exact same world position + rotation as the sequence's
+	// last frame. Snapping the PC view here (zero blend) is INVISIBLE because
+	// the rendered image is identical to what the sequence was showing.
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	SpawnParams.Name = TEXT("CinematicHandoff_Ghost");
@@ -85,66 +89,64 @@ void UCinematicHandoffComponent::BeginHandoff(
 	if (!GhostCamera)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("UCinematicHandoffComponent::BeginHandoff — Ghost camera failed to spawn. "
+			TEXT("UCinematicHandoffComponent::BeginHandoff — Ghost spawn failed. "
 			     "Firing OnHandoffComplete as fallback."));
 		bHandoffInProgress = false;
 		OnHandoffComplete.Broadcast();
 		return;
 	}
 
-	// Freeze the view at the sequence's last frame.
-	// Zero blend time = instant snap. Image does not change at all.
+	// Make sure the ghost camera has no black bars either.
+	if (UCameraComponent* GhostCam = GhostCamera->FindComponentByClass<UCameraComponent>())
+	{
+		GhostCam->bConstrainAspectRatio = false;
+	}
+
+	// Snap PC view to ghost — image on screen does not change at all.
 	PC->SetViewTargetWithBlend(GhostCamera, 0.0f);
 
-	// ── ENABLE TICK → START TRAVEL ────────────────────────────────────────────
+	// ── SAFETY TIMER ──────────────────────────────────────────────────────────
+	// If the handoff never completes (race condition, no proxy, etc.) this fires
+	// after SafetyInputRestoreDelay seconds and forces the player to be playable.
+	World->GetTimerManager().SetTimer(
+		SafetyHandle,
+		this,
+		&UCinematicHandoffComponent::SafetyRestoreInput,
+		SafetyInputRestoreDelay,
+		false);
+
+	// ── START TRAVELLING ──────────────────────────────────────────────────────
 	SetComponentTickEnabled(true);
 
 	UE_LOG(LogTemp, Log,
-		TEXT("UCinematicHandoffComponent: Ghost spawned. "
-		     "Travelling %.2fs from %s → %s (head bone)."),
-		CameraBlendTime,
-		*GhostStartLocation.ToString(),
-		*CameraTargetLocation.ToString());
+		TEXT("UCinematicHandoffComponent: Ghost at %s. Travelling %.2fs → %s (head bone)."),
+		*GhostStartLocation.ToString(), CameraBlendTime, *CameraTargetLocation.ToString());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TickComponent — moves the ghost toward the head bone every frame
+// TickComponent — smooth ghost travel every frame
 // ─────────────────────────────────────────────────────────────────────────────
 
 void UCinematicHandoffComponent::TickComponent(
-	float DeltaTime,
-	ELevelTick TickType,
+	float DeltaTime, ELevelTick TickType,
 	FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	if (!bHandoffInProgress || !GhostCamera) return;
 
-	// Advance time, clamp to total duration.
 	TravelElapsed = FMath::Min(TravelElapsed + DeltaTime, CameraBlendTime);
 
-	// Normalized alpha [0, 1].
-	const float Alpha = (CameraBlendTime > KINDA_SMALL_NUMBER)
-		? (TravelElapsed / CameraBlendTime)
-		: 1.0f;
-
-	// Smooth-step for a cinematic ease-in / ease-out feel.
-	// SmoothStep: slow start, fast middle, slow arrival — matches how AAA games
-	// approach camera-to-character transitions.
-	const float Smooth = FMath::SmoothStep(0.0f, 1.0f, Alpha);
-
-	// Lerp position.
-	const FVector NewPos = FMath::Lerp(TravelStartPos, TravelEndPos, Smooth);
-
-	// Slerp rotation (shortest arc, no gimbal lock).
-	const FQuat NewQuat = FQuat::Slerp(TravelStartQuat, TravelEndQuat, Smooth);
+	const float Alpha  = (CameraBlendTime > KINDA_SMALL_NUMBER)
+	                   ? (TravelElapsed / CameraBlendTime) : 1.f;
+	const float Smooth = FMath::SmoothStep(0.f, 1.f, Alpha); // ease-in / ease-out
 
 	GhostCamera->SetActorLocationAndRotation(
-		NewPos, NewQuat.Rotator(),
+		FMath::Lerp(TravelStartPos, TravelEndPos, Smooth),
+		FQuat::Slerp(TravelStartQuat, TravelEndQuat, Smooth).Rotator(),
 		false, nullptr, ETeleportType::TeleportPhysics);
 
-	// Arrival check.
-	if (Alpha >= 1.0f)
+	if (Alpha >= 1.f)
 	{
 		SetComponentTickEnabled(false);
 		OnArrivalAtTarget();
@@ -153,46 +155,39 @@ void UCinematicHandoffComponent::TickComponent(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OnArrivalAtTarget
-// Ghost has reached the SK_Manny head bone position. Hand off to the player.
+// Ghost reached the head bone. Place player, unhide, switch view.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void UCinematicHandoffComponent::OnArrivalAtTarget()
 {
+	// Cancel the safety timer — we made it in time.
+	if (UWorld* World = GetWorld())
+		World->GetTimerManager().ClearTimer(SafetyHandle);
+
 	if (!CachedPlayer || !CachedPC)
 	{
-		UE_LOG(LogTemp, Error,
-			TEXT("UCinematicHandoffComponent::OnArrivalAtTarget — CachedPlayer or CachedPC null."));
 		if (GhostCamera) { GhostCamera->Destroy(); GhostCamera = nullptr; }
 		bHandoffInProgress = false;
 		OnHandoffComplete.Broadcast();
 		return;
 	}
 
-	// ── 1. TELEPORT PLAYER TO ROOT BONE POSITION ──────────────────────────────
-	//
-	// Player is still hidden. The ghost camera is at the head bone.
-	// We place the player at the root bone position with the correct yaw.
-	// The FP camera (attached to the head socket) will end up at the head bone.
+	// ── 1. TELEPORT PLAYER ────────────────────────────────────────────────────
+	// Player is still hidden. Camera is at head bone. Teleport is invisible.
 	CachedPlayer->SetActorLocationAndRotation(
 		PendingPlayerSpawn.GetLocation(),
 		PendingPlayerSpawn.GetRotation().Rotator(),
 		false, nullptr, ETeleportType::TeleportPhysics);
 
-	// Align control rotation so the camera faces the right direction
-	// the moment the player takes over.
 	CachedPC->SetControlRotation(PendingPlayerSpawn.GetRotation().Rotator());
 
 	// ── 2. RESTORE MOVEMENT MODE ──────────────────────────────────────────────
 	if (UCharacterMovementComponent* Mv = CachedPlayer->GetCharacterMovement())
-	{
 		if (Mv->MovementMode == MOVE_None)
 			Mv->SetMovementMode(MOVE_Walking);
-	}
 
 	// ── 3. DESTROY SK PROXY ───────────────────────────────────────────────────
-	//
-	// Remove the proxy BEFORE unhiding the player so there is never a frame
-	// where both meshes are visible at the same position.
+	// Remove BEFORE unhiding player so both meshes never overlap.
 	if (PendingProxyToDestroy && IsValid(PendingProxyToDestroy))
 	{
 		PendingProxyToDestroy->Destroy();
@@ -200,47 +195,72 @@ void UCinematicHandoffComponent::OnArrivalAtTarget()
 	}
 
 	// ── 4. UNHIDE PLAYER ──────────────────────────────────────────────────────
-	//
-	// Ghost is at the head → player FP camera is also at the head.
-	// Unhiding the player is invisible because the view is still at the ghost.
+	// Camera is at head bone == player FP cam socket. Unhide is invisible.
 	CachedPlayer->SetActorHiddenInGame(false);
 	if (USkeletalMeshComponent* Mesh = CachedPlayer->GetMesh())
+		Mesh->SetVisibility(true, true);
+
+	// ── 5. CLEAR BLACK BARS (again, after proxy destruction) ──────────────────
+	if (UCameraComponent* FPCam = CachedPlayer->FindComponentByClass<UCameraComponent>())
 	{
-		Mesh->SetVisibility(true, true); // propagate to child components
+		FPCam->bConstrainAspectRatio = false;
+		FPCam->PostProcessSettings.bOverride_VignetteIntensity = false;
 	}
 
-	// ── 5. SNAP PC VIEW TO PLAYER ─────────────────────────────────────────────
-	//
-	// Ghost location == head bone == player FP camera location.
-	// Zero blend time → true seamless swap.
-	// FinalSnapBlendTime can be set to 0.1–0.2 in edge cases where a tiny
-	// position discrepancy is visible.
-	if (FinalSnapBlendTime > KINDA_SMALL_NUMBER)
-	{
-		CachedPC->SetViewTargetWithBlend(
-			CachedPlayer, FinalSnapBlendTime,
-			EViewTargetBlendFunction::VTBlend_EaseInOut, 2.0f);
-	}
-	else
-	{
-		CachedPC->SetViewTargetWithBlend(CachedPlayer, 0.0f);
-	}
+	// ── 6. SWITCH PC VIEW TO PLAYER (instant snap) ────────────────────────────
+	// Ghost position == head bone == FP cam → zero blend is seamless.
+	CachedPC->SetViewTargetWithBlend(CachedPlayer, 0.0f);
 
-	// ── 6. DESTROY GHOST ──────────────────────────────────────────────────────
-	if (GhostCamera)
-	{
-		GhostCamera->Destroy();
-		GhostCamera = nullptr;
-	}
+	// ── 7. DESTROY GHOST ──────────────────────────────────────────────────────
+	if (GhostCamera) { GhostCamera->Destroy(); GhostCamera = nullptr; }
 
 	bHandoffInProgress = false;
 
 	UE_LOG(LogTemp, Log,
-		TEXT("UCinematicHandoffComponent: Arrived. Player placed at %s, facing %s. Handoff complete."),
-		*PendingPlayerSpawn.GetLocation().ToString(),
-		*PendingPlayerSpawn.GetRotation().Rotator().ToString());
+		TEXT("UCinematicHandoffComponent: Arrived. Player at %s. Handoff complete."),
+		*PendingPlayerSpawn.GetLocation().ToString());
 
-	// Notify the Director: safe to restore input, show HUD, etc.
+	OnHandoffComplete.Broadcast();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SafetyRestoreInput — fires only if OnArrivalAtTarget never ran
+// ─────────────────────────────────────────────────────────────────────────────
+
+void UCinematicHandoffComponent::SafetyRestoreInput()
+{
+	UE_LOG(LogTemp, Warning,
+		TEXT("UCinematicHandoffComponent::SafetyRestoreInput — Safety timer fired! "
+		     "Handoff did not complete normally. Forcing player control restoration. "
+		     "Check: Was BeginHandoff called? Was ProxySkeletonTag found?"));
+
+	SetComponentTickEnabled(false);
+
+	if (GhostCamera) { GhostCamera->Destroy(); GhostCamera = nullptr; }
+
+	if (CachedPlayer)
+	{
+		CachedPlayer->SetActorHiddenInGame(false);
+		if (USkeletalMeshComponent* Mesh = CachedPlayer->GetMesh())
+			Mesh->SetVisibility(true, true);
+
+		if (UCameraComponent* FPCam = CachedPlayer->FindComponentByClass<UCameraComponent>())
+			FPCam->bConstrainAspectRatio = false;
+
+		if (UCharacterMovementComponent* Mv = CachedPlayer->GetCharacterMovement())
+			if (Mv->MovementMode == MOVE_None)
+				Mv->SetMovementMode(MOVE_Walking);
+	}
+
+	if (CachedPC)
+	{
+		if (CachedPlayer)
+			CachedPC->SetViewTargetWithBlend(CachedPlayer, 0.f);
+		CachedPC->SetInputMode(FInputModeGameOnly());
+		CachedPC->ResetIgnoreMoveInput();
+	}
+
+	bHandoffInProgress = false;
 	OnHandoffComplete.Broadcast();
 }
 
@@ -252,12 +272,11 @@ void UCinematicHandoffComponent::CancelHandoff()
 {
 	SetComponentTickEnabled(false);
 
-	if (GhostCamera)
-	{
-		GhostCamera->Destroy();
-		GhostCamera = nullptr;
-	}
+	if (UWorld* World = GetWorld())
+		World->GetTimerManager().ClearTimer(SafetyHandle);
+
+	if (GhostCamera) { GhostCamera->Destroy(); GhostCamera = nullptr; }
 
 	bHandoffInProgress = false;
-	UE_LOG(LogTemp, Log, TEXT("UCinematicHandoffComponent::CancelHandoff — Cancelled."));
+	UE_LOG(LogTemp, Log, TEXT("UCinematicHandoffComponent::CancelHandoff."));
 }
