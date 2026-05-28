@@ -35,6 +35,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Alarm|Config")
 	float AlarmIntensity = 8000.f;
+	
+	UFUNCTION(BlueprintCallable, Category = "Alarm")
+	void RecacheOriginalLightState() { CacheOriginalLightState(); }
 
 	/**
 	 * Color the lights turn during the alarm.

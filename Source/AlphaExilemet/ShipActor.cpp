@@ -71,7 +71,6 @@ void AShipActor::StopAlarm()
 
 	GetWorld()->GetTimerManager().ClearTimer(PulseTimerHandle);
 
-	// Restore every light to its original intensity AND color.
 	for (int32 i = 0; i < AlarmLights.Num(); ++i)
 	{
 		if (!AlarmLights[i]) continue;
@@ -79,10 +78,10 @@ void AShipActor::StopAlarm()
 			OriginalIntensities.IsValidIndex(i) ? OriginalIntensities[i] : 0.f);
 		AlarmLights[i]->SetLightColor(
 			OriginalColors.IsValidIndex(i) ? OriginalColors[i] : FLinearColor::White);
+		AlarmLights[i]->MarkRenderStateDirty(); // ← ADD THIS
 	}
 
 	BP_OnAlarmStopped();
-	UE_LOG(LogTemp, Log, TEXT("AShipActor [%s]: alarm stopped, lights restored."), *GetName());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -243,6 +242,7 @@ void AShipActor::SetAllLightsState(float Intensity, FLinearColor Color)
 		if (!LC) continue;
 		LC->SetIntensity(Intensity);
 		LC->SetLightColor(Color);
+		LC->MarkRenderStateDirty();
 	}
 }
 

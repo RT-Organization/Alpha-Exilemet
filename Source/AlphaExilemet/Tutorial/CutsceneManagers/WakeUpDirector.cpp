@@ -10,6 +10,7 @@
 #include "LevelSequencePlayer.h"
 
 #include "AlphaExilemet/AlphaExilemetCharacter.h"
+#include "AlphaExilemet/ShipActor.h"
 #include "AlphaExilemet/Core/AlphaStreamingSubsystem.h"
 
 AWakeUpDirector::AWakeUpDirector()
@@ -208,15 +209,13 @@ void AWakeUpDirector::OnCameraReturnComplete()
 
 void AWakeUpDirector::RevealPersistentShip()
 {
-	if (!PersistentShipActor)
-	{
-		UE_LOG(LogTemp, Log,
-			TEXT("AWakeUpDirector: No PersistentShipActor assigned — skipping ship reveal."));
-		return;
-	}
-
+	if (!PersistentShipActor) return;
 	PersistentShipActor->SetActorHiddenInGame(false);
 	PersistentShipActor->SetActorEnableCollision(true);
 
-	UE_LOG(LogTemp, Log, TEXT("AWakeUpDirector: PersistentShipActor revealed."));
+	// Re-cache light state NOW that the ship is visible
+	if (AShipActor* Ship = Cast<AShipActor>(PersistentShipActor))
+	{
+		Ship->RecacheOriginalLightState(); // ← call a new public wrapper
+	}
 }
