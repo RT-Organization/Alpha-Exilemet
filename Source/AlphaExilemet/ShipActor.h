@@ -28,13 +28,21 @@ public:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Ship|Terminals")
 	TArray<ABaseTerminal*> Terminals;
 
-	// ── ALARM ────────────────────────────────────────────────────────────────
+	// ── ALARM CONFIG ──────────────────────────────────────────────────────────
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Alarm|Config")
 	FName AlarmLightTag = FName("AlarmLight");
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Alarm|Config")
 	float AlarmIntensity = 8000.f;
+
+	/**
+	 * Color the lights turn during the alarm.
+	 * Default: pure red (R=1, G=0, B=0).
+	 * Outside alarm the lights stay at their original designer-set color.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Alarm|Config")
+	FLinearColor AlarmColor = FLinearColor(1.f, 0.f, 0.f, 1.f);
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Alarm|Config")
 	float PulseOnTime = 0.25f;
@@ -51,16 +59,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Alarm")
 	void StopAlarm();
 
-	// ── ANIMATION ─────────────────────────────────────────────────────────────
+	// ── ANIMATION CONFIG ──────────────────────────────────────────────────────
 
-	/**
-	 * Montage that plays when the ship OPENS.
-	 * REQUIREMENT: ExteriorMesh AnimBP must have a DefaultSlot node in AnimGraph.
-	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Ship|Animation")
 	UAnimMontage* OpenMontage = nullptr;
 
-	/** Montage that plays when the ship CLOSES. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Ship|Animation")
 	UAnimMontage* CloseMontage = nullptr;
 
@@ -89,41 +92,31 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Alarm|Events")
 	void BP_OnAlarmStopped();
 
-	/**
-	 * Ship finished opening. Use for:
-	 *   - Enabling ramp collision component
-	 *   - Playing door-open SFX
-	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Ship|Animation|Events")
 	void BP_OnShipOpened();
 
-	/**
-	 * Ship finished closing. Use for:
-	 *   - Disabling ramp collision component
-	 *   - Playing door-close SFX
-	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Ship|Animation|Events")
 	void BP_OnShipClosed();
 
 private:
-	// Alarm
 	FTimerHandle             PulseTimerHandle;
 	TArray<ULightComponent*> AlarmLights;
 	TArray<float>            OriginalIntensities;
+	TArray<FLinearColor>     OriginalColors;       // ← new: cache original color
+
 	void CollectAlarmLightsByTag();
-	void CacheOriginalIntensities();
+	void CacheOriginalLightState();                // ← replaces CacheOriginalIntensities
+	void SetAllLightsState(float Intensity, FLinearColor Color);
+	void SchedulePulseOff();
 	void PulseOn();
 	void PulseOff();
-	void SetAllLightsIntensity(float Intensity);
 
-	// Animation
 	void TryUpdateAnimation();
 	void PlayMontage(UAnimMontage* Montage);
 
 	UFUNCTION()
 	void OnMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
-	// Camp
 	UPROPERTY()
 	ABaseCamp* CachedBaseCamp = nullptr;
 	void FindAndBindBaseCamp();

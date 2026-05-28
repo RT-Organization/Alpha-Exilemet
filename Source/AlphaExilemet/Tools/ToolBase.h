@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "AlphaExilemet/Data/AlphaExilemetTypes.h"
 #include "AlphaExilemet/Interfaces/Interactable.h"
 #include "ToolBase.generated.h"
@@ -54,7 +55,13 @@ public:
 	FText Description;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Tool")
-	UStaticMeshComponent* Mesh;
+	UMeshComponent* Mesh;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Tool")
+	UStaticMeshComponent* StaticMeshComp;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Tool")
+	USkeletalMeshComponent* SkeletalMeshComp;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tool|Animations")
 	UAnimMontage* EquipAnimation;

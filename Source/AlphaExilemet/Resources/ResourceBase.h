@@ -79,7 +79,7 @@ public:
 	// =========================================================================
 	
 	UFUNCTION(BlueprintCallable, Category="Resource")
-	bool ApplyResourceDamage(float DamageAmount);
+	virtual bool ApplyResourceDamage(float DamageAmount);
 	
 	UFUNCTION(BlueprintCallable, Category="Resource")
 	void SetOutline(bool bEnable);

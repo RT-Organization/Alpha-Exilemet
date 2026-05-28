@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "SkeletalToolBase.h"
 #include "ToolBase.h"
 #include "AlphaExilemet/Data/AlphaExilemetTypes.h"
 #include "GasRodTool.generated.h"
@@ -32,7 +33,7 @@ class AGasSphere;
  *   Capacity → increases total sphere slots
  */
 UCLASS()
-class ALPHAEXILEMET_API AGasRodTool : public AToolBase
+class ALPHAEXILEMET_API AGasRodTool : public ASkeletalToolBase
 {
 	GENERATED_BODY()
 
