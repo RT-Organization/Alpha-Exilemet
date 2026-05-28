@@ -96,7 +96,11 @@ public:
 	// ═════════════════════════════════════════════════════════════════════════
 	// RUNTIME STATE
 	// ═════════════════════════════════════════════════════════════════════════
-
+	
+	// Inside TutorialDirector.h -> RUNTIME STATE section
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tutorial|Runtime")
+	bool bIsTeleporting = false;
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tutorial|Runtime")
 	ULevelSequencePlayer* IntroSequencePlayer = nullptr;
 

@@ -11,6 +11,7 @@
 
 #include "LevelSequenceActor.h"
 #include "LevelSequencePlayer.h"
+#include "Components/CapsuleComponent.h"
 
 #include "AlphaExilemet/AlphaExilemetCharacter.h"
 #include "AlphaExilemet/BaseCamp.h"
@@ -295,11 +296,22 @@ void ATutorialDirector::OnCameraReturnComplete()
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ATutorialDirector::OnOxygenSphereEndOverlap(
-	UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+	UPrimitiveComponent* OverlappedComponent,
+	AActor* OtherActor,
+	UPrimitiveComponent* OtherComp,
+	int32                OtherBodyIndex)
 {
-	if (!Cast<AAlphaExilemetCharacter>(OtherActor)) return;
-	if (bSkullInteractionActive)                    return;
+	// 1. Cast to your character
+	AAlphaExilemetCharacter* PlayerChar = Cast<AAlphaExilemetCharacter>(OtherActor);
+	if (!PlayerChar) return;
+
+	// 2. CRITICAL FIX: Only proceed if the main Capsule Component exited.
+	// This stops the Mesh and attachments from firing this function multiple times!
+	if (OtherComp != PlayerChar->GetCapsuleComponent()) return;
+
+	// 3. State guards
+	if (bIsTeleporting)              return;
+	if (bSkullInteractionActive)     return;
 	if (CraterStartTransform.GetLocation().IsZero()) return;
 
 	ExecuteTeleportToCrater();
@@ -309,6 +321,7 @@ void ATutorialDirector::ExecuteTeleportToCrater()
 {
 	if (!CachedPlayer || !CachedPC) return;
 
+	bIsTeleporting = true; // Lock the gate
 	SuppressPlayerMoveInput();
 
 	if (APlayerCameraManager* Cam = CachedPC->PlayerCameraManager)
@@ -340,6 +353,7 @@ void ATutorialDirector::OnTeleportReadyToMove()
 void ATutorialDirector::OnTeleportComplete()
 {
 	RestorePlayerMoveInput();
+	bIsTeleporting = false; // Unlock the gate
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
