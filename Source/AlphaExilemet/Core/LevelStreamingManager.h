@@ -71,8 +71,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnLevelTransitionStarted, EGameLev
 //   - WB_LoadMenu Load button: call LoadSavedGame(SlotName).
 //   - WB_Pause Main Menu button: call ReturnToMainMenu().
 //   - PortalBase: call EnterPortal(PortalLevel, ReturnTransform).
-//   - AlphaStreamingSubsystem skull sequence: call CompleteMainTutorial().
-//   - Challenge complete: call ExitPortal().
+//   - AlphaStreamingSubsystem skull sequence: call CompleteTutorialAndLoadMain().
+//   - Challenge complete: call CompletePortalChallengeWithDelay(Seconds).
 //   - Nobody else calls LoadStreamLevel or UnloadStreamLevel directly.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -188,14 +188,32 @@ public:
 	void EnterPortal(EGameLevel PortalLevel, FTransform PlayerReturnTransform);
 
 	/**
-	 * Called when the portal challenge is complete.
-	 * Shows loading screen, restores player to return transform, unloads portal, loads Main.
+	 * Called when the portal challenge is complete (no delay).
+	 * Fires OnPortalExitStarted, then begins the transition back to Main immediately.
+	 * The player return transform is applied AFTER Main is loaded (inside OnBothConditionsMet).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
-	void ExitPortal();
+	void CompletePortalChallenge();
 
 	/**
-	 * Debug: force complete a portal challenge.
+	 * PRIMARY CHALLENGE COMPLETION ENTRY POINT.
+	 *
+	 * Fires OnPortalExitStarted so directors/UI can react (show reward screen, etc.),
+	 * then waits ExploreDelay seconds before starting the transition back to Main.
+	 * This gives the player time to explore the challenge level before being sent back.
+	 *
+	 * The loading screen appears AFTER the delay, not immediately — the player can
+	 * still move around during the wait.
+	 *
+	 * ExploreDelay = 0 → behaves identically to CompletePortalChallenge().
+	 *
+	 * CALL THIS FROM BP_QuestManager instead of CompletePortalChallenge().
+	 */
+	UFUNCTION(BlueprintCallable, Category = "LevelStreaming", meta = (DefaultToSelf = "Target"))
+	void CompletePortalChallengeWithDelay(float ExploreDelay = 5.0f);
+
+	/**
+	 * Debug: force complete a portal challenge immediately (no delay).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming|Debug")
 	void Debug_ForceExitPortal();
@@ -225,15 +243,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming|Debug")
 	void InitializeForDirectPlay();
 
-	// ── PORTAL HELPERS (called by subsystem for backward compat) ─────────────
+	// ── PORTAL HELPERS (called by GM or subsystem) ────────────────────────────
 
-	/** Teleports the player pawn to the PlayerStart in the active portal. */
+	/** Teleports the player pawn to the PlayerStart in the active portal sublevel. */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
 	void TeleportPlayerToPortalStart();
-
-	/** Re-enables survival and fires OnPortalExitStarted (kept for challenge code). */
-	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
-	void CompletePortalChallenge();
 
 	// ── UTILITY ───────────────────────────────────────────────────────────────
 
@@ -265,8 +279,15 @@ private:
 	// ── INTERNAL STATE ────────────────────────────────────────────────────────
 
 	EGameLevel PendingLevel      = EGameLevel::None;
-	EGameLevel PortalReturnFrom  = EGameLevel::Main; // what to return to after portal
 
+	/**
+	 * The level we were in when EnterPortal() was called.
+	 * Stored so OnBothConditionsMet knows whether to apply the return transform.
+	 * Reset to EGameLevel::None after the return teleport fires.
+	 */
+	EGameLevel PortalReturnFrom  = EGameLevel::None;
+
+	/** Pre-portal player transform, applied after Main is fully loaded on exit. */
 	FTransform PortalReturnTransform;
 
 	bool  bLevelLoaded          = false;
@@ -313,6 +334,9 @@ private:
 	 */
 	void BeginTransition(EGameLevel NewLevel, EGameLevel OldLevel, bool bSeamless = false);
 
+	/** Internal: begins the actual portal exit transition. Called by ExitPortalDelayCallback or directly. */
+	void ExitPortal();
+
 	void ShowLoadingScreen();
 	void HideLoadingScreen();
 
@@ -333,6 +357,16 @@ private:
 	/** Callback fired by DirectPlayTimerHandle. Broadcasts OnLevelTransitionComplete. */
 	UFUNCTION()
 	void DirectPlayTimerCallback();
+
+	/**
+	 * Timer handle for CompletePortalChallengeWithDelay.
+	 * Fires ExitPortal() after the player's explore time has elapsed.
+	 */
+	FTimerHandle PortalExitDelayHandle;
+
+	/** Callback fired by PortalExitDelayHandle. Calls ExitPortal(). */
+	UFUNCTION()
+	void PortalExitDelayCallback();
 
 	// Player cleanup helpers
 	void DestroyPlayerPawn();

@@ -254,7 +254,7 @@ void ULevelStreamingManager::CompleteTutorialAndLoadMain()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PORTAL ENTER / EXIT
+// PORTAL ENTER
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ULevelStreamingManager::EnterPortal(EGameLevel PortalLevel, FTransform PlayerReturnTransform)
@@ -285,6 +285,25 @@ void ULevelStreamingManager::EnterPortal(EGameLevel PortalLevel, FTransform Play
 	BeginTransition(PortalLevel, PortalReturnFrom);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PORTAL EXIT
+//
+// FIX — the original ExitPortal() teleported the player BEFORE Main was loaded.
+// This caused two problems:
+//   1. The player was placed in an unloaded world, causing the physics system
+//      to drop them back to the portal level's origin (or the portal arch itself).
+//   2. The portal arch's overlap volume was still live, so the OnOverlapBegin
+//      callback re-fired immediately, sending the player back into the portal.
+//
+// The correct sequence is:
+//   ExitPortal()           — save state, begin streaming (portal out / Main in)
+//   OnBothConditionsMet()  — Main is now loaded → apply return transform HERE
+//
+// The player transform is stored in PortalReturnTransform (set during EnterPortal
+// and confirmed from the save in ExitPortal). PortalReturnFrom tracks that we
+// came from a portal so OnBothConditionsMet knows to apply the teleport.
+// ─────────────────────────────────────────────────────────────────────────────
+
 void ULevelStreamingManager::ExitPortal()
 {
 	if (bTransitionInProgress) return;
@@ -296,35 +315,95 @@ void ULevelStreamingManager::ExitPortal()
 		GI->CurrentPhase = EGamePhase::Main;
 		if (GI->LocalSaveRef)
 		{
+			// Confirm the stored return transform from the save (authoritative source).
 			PortalReturnTransform              = GI->LocalSaveRef->PrePortalTransform;
 			GI->LocalSaveRef->CurrentLevelName = FName("Main");
 		}
 		GI->SavePlayerData();
 	}
 
-	if (AAlphaExilemetCharacter* Player = GetLocalPlayer())
-	{
-		Player->SetActorTransform(PortalReturnTransform, false, nullptr, ETeleportType::TeleportPhysics);
-		if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
-			PC->SetControlRotation(PortalReturnTransform.GetRotation().Rotator());
-		Player->bIsSurvivalActive = true;
-	}
+	// ── DO NOT teleport or modify the player here ──────────────────────────
+	// Main is not loaded yet. Teleporting now puts the player in limbo:
+	//   • The portal arch's overlap volume is still active → re-fires OnOverlapBegin.
+	//   • Physics has no valid world to place the pawn → position is undefined.
+	//
+	// The teleport happens inside OnBothConditionsMet(), once Main is fully loaded.
+	// ──────────────────────────────────────────────────────────────────────────
 
-	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager::ExitPortal — from '%s'."),
+	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager::ExitPortal — from '%s'. Teleport deferred until Main loads."),
 		*LevelToName(FromPortal).ToString());
+
+	// PortalReturnFrom was set when EnterPortal() was called (and stays set).
+	// OnBothConditionsMet checks IsPortalLevel(PortalReturnFrom) to know whether
+	// to apply the return transform, so we must NOT reset it here.
 
 	BeginTransition(EGameLevel::Main, FromPortal);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CHALLENGE COMPLETION — public API
+// ─────────────────────────────────────────────────────────────────────────────
+
 void ULevelStreamingManager::CompletePortalChallenge()
 {
+	// Immediate exit — no explore delay.
 	OnPortalExitStarted.Broadcast(CurrentLevel, EGameLevel::Main);
+	ExitPortal();
+}
+
+void ULevelStreamingManager::CompletePortalChallengeWithDelay(float ExploreDelay)
+{
+	// Guard: don't start the delay if a transition is already in progress,
+	// and don't start it twice (e.g. if the player hits two trigger volumes).
+	if (bTransitionInProgress)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("LevelStreamingManager::CompletePortalChallengeWithDelay — transition already in progress, ignored."));
+		return;
+	}
+
+	if (GetWorld()->GetTimerManager().IsTimerActive(PortalExitDelayHandle))
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("LevelStreamingManager::CompletePortalChallengeWithDelay — delay already counting, ignored."));
+		return;
+	}
+
+	// Broadcast immediately so directors/UI can react (show reward screen, etc.).
+	OnPortalExitStarted.Broadcast(CurrentLevel, EGameLevel::Main);
+
+	if (ExploreDelay <= 0.f)
+	{
+		// Zero delay: behave exactly like CompletePortalChallenge().
+		ExitPortal();
+		return;
+	}
+
+	UE_LOG(LogTemp, Log,
+		TEXT("LevelStreamingManager::CompletePortalChallengeWithDelay — player has %.1f seconds to explore."),
+		ExploreDelay);
+
+	GetWorld()->GetTimerManager().SetTimer(
+		PortalExitDelayHandle,
+		this,
+		&ULevelStreamingManager::PortalExitDelayCallback,
+		ExploreDelay,
+		false);   // not looping
+}
+
+void ULevelStreamingManager::PortalExitDelayCallback()
+{
+	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager: explore delay elapsed — starting ExitPortal."));
 	ExitPortal();
 }
 
 void ULevelStreamingManager::Debug_ForceExitPortal()
 {
 	UE_LOG(LogTemp, Warning, TEXT("LevelStreamingManager: Debug_ForceExitPortal."));
+
+	// Cancel any pending explore delay so the debug call wins immediately.
+	GetWorld()->GetTimerManager().ClearTimer(PortalExitDelayHandle);
+
 	ExitPortal();
 }
 
@@ -443,7 +522,8 @@ void ULevelStreamingManager::OnBothConditionsMet()
 		*LevelToName(CurrentLevel).ToString(),
 		bSeamlessTransition ? TEXT(" [SEAMLESS]") : TEXT(""));
 
-	// When returning to MainMenu, the PlayerCameraManager still has the stale
+	// ── MAIN MENU: fix stale FPS camera ──────────────────────────────────────
+	// When returning to MainMenu the PlayerCameraManager still has the stale
 	// first-person camera settings from the destroyed player pawn (FOV, rotation
 	// mode, etc.). Simply calling SetViewTarget is not enough — the camera manager
 	// continues to run in FPS mode and produces a black screen.
@@ -456,6 +536,34 @@ void ULevelStreamingManager::OnBothConditionsMet()
 	{
 		ForceCameraToMainMenuCineCamera();
 	}
+
+	// ── PORTAL RETURN: apply the deferred player teleport ────────────────────
+	// ExitPortal() intentionally did NOT teleport the player because Main was not
+	// loaded yet. Now that Main is fully loaded (bLevelLoaded is true) we apply
+	// the pre-portal transform, re-enable survival, and reset PortalReturnFrom
+	// so this block does not fire again on the next transition to Main.
+	if (CurrentLevel == EGameLevel::Main && IsPortalLevel(PortalReturnFrom))
+	{
+		if (AAlphaExilemetCharacter* Player = GetLocalPlayer())
+		{
+			Player->SetActorTransform(
+				PortalReturnTransform, false, nullptr, ETeleportType::TeleportPhysics);
+
+			if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
+				PC->SetControlRotation(PortalReturnTransform.GetRotation().Rotator());
+
+			Player->bIsSurvivalActive = true;
+
+			UE_LOG(LogTemp, Log,
+				TEXT("LevelStreamingManager: player restored to pre-portal transform (was in '%s')."),
+				*LevelToName(PortalReturnFrom).ToString());
+		}
+
+		// Reset so this block does not re-fire on the next Main load
+		// (e.g. after a Tutorial→Main or LoadedGame→Main transition).
+		PortalReturnFrom = EGameLevel::None;
+	}
+	// ─────────────────────────────────────────────────────────────────────────
 
 	if (!bSeamlessTransition)
 		HideLoadingScreen();
@@ -559,7 +667,7 @@ void ULevelStreamingManager::ShowLoadingScreen()
 	}
 
 	APlayerController* PC = World->GetFirstPlayerController();
-	UUserWidget* NewScreen = PC ? CreateWidget<UUserWidget>(PC, LoadingScreenClass) 
+	UUserWidget* NewScreen = PC ? CreateWidget<UUserWidget>(PC, LoadingScreenClass)
 								: CreateWidget<UUserWidget>(World, LoadingScreenClass);
 
 	if (!NewScreen)
@@ -597,7 +705,7 @@ void ULevelStreamingManager::HideLoadingScreen()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PORTAL TELEPORT
+// PORTAL TELEPORT — used when ENTERING a portal (spawn at PlayerStart)
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ULevelStreamingManager::TeleportPlayerToPortalStart()
