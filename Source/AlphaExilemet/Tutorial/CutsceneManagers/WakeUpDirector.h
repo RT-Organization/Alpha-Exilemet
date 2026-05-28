@@ -8,16 +8,13 @@ class ULevelSequencePlayer;
 class ALevelSequenceActor;
 class AAlphaExilemetCharacter;
 class APlayerController;
-class UCinematicHandoffComponent;
-class ACameraActor;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AWakeUpDirector  v4 — identical pattern to TutorialDirector v18
+// AWakeUpDirector  v5 — simplified to match TutorialDirector v19
 //
-// - No Actor Tags, no Sequencer Binding Tags.
-// - Proxy found via GetBoundObjects() + ProxyMeshNameHint.
-// - OnStop deferred by one tick to let Sequencer finish teardown.
-// - Black bars cleared by CinematicHandoffComponent.
+// The animator handles the camera animation in Sequencer.
+// C++ only needs to: play the sequence, return camera to player when done,
+// restore input, enable survival.
 // ─────────────────────────────────────────────────────────────────────────────
 
 UCLASS(Abstract, Blueprintable)
@@ -32,41 +29,51 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WakeUp|Components")
-	UCinematicHandoffComponent* CinematicHandoff;
+	// ═════════════════════════════════════════════════════════════════════════
+	// INSTANCE REFERENCES
+	// ═════════════════════════════════════════════════════════════════════════
 
-	// ── INSTANCE REFERENCES ───────────────────────────────────────────────────
-
+	/** The LevelSequenceActor for the wake-up cutscene in the Main level. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
 		meta = (DisplayName = "Wake Up Sequence"))
 	ALevelSequenceActor* WakeUpSequenceRef = nullptr;
 
+	/**
+	 * Optional: cinecam to snap to before the sequence plays.
+	 * Leave null if the Camera Cuts track handles the first frame.
+	 */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
 		meta = (DisplayName = "Pre-Sequence Cinecam"))
 	AActor* WakeUpCineCamRef = nullptr;
+	
+	/**
+	 * The ship actor placed in the level with Hidden In Game = true.
+	 * It will be revealed the moment the wake-up sequence ends.
+	 */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "WakeUp|Config",
+		meta = (DisplayName = "Persistent Ship Actor"))
+	AActor* PersistentShipActor = nullptr;
+	
+	/** Reveals PersistentShipActor if assigned. */
+	void RevealPersistentShip();
 
-	// ── CLASS DEFAULTS ────────────────────────────────────────────────────────
+	// ═════════════════════════════════════════════════════════════════════════
+	// CLASS DEFAULTS
+	// ═════════════════════════════════════════════════════════════════════════
 
 	/**
-	 * Partial name used to find the SK_Manny Spawnable via GetBoundObjects().
-	 * No tags required. Leave empty to use the first bound SK actor found.
-	 * Default: "SKM_Manny"
+	 * Blend time to return the camera to the player after the sequence ends.
+	 * 0.0 = instant snap.
+	 * 0.3–0.8 = soft blend (use if there is a small gap between the sequence
+	 *           camera's last position and the player's FP camera).
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config",
-		meta = (DisplayName = "Proxy Mesh Name Hint"))
-	FString ProxyMeshNameHint = TEXT("SKM_Manny");
+		meta = (DisplayName = "Camera Return Blend Time", ClampMin = "0.0"))
+	float CameraReturnBlendTime = 0.3f;
 
-	/** Head bone — ghost camera travels here. Standard Manny: "head" */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config|Bones",
-		meta = (DisplayName = "Head Bone Name"))
-	FName HeadBoneName = FName("head");
-
-	/** Root bone — player pawn placed here. Standard Manny: "root" */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WakeUp|Config|Bones",
-		meta = (DisplayName = "Root Bone Name"))
-	FName RootBoneName = FName("root");
-
-	// ── RUNTIME STATE ─────────────────────────────────────────────────────────
+	// ═════════════════════════════════════════════════════════════════════════
+	// RUNTIME STATE
+	// ═════════════════════════════════════════════════════════════════════════
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WakeUp|Runtime")
 	ULevelSequencePlayer* WakeUpSequencePlayer = nullptr;
@@ -77,24 +84,39 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WakeUp|Runtime")
 	APlayerController* CachedPC = nullptr;
 
-	// ── PUBLIC INTERFACE ──────────────────────────────────────────────────────
+	// ═════════════════════════════════════════════════════════════════════════
+	// PUBLIC INTERFACE
+	// ═════════════════════════════════════════════════════════════════════════
 
+	/**
+	 * Called by GM_SimulatorGamemode after Tutorial→Main transition.
+	 * GM BP: [WakeUpDirectorRef → Is Valid] → [InitializeWakeUp]
+	 */
 	UFUNCTION(BlueprintCallable, Category = "WakeUp")
 	void InitializeWakeUp();
 
 protected:
+	// ═════════════════════════════════════════════════════════════════════════
+	// BLUEPRINT IMPLEMENTABLE EVENTS
+	// ═════════════════════════════════════════════════════════════════════════
+
+	/** Push self-reference to GM (end of C++ BeginPlay). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "WakeUp|Events")
 	void BP_RegisterWithGameMode();
 
+	/**
+	 * Called after camera returns to player and survival is enabled.
+	 * Show HUD, play ambient audio, trigger ship terminal warning, etc.
+	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "WakeUp|Events")
 	void BP_OnWakeUpComplete();
 
 private:
-	UFUNCTION() void OnWakeUpSequenceFinished();
-	void             OnWakeUpSequenceFinishedDeferred();
-	UFUNCTION() void OnWakeUpHandoffComplete();
+	UFUNCTION()
+	void OnWakeUpSequenceFinished();
 
-	USkeletalMeshComponent* FindProxyMeshInSequence(AActor*& OutProxyActor) const;
+	void OnWakeUpSequenceFinishedDeferred();
+	void OnCameraReturnComplete();
 
-	FTimerHandle DeferredSequenceEndHandle;
+	FTimerHandle CameraReturnHandle;
 };

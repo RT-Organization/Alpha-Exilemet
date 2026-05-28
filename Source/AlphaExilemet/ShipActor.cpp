@@ -4,14 +4,10 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/LightComponent.h"
-#include "Components/SphereComponent.h"
 #include "Animation/AnimInstance.h"
 #include "TimerManager.h"
+#include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Constructor
-// ─────────────────────────────────────────────────────────────────────────────
 
 AShipActor::AShipActor()
 {
@@ -24,32 +20,27 @@ AShipActor::AShipActor()
 	InteriorMesh->SetupAttachment(RootComponent);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BeginPlay
-// ─────────────────────────────────────────────────────────────────────────────
-
 void AShipActor::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Collect lights, cache their ORIGINAL state (intensity + color).
+	// Do NOT turn them off — they are interior lights that stay on normally.
 	CollectAlarmLightsByTag();
-	CacheOriginalIntensities();
-	SetAllLightsIntensity(0.f);
+	CacheOriginalLightState();
 
-	// Bind the montage-ended callback on the ExteriorMesh AnimInstance once.
-	// C++ owns the callback — BP never needs to wire Bind/Unbind manually.
+	// Bind montage-ended callback once.
 	if (UAnimInstance* AnimInst = ExteriorMesh->GetAnimInstance())
 	{
 		AnimInst->OnMontageEnded.AddDynamic(this, &AShipActor::OnMontageEnded);
 		UE_LOG(LogTemp, Log,
-			TEXT("AShipActor [%s]: montage-ended callback bound."), *GetName());
+			TEXT("AShipActor [%s]: montage callback bound."), *GetName());
 	}
 	else
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("AShipActor [%s]: ExteriorMesh has no AnimInstance at BeginPlay. "
-			     "Make sure ExteriorMesh has an Animation Blueprint assigned that "
-			     "contains a DefaultSlot node in its AnimGraph."), *GetName());
+			TEXT("AShipActor [%s]: no AnimInstance — assign ABP_Ship to ExteriorMesh."),
+			*GetName());
 	}
 
 	FindAndBindBaseCamp();
@@ -64,7 +55,11 @@ void AShipActor::StartAlarm()
 {
 	if (bAlarmActive) return;
 	bAlarmActive = true;
-	PulseOn();
+
+	// Set all lights to alarm red immediately, then start pulsing.
+	SetAllLightsState(AlarmIntensity, AlarmColor);
+	SchedulePulseOff();
+
 	BP_OnAlarmStarted();
 	UE_LOG(LogTemp, Log, TEXT("AShipActor [%s]: alarm started."), *GetName());
 }
@@ -73,17 +68,25 @@ void AShipActor::StopAlarm()
 {
 	if (!bAlarmActive) return;
 	bAlarmActive = false;
+
 	GetWorld()->GetTimerManager().ClearTimer(PulseTimerHandle);
+
+	// Restore every light to its original intensity AND color.
 	for (int32 i = 0; i < AlarmLights.Num(); ++i)
-		if (AlarmLights[i])
-			AlarmLights[i]->SetIntensity(
-				OriginalIntensities.IsValidIndex(i) ? OriginalIntensities[i] : 0.f);
+	{
+		if (!AlarmLights[i]) continue;
+		AlarmLights[i]->SetIntensity(
+			OriginalIntensities.IsValidIndex(i) ? OriginalIntensities[i] : 0.f);
+		AlarmLights[i]->SetLightColor(
+			OriginalColors.IsValidIndex(i) ? OriginalColors[i] : FLinearColor::White);
+	}
+
 	BP_OnAlarmStopped();
-	UE_LOG(LogTemp, Log, TEXT("AShipActor [%s]: alarm stopped."), *GetName());
+	UE_LOG(LogTemp, Log, TEXT("AShipActor [%s]: alarm stopped, lights restored."), *GetName());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ANIMATION — public interface
+// ANIMATION
 // ─────────────────────────────────────────────────────────────────────────────
 
 void AShipActor::OnPlayerEnteredCamp()
@@ -98,14 +101,10 @@ void AShipActor::OnPlayerExitedCamp()
 	TryUpdateAnimation();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ANIMATION — state machine
-// ─────────────────────────────────────────────────────────────────────────────
-
 void AShipActor::TryUpdateAnimation()
 {
-	if (bIsAnimationPlaying) return;          // wait for current montage to end
-	if (bShouldBeOpen == bCurrentlyOpen) return; // already in correct state
+	if (bIsAnimationPlaying) return;
+	if (bShouldBeOpen == bCurrentlyOpen) return;
 
 	bIsAnimationPlaying = true;
 
@@ -125,12 +124,9 @@ void AShipActor::PlayMontage(UAnimMontage* Montage)
 {
 	if (!Montage)
 	{
-		// No montage assigned — skip animation but still update state so the
-		// system doesn't get stuck. Fire the appropriate BP event immediately.
 		UE_LOG(LogTemp, Warning,
-			TEXT("AShipActor [%s]: montage is null — "
-			     "assign OpenMontage/CloseMontage in Class Defaults."), *GetName());
-
+			TEXT("AShipActor [%s]: montage null — set OpenMontage/CloseMontage in Class Defaults."),
+			*GetName());
 		bIsAnimationPlaying = false;
 		bCurrentlyOpen = bShouldBeOpen;
 		if (bCurrentlyOpen) BP_OnShipOpened(); else BP_OnShipClosed();
@@ -141,8 +137,7 @@ void AShipActor::PlayMontage(UAnimMontage* Montage)
 	if (!AnimInst)
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("AShipActor [%s]: no AnimInstance — "
-			     "ExteriorMesh needs an Animation Blueprint with a DefaultSlot node."),
+			TEXT("AShipActor [%s]: no AnimInstance — ExteriorMesh needs ABP_Ship."),
 			*GetName());
 		bIsAnimationPlaying = false;
 		return;
@@ -151,30 +146,18 @@ void AShipActor::PlayMontage(UAnimMontage* Montage)
 	AnimInst->Montage_Play(Montage, 1.f);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ANIMATION — montage-ended callback (bound once in BeginPlay)
-// ─────────────────────────────────────────────────────────────────────────────
-
 void AShipActor::OnMontageEnded(UAnimMontage* Montage, bool bInterrupted)
 {
-	// Only react to our own montages — ignore anything from other systems.
 	if (Montage != OpenMontage && Montage != CloseMontage) return;
 
-	// If interrupted we still update state — the ship is wherever the
-	// geometry ended up. TryUpdateAnimation will immediately start the
-	// correct follow-up animation if desired state changed mid-play.
 	bCurrentlyOpen      = bShouldBeOpen;
 	bIsAnimationPlaying = false;
 
 	UE_LOG(LogTemp, Log,
-		TEXT("AShipActor [%s]: montage ended (interrupted=%d). "
-		     "CurrentlyOpen=%d, ShouldBeOpen=%d"),
-		*GetName(), bInterrupted, bCurrentlyOpen, bShouldBeOpen);
+		TEXT("AShipActor [%s]: montage ended (interrupted=%d). Open=%d"),
+		*GetName(), bInterrupted, bCurrentlyOpen);
 
-	// Fire BP notification so BP can enable/disable ramp collision, SFX, etc.
 	if (bCurrentlyOpen) BP_OnShipOpened(); else BP_OnShipClosed();
-
-	// Re-evaluate — handles the "player left during open animation" case.
 	TryUpdateAnimation();
 }
 
@@ -190,8 +173,7 @@ void AShipActor::FindAndBindBaseCamp()
 	if (!CachedBaseCamp)
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("AShipActor [%s]: BaseCamp not found — no proximity animation."),
-			*GetName());
+			TEXT("AShipActor [%s]: BaseCamp not found."), *GetName());
 		return;
 	}
 
@@ -200,9 +182,7 @@ void AShipActor::FindAndBindBaseCamp()
 	CachedBaseCamp->OnPlayerExitedCamp.AddDynamic(
 		this, &AShipActor::HandlePlayerExitedCamp);
 
-	// ── INITIAL STATE CHECK ───────────────────────────────────────────────────
-	// BaseCamp may have already broadcast OnPlayerEnteredCamp before we bound.
-	// Query the sphere directly — this fixes the "spawn inside bubble" case.
+	// Handle spawn-inside-bubble case.
 	if (CachedBaseCamp->OxygenSphere)
 	{
 		TArray<AActor*> Overlapping;
@@ -212,22 +192,21 @@ void AShipActor::FindAndBindBaseCamp()
 		if (Overlapping.Num() > 0)
 		{
 			UE_LOG(LogTemp, Log,
-				TEXT("AShipActor [%s]: player inside bubble at spawn — opening ship."),
-				*GetName());
+				TEXT("AShipActor [%s]: player inside bubble at spawn — opening."), *GetName());
 			bShouldBeOpen = true;
 			TryUpdateAnimation();
 		}
 	}
 
 	UE_LOG(LogTemp, Log,
-		TEXT("AShipActor [%s]: bound to BaseCamp delegates."), *GetName());
+		TEXT("AShipActor [%s]: bound to BaseCamp."), *GetName());
 }
 
 void AShipActor::HandlePlayerEnteredCamp() { OnPlayerEnteredCamp(); }
 void AShipActor::HandlePlayerExitedCamp()  { OnPlayerExitedCamp();  }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ALARM — internal helpers
+// LIGHT HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
 void AShipActor::CollectAlarmLightsByTag()
@@ -240,21 +219,35 @@ void AShipActor::CollectAlarmLightsByTag()
 			AlarmLights.Add(LC);
 
 	UE_LOG(LogTemp, Log,
-		TEXT("AShipActor [%s]: %d alarm light(s) found with tag '%s'."),
+		TEXT("AShipActor [%s]: %d alarm light(s) with tag '%s'."),
 		*GetName(), AlarmLights.Num(), *AlarmLightTag.ToString());
 }
 
-void AShipActor::CacheOriginalIntensities()
+void AShipActor::CacheOriginalLightState()
 {
 	OriginalIntensities.Empty();
+	OriginalColors.Empty();
+
 	for (ULightComponent* LC : AlarmLights)
+	{
 		OriginalIntensities.Add(LC ? LC->Intensity : 0.f);
+		// GetLightColor returns FLinearColor
+		OriginalColors.Add(LC ? LC->GetLightColor() : FLinearColor::White);
+	}
 }
 
-void AShipActor::PulseOn()
+void AShipActor::SetAllLightsState(float Intensity, FLinearColor Color)
 {
-	if (!bAlarmActive) return;
-	SetAllLightsIntensity(AlarmIntensity);
+	for (ULightComponent* LC : AlarmLights)
+	{
+		if (!LC) continue;
+		LC->SetIntensity(Intensity);
+		LC->SetLightColor(Color);
+	}
+}
+
+void AShipActor::SchedulePulseOff()
+{
 	GetWorld()->GetTimerManager().SetTimer(
 		PulseTimerHandle, this, &AShipActor::PulseOff, PulseOnTime, false);
 }
@@ -262,13 +255,16 @@ void AShipActor::PulseOn()
 void AShipActor::PulseOff()
 {
 	if (!bAlarmActive) return;
-	SetAllLightsIntensity(0.f);
+	// OFF state: intensity 0, color doesn't matter
+	SetAllLightsState(0.f, AlarmColor);
 	GetWorld()->GetTimerManager().SetTimer(
 		PulseTimerHandle, this, &AShipActor::PulseOn, PulseOffTime, false);
 }
 
-void AShipActor::SetAllLightsIntensity(float Intensity)
+void AShipActor::PulseOn()
 {
-	for (ULightComponent* LC : AlarmLights)
-		if (LC) LC->SetIntensity(Intensity);
+	if (!bAlarmActive) return;
+	SetAllLightsState(AlarmIntensity, AlarmColor);
+	GetWorld()->GetTimerManager().SetTimer(
+		PulseTimerHandle, this, &AShipActor::PulseOff, PulseOnTime, false);
 }
