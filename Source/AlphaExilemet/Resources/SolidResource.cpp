@@ -41,6 +41,15 @@ ASolidResource::ASolidResource()
 	{
 		MiningHitSounds.Add(Metal3.Object);
 	}
+	
+	static ConstructorHelpers::FObjectFinder<USoundBase> BreakSound(
+		TEXT("/Game/AlphaExilemet/SFX/XFX/Base/Break/WoodenMetalBreak.WoodenMetalBreak")
+	);
+	
+	if (!DepletionSound && BreakSound.Succeeded())
+	{
+		DepletionSound = BreakSound.Object;
+	}
 }
 
 void ASolidResource::SetLastPickaxe(APickaxeTool* Tool)
@@ -111,6 +120,15 @@ void ASolidResource::UpdateScale()
 void ASolidResource::DepleteResource()
 {
 	Super::DepleteResource();
+	
+	if (DepletionSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			this,
+			DepletionSound,
+			GetActorLocation()
+		);
+	}
 	
 	const FResourceRow* Row = ResourceID.GetRow<FResourceRow>(TEXT("SolidResource"));
 	if (!Row)

@@ -25,6 +25,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio")
 	TArray<USoundBase*> MiningHitSounds;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio")
+	USoundBase* DepletionSound;
+	
 	/** Random pitch variation for hit sound. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio")
 	FVector2D MiningHitPitchRange = FVector2D(0.95f, 1.05f);
