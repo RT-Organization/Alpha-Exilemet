@@ -68,36 +68,53 @@ void ULevelStreamingManager::InitializeAtMainMenu(TSubclassOf<UUserWidget> InLoa
 
 	CurrentLevel          = EGameLevel::MainMenu;
 	bTransitionInProgress = false;
+	bIsPortalExit         = false;
 
 	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager: initialized at MainMenu."));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DIRECT PLAY (Developer PIE into any sublevel)
+// DIRECT PLAY (Developer PIE directly into Main or any sublevel)
 //
 // Called from GM InitializeInstance when the current level is NOT L_Persistent.
-// No loading screen. No streaming. No phase set (stays EGamePhase::None).
-// Fires OnLevelTransitionComplete(Main) after one frame so all GM bindings
-// registered in InitializeInstance are already live when the event arrives.
 //
-// Result in GM:
-//   Switch on EGameLevel → Main pin → SpawnNewGamePlayer
-//   → InitializePlayer (spawns at PlayerStart, possesses)
-//   → SetupPlayerGame (creates HUD etc.)
-//   Since CurrentPhase == None, the survival SET node is skipped.
+// This sets CurrentLevel = Main and schedules a one-frame timer that broadcasts
+// OnLevelTransitionComplete(Main).  The one-frame delay is critical: it lets
+// InitializeInstance finish binding OnLevelTransitionComplete BEFORE the event
+// fires, so the GM's handler is already wired up when it arrives.
+//
+// The GM's OnLevelTransitionComplete_Handler hits the Main pin, reads
+// bIsPortalExit = false, and calls SpawnNewGamePlayer normally.
+// Since CurrentPhase = None (never set), survival stays OFF.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ULevelStreamingManager::InitializeForDirectPlay()
 {
 	CurrentLevel          = EGameLevel::Main;
 	bTransitionInProgress = false;
+	bIsPortalExit         = false;
 
-	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager: InitializeForDirectPlay — direct PIE detected. Survival will stay OFF."));
+	// Schedule the broadcast for the next frame.
+	// Using a minimal positive time so the timer actually fires on the next tick.
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		World->GetTimerManager().SetTimer(
+			DirectPlayTimerHandle,
+			this,
+			&ULevelStreamingManager::DirectPlayTimerCallback,
+			0.05f,   // one frame at 20fps; safe for any frame rate
+			false);
+	}
+
+	UE_LOG(LogTemp, Log,
+		TEXT("LevelStreamingManager: InitializeForDirectPlay — scheduled OnLevelTransitionComplete(Main)."));
 }
 
 void ULevelStreamingManager::DirectPlayTimerCallback()
 {
-	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager: DirectPlayTimerCallback — broadcasting OnLevelTransitionComplete(Main)."));
+	UE_LOG(LogTemp, Log,
+		TEXT("LevelStreamingManager: DirectPlayTimerCallback — broadcasting OnLevelTransitionComplete(Main)."));
 	OnLevelTransitionComplete.Broadcast(EGameLevel::Main);
 }
 
@@ -138,7 +155,8 @@ void ULevelStreamingManager::LoadSavedGame(const FString& SlotName)
 
 	if (!UGameplayStatics::DoesSaveGameExist(SlotName, 0))
 	{
-		UE_LOG(LogTemp, Error, TEXT("LevelStreamingManager::LoadSavedGame — no save in slot '%s'."), *SlotName);
+		UE_LOG(LogTemp, Error,
+			TEXT("LevelStreamingManager::LoadSavedGame — no save in slot '%s'."), *SlotName);
 		return;
 	}
 
@@ -158,10 +176,10 @@ void ULevelStreamingManager::LoadSavedGame(const FString& SlotName)
 	const FName SavedLevelName = GI->LocalSaveRef->CurrentLevelName;
 	EGameLevel  TargetLevel    = NameToLevel(SavedLevelName);
 
-	if (TargetLevel == EGameLevel::None || TargetLevel == EGameLevel::Tutorial
+	if (TargetLevel == EGameLevel::None
+		|| TargetLevel == EGameLevel::Tutorial
 		|| TargetLevel == EGameLevel::MainMenu)
 	{
-		// Tutorial/corrupt/MainMenu save → restart Tutorial fresh.
 		TargetLevel = EGameLevel::Tutorial;
 		GI->LocalSaveRef->bHasValidTransform = false;
 		GI->CurrentPhase = EGamePhase::NewGame_Tutorial;
@@ -176,42 +194,35 @@ void ULevelStreamingManager::LoadSavedGame(const FString& SlotName)
 	}
 	else
 	{
-		// "Main" → normal loaded game.
 		GI->CurrentPhase = EGamePhase::LoadedGame;
 		TargetLevel      = EGameLevel::Main;
 		UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager::LoadSavedGame — Main LoadedGame."));
 	}
 
-	// Always unload MainMenu — L_Persistent guarantees it is loaded at this point.
 	BeginTransition(TargetLevel, EGameLevel::MainMenu);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RETURN TO MAIN MENU
-//
-// ALWAYS shows the loading screen regardless of which level we are leaving.
-// The loading screen appears the moment the button is pressed, covers the
-// entire level swap, and fades out once MainMenu is loaded.
-//
-// NOTE: The skull sequence black screen in Tutorial fires and FINISHES before
-// ReturnToMainMenu is ever called — there is no overlap.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ULevelStreamingManager::ReturnToMainMenu()
 {
 	if (bTransitionInProgress)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LevelStreamingManager::ReturnToMainMenu — transition in progress."));
+		UE_LOG(LogTemp, Warning,
+			TEXT("LevelStreamingManager::ReturnToMainMenu — transition in progress."));
 		return;
 	}
 
-	EGameLevel FromLevel = CurrentLevel;
+	// Cancel any pending portal exit delay so it doesn't fire mid-return.
+	if (GetWorld())
+		GetWorld()->GetTimerManager().ClearTimer(PortalExitDelayHandle);
 
+	EGameLevel FromLevel = CurrentLevel;
 	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager::ReturnToMainMenu — from '%s'."),
 		*LevelToName(FromLevel).ToString());
 
-	// Always use a loading screen (bSeamless = false).
-	// This covers the camera transition and level swap from any level.
 	BeginTransition(EGameLevel::MainMenu, FromLevel, false);
 }
 
@@ -223,7 +234,6 @@ void ULevelStreamingManager::CompleteTutorialAndLoadMain()
 {
 	if (bTransitionInProgress) return;
 
-	// Clear all player tools.
 	if (AAlphaExilemetCharacter* Player = GetLocalPlayer())
 	{
 		for (AToolBase* Tool : Player->OwnedTools)
@@ -237,7 +247,6 @@ void ULevelStreamingManager::CompleteTutorialAndLoadMain()
 		Player->OnToolWielded.Broadcast(-1);
 	}
 
-	// Set phase = NewGame_Tutorial BEFORE streaming so SpawnNewGamePlayer reads it correctly.
 	if (UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance()))
 	{
 		GI->CurrentPhase = EGamePhase::NewGame_Tutorial;
@@ -246,15 +255,19 @@ void ULevelStreamingManager::CompleteTutorialAndLoadMain()
 		GI->SavePlayerData();
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager::CompleteTutorialAndLoadMain. Phase=NewGame_Tutorial."));
+	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager::CompleteTutorialAndLoadMain."));
 
-	// Tutorial→Main always shows the loading screen (covers the level swap).
-	// The skull black screen has already faded BEFORE this is called.
 	BeginTransition(EGameLevel::Main, EGameLevel::Tutorial, true);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PORTAL ENTER
+//
+// The player pawn is NOT destroyed here. The GM's OnLevelTransitionStarted
+// handler checks IsPortalLevel(ToLevel) and skips the destroy-pawn path so the
+// existing pawn is kept alive throughout the streaming swap.  Once the portal
+// level loads, OnLevelTransitionComplete(Portal_X) fires and the GM calls
+// TeleportPlayerToPortalStart() to place the pawn at the portal's PlayerStart.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ULevelStreamingManager::EnterPortal(EGameLevel PortalLevel, FTransform PlayerReturnTransform)
@@ -262,8 +275,9 @@ void ULevelStreamingManager::EnterPortal(EGameLevel PortalLevel, FTransform Play
 	if (bTransitionInProgress) return;
 	if (!IsPortalLevel(PortalLevel)) return;
 
-	PortalReturnFrom      = CurrentLevel;
+	PortalReturnFrom      = CurrentLevel;   // remember Main (or wherever we came from)
 	PortalReturnTransform = PlayerReturnTransform;
+	bIsPortalExit         = false;          // entering, not exiting
 
 	if (UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance()))
 	{
@@ -276,6 +290,7 @@ void ULevelStreamingManager::EnterPortal(EGameLevel PortalLevel, FTransform Play
 		GI->SavePlayerData();
 	}
 
+	// Disable survival NOW so it doesn't tick during the transition.
 	if (AAlphaExilemetCharacter* Player = GetLocalPlayer())
 		Player->bIsSurvivalActive = false;
 
@@ -288,20 +303,21 @@ void ULevelStreamingManager::EnterPortal(EGameLevel PortalLevel, FTransform Play
 // ─────────────────────────────────────────────────────────────────────────────
 // PORTAL EXIT
 //
-// FIX — the original ExitPortal() teleported the player BEFORE Main was loaded.
-// This caused two problems:
-//   1. The player was placed in an unloaded world, causing the physics system
-//      to drop them back to the portal level's origin (or the portal arch itself).
-//   2. The portal arch's overlap volume was still live, so the OnOverlapBegin
-//      callback re-fired immediately, sending the player back into the portal.
+// KEY DESIGN DECISION — why the teleport is deferred:
 //
-// The correct sequence is:
-//   ExitPortal()           — save state, begin streaming (portal out / Main in)
-//   OnBothConditionsMet()  — Main is now loaded → apply return transform HERE
+//   ExitPortal() is called while the portal level is still loaded and Main is
+//   not. If we teleport the player NOW:
+//     (a) The portal arch's overlap volume is still active and immediately
+//         re-fires OnOverlapBegin, sending the player back in.
+//     (b) Physics has no valid ground in Main yet so the pawn falls or
+//         snaps to origin.
 //
-// The player transform is stored in PortalReturnTransform (set during EnterPortal
-// and confirmed from the save in ExitPortal). PortalReturnFrom tracks that we
-// came from a portal so OnBothConditionsMet knows to apply the teleport.
+//   Solution: do NOT touch the player here. Just update phase/save and kick off
+//   BeginTransition.  OnBothConditionsMet() runs only after Main is fully loaded
+//   AND MinLoadingScreenTime has elapsed — at that point it is safe to teleport.
+//
+//   bIsPortalExit is set to true so the GM's OnLevelTransitionComplete handler
+//   can take the lightweight "portal exit" path instead of SpawnNewGamePlayer.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ULevelStreamingManager::ExitPortal()
@@ -309,33 +325,26 @@ void ULevelStreamingManager::ExitPortal()
 	if (bTransitionInProgress) return;
 
 	EGameLevel FromPortal = CurrentLevel;
+	bIsPortalExit         = true;   // tell the GM not to spawn a new player
 
 	if (UAlphaExilemetGameInstance* GI = Cast<UAlphaExilemetGameInstance>(GetGameInstance()))
 	{
 		GI->CurrentPhase = EGamePhase::Main;
 		if (GI->LocalSaveRef)
 		{
-			// Confirm the stored return transform from the save (authoritative source).
+			// Re-confirm the return transform from the save (authoritative source).
 			PortalReturnTransform              = GI->LocalSaveRef->PrePortalTransform;
 			GI->LocalSaveRef->CurrentLevelName = FName("Main");
 		}
 		GI->SavePlayerData();
 	}
 
-	// ── DO NOT teleport or modify the player here ──────────────────────────
-	// Main is not loaded yet. Teleporting now puts the player in limbo:
-	//   • The portal arch's overlap volume is still active → re-fires OnOverlapBegin.
-	//   • Physics has no valid world to place the pawn → position is undefined.
-	//
-	// The teleport happens inside OnBothConditionsMet(), once Main is fully loaded.
-	// ──────────────────────────────────────────────────────────────────────────
+	// PortalReturnFrom was set in EnterPortal() and must NOT be reset here.
+	// OnBothConditionsMet reads it to decide whether to apply the return teleport.
 
-	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager::ExitPortal — from '%s'. Teleport deferred until Main loads."),
+	UE_LOG(LogTemp, Log,
+		TEXT("LevelStreamingManager::ExitPortal — from '%s'. Teleport deferred until Main loads."),
 		*LevelToName(FromPortal).ToString());
-
-	// PortalReturnFrom was set when EnterPortal() was called (and stays set).
-	// OnBothConditionsMet checks IsPortalLevel(PortalReturnFrom) to know whether
-	// to apply the return transform, so we must NOT reset it here.
 
 	BeginTransition(EGameLevel::Main, FromPortal);
 }
@@ -346,64 +355,61 @@ void ULevelStreamingManager::ExitPortal()
 
 void ULevelStreamingManager::CompletePortalChallenge()
 {
-	// Immediate exit — no explore delay.
 	OnPortalExitStarted.Broadcast(CurrentLevel, EGameLevel::Main);
 	ExitPortal();
 }
 
 void ULevelStreamingManager::CompletePortalChallengeWithDelay(float ExploreDelay)
 {
-	// Guard: don't start the delay if a transition is already in progress,
-	// and don't start it twice (e.g. if the player hits two trigger volumes).
 	if (bTransitionInProgress)
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("LevelStreamingManager::CompletePortalChallengeWithDelay — transition already in progress, ignored."));
+			TEXT("LevelStreamingManager::CompletePortalChallengeWithDelay — transition in progress, ignored."));
 		return;
 	}
 
-	if (GetWorld()->GetTimerManager().IsTimerActive(PortalExitDelayHandle))
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	if (World->GetTimerManager().IsTimerActive(PortalExitDelayHandle))
 	{
 		UE_LOG(LogTemp, Warning,
-			TEXT("LevelStreamingManager::CompletePortalChallengeWithDelay — delay already counting, ignored."));
+			TEXT("LevelStreamingManager::CompletePortalChallengeWithDelay — already counting, ignored."));
 		return;
 	}
 
-	// Broadcast immediately so directors/UI can react (show reward screen, etc.).
+	// Broadcast immediately so directors / UI can react (show reward screen etc.).
 	OnPortalExitStarted.Broadcast(CurrentLevel, EGameLevel::Main);
 
 	if (ExploreDelay <= 0.f)
 	{
-		// Zero delay: behave exactly like CompletePortalChallenge().
 		ExitPortal();
 		return;
 	}
 
 	UE_LOG(LogTemp, Log,
-		TEXT("LevelStreamingManager::CompletePortalChallengeWithDelay — player has %.1f seconds to explore."),
+		TEXT("LevelStreamingManager::CompletePortalChallengeWithDelay — player has %.1fs to explore."),
 		ExploreDelay);
 
-	GetWorld()->GetTimerManager().SetTimer(
+	World->GetTimerManager().SetTimer(
 		PortalExitDelayHandle,
 		this,
 		&ULevelStreamingManager::PortalExitDelayCallback,
 		ExploreDelay,
-		false);   // not looping
+		false);
 }
 
 void ULevelStreamingManager::PortalExitDelayCallback()
 {
-	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager: explore delay elapsed — starting ExitPortal."));
+	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager: explore delay elapsed — ExitPortal."));
 	ExitPortal();
 }
 
 void ULevelStreamingManager::Debug_ForceExitPortal()
 {
 	UE_LOG(LogTemp, Warning, TEXT("LevelStreamingManager: Debug_ForceExitPortal."));
-
-	// Cancel any pending explore delay so the debug call wins immediately.
-	GetWorld()->GetTimerManager().ClearTimer(PortalExitDelayHandle);
-
+	if (GetWorld())
+		GetWorld()->GetTimerManager().ClearTimer(PortalExitDelayHandle);
 	ExitPortal();
 }
 
@@ -423,14 +429,12 @@ void ULevelStreamingManager::BeginTransition(EGameLevel NewLevel, EGameLevel Old
 		*LevelToName(OldLevel).ToString(), *LevelToName(NewLevel).ToString(),
 		bSeamless ? TEXT(" [SEAMLESS]") : TEXT(""));
 
-	// 1. UNPAUSE THE GAME.
-	// The player may have opened the Pause menu before clicking "Main Menu".
-	// SetTimer (and LoadStreamLevel latent actions) use game time by default —
-	// they NEVER fire while the game is paused. Unpausing here before any I/O
-	// ensures timers and streaming callbacks tick correctly.
+	// 1. Unpause — timers and latent actions need game time to tick.
 	UGameplayStatics::SetGamePaused(GetWorld(), false);
 
-	// 2. Notify GM to clean up BEFORE any I/O.
+	// 2. Notify GM BEFORE any I/O so it can clean up the old level.
+	//    IMPORTANT: the GM's OnLevelTransitionStarted_Handler must check
+	//    IsPortalLevel(ToLevel) and skip pawn destruction when entering a portal.
 	OnLevelTransitionStarted.Broadcast(OldLevel, NewLevel);
 
 	// 3. Loading screen (skipped in seamless mode).
@@ -438,7 +442,6 @@ void ULevelStreamingManager::BeginTransition(EGameLevel NewLevel, EGameLevel Old
 	{
 		ShowLoadingScreen();
 
-		// Now that the game is unpaused, this timer will tick correctly.
 		GetWorld()->GetTimerManager().SetTimer(
 			MinTimeHandle,
 			this,
@@ -448,7 +451,6 @@ void ULevelStreamingManager::BeginTransition(EGameLevel NewLevel, EGameLevel Old
 	}
 	else
 	{
-		// Seamless: treat min time as already done.
 		bMinTimeElapsed = true;
 	}
 
@@ -480,12 +482,13 @@ void ULevelStreamingManager::BeginTransition(EGameLevel NewLevel, EGameLevel Old
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("LevelStreamingManager::BeginTransition — NewLevel has no name!"));
+		UE_LOG(LogTemp, Error,
+			TEXT("LevelStreamingManager::BeginTransition — NewLevel has no name!"));
 		bTransitionInProgress = false;
 		return;
 	}
 
-	// Update tracking immediately.
+	// 6. Update tracking immediately (before any callbacks fire).
 	CurrentLevel = NewLevel;
 }
 
@@ -497,7 +500,6 @@ void ULevelStreamingManager::OnLevelLoaded()
 {
 	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager: '%s' loaded."),
 		*LevelToName(CurrentLevel).ToString());
-
 	bLevelLoaded = true;
 	OnBothConditionsMet();
 }
@@ -522,26 +524,22 @@ void ULevelStreamingManager::OnBothConditionsMet()
 		*LevelToName(CurrentLevel).ToString(),
 		bSeamlessTransition ? TEXT(" [SEAMLESS]") : TEXT(""));
 
-	// ── MAIN MENU: fix stale FPS camera ──────────────────────────────────────
-	// When returning to MainMenu the PlayerCameraManager still has the stale
-	// first-person camera settings from the destroyed player pawn (FOV, rotation
-	// mode, etc.). Simply calling SetViewTarget is not enough — the camera manager
-	// continues to run in FPS mode and produces a black screen.
-	//
-	// Fix: reset the camera manager to a neutral state, then explicitly force the
-	// view target to the CineCameraActor placed in the MainMenu level. This must
-	// happen BEFORE HideLoadingScreen so the correct view is ready the instant the
-	// loading screen fades out.
+	// ── MainMenu: reset stale FPS camera ─────────────────────────────────────
 	if (CurrentLevel == EGameLevel::MainMenu)
 	{
 		ForceCameraToMainMenuCineCamera();
 	}
 
-	// ── PORTAL RETURN: apply the deferred player teleport ────────────────────
-	// ExitPortal() intentionally did NOT teleport the player because Main was not
-	// loaded yet. Now that Main is fully loaded (bLevelLoaded is true) we apply
-	// the pre-portal transform, re-enable survival, and reset PortalReturnFrom
-	// so this block does not fire again on the next transition to Main.
+	// ── Portal Exit: apply the deferred player teleport ───────────────────────
+	//
+	// ExitPortal() did NOT touch the player because Main was not loaded yet.
+	// Now that Main is fully loaded it is safe to place the player at the
+	// pre-portal transform.  We also re-enable survival here in C++ as a
+	// safety net — the GM's handler will do the same via SET IsSurvivalActive.
+	//
+	// The GM's OnLevelTransitionComplete_Handler reads bIsPortalExit and
+	// takes the lightweight path (no SpawnNewGamePlayer) so there is no race.
+	//
 	if (CurrentLevel == EGameLevel::Main && IsPortalLevel(PortalReturnFrom))
 	{
 		if (AAlphaExilemetCharacter* Player = GetLocalPlayer())
@@ -559,20 +557,27 @@ void ULevelStreamingManager::OnBothConditionsMet()
 				*LevelToName(PortalReturnFrom).ToString());
 		}
 
-		// Reset so this block does not re-fire on the next Main load
-		// (e.g. after a Tutorial→Main or LoadedGame→Main transition).
+		// Reset so this block does not re-fire on the next Main load.
 		PortalReturnFrom = EGameLevel::None;
 	}
-	// ─────────────────────────────────────────────────────────────────────────
 
+	// ── Finish ────────────────────────────────────────────────────────────────
 	if (!bSeamlessTransition)
 		HideLoadingScreen();
 
 	bTransitionInProgress = false;
 	bSeamlessTransition   = false;
 
+	// Broadcast BEFORE resetting bIsPortalExit so the GM handler can read it.
 	OnLevelTransitionComplete.Broadcast(CurrentLevel);
+
+	// Reset portal-exit flag AFTER the broadcast so it is fresh for the next use.
+	bIsPortalExit = false;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CAMERA — fix stale FPS state when returning to MainMenu
+// ─────────────────────────────────────────────────────────────────────────────
 
 void ULevelStreamingManager::ForceCameraToMainMenuCineCamera()
 {
@@ -582,45 +587,28 @@ void ULevelStreamingManager::ForceCameraToMainMenuCineCamera()
 	APlayerController* PC = World->GetFirstPlayerController();
 	if (!PC) return;
 
-	// Find the CineCameraActor in the loaded MainMenu level.
-	// It lives in the MainMenu sublevel, so we iterate streaming levels.
-	ACineCameraActor* CineCam = nullptr;
-
-	// First try GetActorOfClass — works if the actor is in the persistent level
-	// or if the level is already fully visible.
 	TArray<AActor*> FoundActors;
 	UGameplayStatics::GetAllActorsOfClass(World, ACineCameraActor::StaticClass(), FoundActors);
-	if (FoundActors.Num() > 0)
-	{
-		CineCam = Cast<ACineCameraActor>(FoundActors[0]);
-	}
-
-	if (!CineCam)
+	if (FoundActors.Num() == 0)
 	{
 		UE_LOG(LogTemp, Warning,
 			TEXT("LevelStreamingManager::ForceCameraToMainMenuCineCamera — no CineCameraActor found."));
 		return;
 	}
 
-	// 1. Reset the PlayerCameraManager to remove any stale FPS state.
-	//    SetViewTarget with a new actor triggers ApplyCameraModifiers and
-	//    resets the view info through the camera manager pipeline.
+	ACineCameraActor* CineCam = Cast<ACineCameraActor>(FoundActors[0]);
+	if (!CineCam) return;
+
 	if (APlayerCameraManager* CamMgr = PC->PlayerCameraManager)
 	{
-		// Force-flush the camera manager's cached view by setting it to the
-		// CineCam location/rotation directly. This overwrites the stale FPS data.
 		FMinimalViewInfo ViewInfo;
 		ViewInfo.Location = CineCam->GetActorLocation();
 		ViewInfo.Rotation = CineCam->GetActorRotation();
-		ViewInfo.FOV      = 90.0f; // default — CineCam will override this next frame
+		ViewInfo.FOV      = 90.0f;
 		CamMgr->SetDesiredColorScale(FVector(1, 1, 1), 0.0f);
-
-		// Lock the camera manager's last frame info to the CineCam position
-		// so there is no interpolation artefact on the first visible frame.
 		CamMgr->FillCameraCache(ViewInfo);
 	}
 
-	// 2. Set the actual view target — the camera manager will now follow CineCam.
 	PC->SetViewTargetWithBlend(CineCam, 0.0f);
 
 	UE_LOG(LogTemp, Log,
@@ -630,28 +618,18 @@ void ULevelStreamingManager::ForceCameraToMainMenuCineCamera()
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LOADING SCREEN
-//
-// BUG FIX: The old code nulled ActiveLoadingScreen immediately after calling
-// StartFadeOut. The BP widget then tried to Remove from Parent after its
-// animation but the C++ reference was gone — the widget was orphaned.
-//
-// Fix: we keep a TWeakObjectPtr to track the widget. We null ActiveLoadingScreen
-// so we don't double-call HideLoadingScreen, but the widget itself remains valid
-// in memory and can call Remove from Parent when its animation finishes.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ULevelStreamingManager::ShowLoadingScreen()
 {
 	if (!LoadingScreenClass)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LevelStreamingManager::ShowLoadingScreen — LoadingScreenClass not set!"));
-		// Still mark min time elapsed so we don't get stuck waiting for a screen
-		// that was never shown. OnBothConditionsMet will fire when level loads.
-		bMinTimeElapsed = true;
+		UE_LOG(LogTemp, Warning,
+			TEXT("LevelStreamingManager::ShowLoadingScreen — LoadingScreenClass not set!"));
+		bMinTimeElapsed = true;   // don't stall if there is no screen
 		return;
 	}
 
-	// If a previous screen is still alive, remove it immediately.
 	if (ActiveLoadingScreen.IsValid())
 	{
 		ActiveLoadingScreen->RemoveFromParent();
@@ -667,20 +645,21 @@ void ULevelStreamingManager::ShowLoadingScreen()
 	}
 
 	APlayerController* PC = World->GetFirstPlayerController();
-	UUserWidget* NewScreen = PC ? CreateWidget<UUserWidget>(PC, LoadingScreenClass)
-								: CreateWidget<UUserWidget>(World, LoadingScreenClass);
+	UUserWidget* NewScreen = PC
+		? CreateWidget<UUserWidget>(PC, LoadingScreenClass)
+		: CreateWidget<UUserWidget>(World, LoadingScreenClass);
 
 	if (!NewScreen)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LevelStreamingManager::ShowLoadingScreen — CreateWidget returned null!"));
+		UE_LOG(LogTemp, Warning,
+			TEXT("LevelStreamingManager::ShowLoadingScreen — CreateWidget returned null!"));
 		bMinTimeElapsed = true;
 		return;
 	}
 
-	ActiveLoadingScreen = NewScreen; // TWeakObjectPtr — widget stays alive in UMG
+	ActiveLoadingScreen = NewScreen;
 	NewScreen->AddToViewport(100);
 
-	// Call StartFadeIn BP event.
 	if (UFunction* Fn = NewScreen->FindFunction(FName("StartFadeIn")))
 		NewScreen->ProcessEvent(Fn, nullptr);
 
@@ -693,19 +672,17 @@ void ULevelStreamingManager::HideLoadingScreen()
 
 	UUserWidget* Screen = ActiveLoadingScreen.Get();
 
-	// Call StartFadeOut BP event — widget animates out and calls Remove from Parent itself.
 	if (UFunction* Fn = Screen->FindFunction(FName("StartFadeOut")))
 		Screen->ProcessEvent(Fn, nullptr);
 
-	// Null our weak pointer so we don't call this twice.
-	// The widget object itself stays alive until Remove from Parent fires.
 	ActiveLoadingScreen = nullptr;
 
 	UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager: loading screen fade-out started."));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PORTAL TELEPORT — used when ENTERING a portal (spawn at PlayerStart)
+// PORTAL TELEPORT — teleport to PlayerStart inside the active portal sublevel
+// Called by GM on every Portal_X pin of OnLevelTransitionComplete_Handler.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void ULevelStreamingManager::TeleportPlayerToPortalStart()
@@ -730,17 +707,19 @@ void ULevelStreamingManager::TeleportPlayerToPortalStart()
 		{
 			if (APlayerStart* PS = Cast<APlayerStart>(Actor))
 			{
-				Player->SetActorTransform(PS->GetActorTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+				Player->SetActorTransform(
+					PS->GetActorTransform(), false, nullptr, ETeleportType::TeleportPhysics);
 				if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
 					PC->SetControlRotation(PS->GetActorRotation());
-				UE_LOG(LogTemp, Log, TEXT("LevelStreamingManager: teleported to portal PlayerStart."));
+				UE_LOG(LogTemp, Log,
+					TEXT("LevelStreamingManager: teleported to portal PlayerStart."));
 				return;
 			}
 		}
 		UE_LOG(LogTemp, Warning, TEXT("LevelStreamingManager: portal has no PlayerStart!"));
 		return;
 	}
-	UE_LOG(LogTemp, Warning, TEXT("LevelStreamingManager: portal level not found."));
+	UE_LOG(LogTemp, Warning, TEXT("LevelStreamingManager: portal level not found in streaming levels."));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

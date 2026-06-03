@@ -24,19 +24,10 @@ void AShipActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Collect lights, cache their ORIGINAL state (intensity + color).
-	// Do NOT turn them off — they are interior lights that stay on normally.
 	CollectAlarmLightsByTag();
 	CacheOriginalLightState();
 
-	// Bind montage-ended callback once.
-	if (UAnimInstance* AnimInst = ExteriorMesh->GetAnimInstance())
-	{
-		AnimInst->OnMontageEnded.AddDynamic(this, &AShipActor::OnMontageEnded);
-		UE_LOG(LogTemp, Log,
-			TEXT("AShipActor [%s]: montage callback bound."), *GetName());
-	}
-	else
+	if (!ExteriorMesh->GetAnimInstance())
 	{
 		UE_LOG(LogTemp, Warning,
 			TEXT("AShipActor [%s]: no AnimInstance — assign ABP_Ship to ExteriorMesh."),
@@ -55,30 +46,23 @@ void AShipActor::StartAlarm()
 {
 	if (bAlarmActive) return;
 	bAlarmActive = true;
-
-	// Set all lights to alarm red immediately, then start pulsing.
 	SetAllLightsState(AlarmIntensity, AlarmColor);
 	SchedulePulseOff();
-
 	BP_OnAlarmStarted();
-	UE_LOG(LogTemp, Log, TEXT("AShipActor [%s]: alarm started."), *GetName());
 }
 
 void AShipActor::StopAlarm()
 {
 	if (!bAlarmActive) return;
 	bAlarmActive = false;
-
 	GetWorld()->GetTimerManager().ClearTimer(PulseTimerHandle);
 
 	for (int32 i = 0; i < AlarmLights.Num(); ++i)
 	{
 		if (!AlarmLights[i]) continue;
-		AlarmLights[i]->SetIntensity(
-			OriginalIntensities.IsValidIndex(i) ? OriginalIntensities[i] : 0.f);
-		AlarmLights[i]->SetLightColor(
-			OriginalColors.IsValidIndex(i) ? OriginalColors[i] : FLinearColor::White);
-		AlarmLights[i]->MarkRenderStateDirty(); // ← ADD THIS
+		AlarmLights[i]->SetIntensity(OriginalIntensities.IsValidIndex(i) ? OriginalIntensities[i] : 0.f);
+		AlarmLights[i]->SetLightColor(OriginalColors.IsValidIndex(i) ? OriginalColors[i] : FLinearColor::White);
+		AlarmLights[i]->MarkRenderStateDirty();
 	}
 
 	BP_OnAlarmStopped();
@@ -90,12 +74,14 @@ void AShipActor::StopAlarm()
 
 void AShipActor::OnPlayerEnteredCamp()
 {
+	UE_LOG(LogTemp, Warning, TEXT("AShipActor [%s]: OnPlayerEnteredCamp"), *GetName());
 	bShouldBeOpen = true;
 	TryUpdateAnimation();
 }
 
 void AShipActor::OnPlayerExitedCamp()
 {
+	UE_LOG(LogTemp, Warning, TEXT("AShipActor [%s]: OnPlayerExitedCamp"), *GetName());
 	bShouldBeOpen = false;
 	TryUpdateAnimation();
 }
@@ -108,24 +94,18 @@ void AShipActor::TryUpdateAnimation()
 	bIsAnimationPlaying = true;
 
 	if (bShouldBeOpen)
-	{
-		UE_LOG(LogTemp, Log, TEXT("AShipActor [%s]: → OPEN"), *GetName());
 		PlayMontage(OpenMontage);
-	}
 	else
-	{
-		UE_LOG(LogTemp, Log, TEXT("AShipActor [%s]: → CLOSE"), *GetName());
 		PlayMontage(CloseMontage);
-	}
 }
 
 void AShipActor::PlayMontage(UAnimMontage* Montage)
 {
+	UE_LOG(LogTemp, Warning, TEXT("AShipActor [%s]: PlayMontage — %s"),
+		*GetName(), Montage ? *Montage->GetName() : TEXT("NULL"));
+
 	if (!Montage)
 	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("AShipActor [%s]: montage null — set OpenMontage/CloseMontage in Class Defaults."),
-			*GetName());
 		bIsAnimationPlaying = false;
 		bCurrentlyOpen = bShouldBeOpen;
 		if (bCurrentlyOpen) BP_OnShipOpened(); else BP_OnShipClosed();
@@ -135,28 +115,54 @@ void AShipActor::PlayMontage(UAnimMontage* Montage)
 	UAnimInstance* AnimInst = ExteriorMesh->GetAnimInstance();
 	if (!AnimInst)
 	{
-		UE_LOG(LogTemp, Error,
-			TEXT("AShipActor [%s]: no AnimInstance — ExteriorMesh needs ABP_Ship."),
-			*GetName());
 		bIsAnimationPlaying = false;
 		return;
 	}
 
-	AnimInst->Montage_Play(Montage, 1.f);
+	float Duration = AnimInst->Montage_Play(Montage, 1.f);
+	UE_LOG(LogTemp, Warning, TEXT("AShipActor [%s]: Montage_Play duration=%.3f"), *GetName(), Duration);
+
+	if (Duration <= 0.f)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AShipActor [%s]: Montage_Play returned 0 — check slot DefaultSlot/DefaultGroup."), *GetName());
+		bIsAnimationPlaying = false;
+		bCurrentlyOpen = bShouldBeOpen;
+		if (bCurrentlyOpen) BP_OnShipOpened(); else BP_OnShipClosed();
+		return;
+	}
+
+	// Auto Blend Out is DISABLED on the montage asset, so OnMontageEnded will
+	// never fire naturally. Instead we schedule a timer to fire one frame
+	// before the end so we can update state and fire BP events cleanly.
+	// The montage just holds its last frame forever after that — no snap back.
+	const float FireAt = FMath::Max(Duration - 0.05f, Duration * 0.99f);
+	GetWorld()->GetTimerManager().SetTimer(
+		MontageEndTimerHandle, this, &AShipActor::OnMontageReachedEnd, FireAt, false);
+
+	UE_LOG(LogTemp, Warning, TEXT("AShipActor [%s]: end timer set for %.3fs"), *GetName(), FireAt);
 }
 
-void AShipActor::OnMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+bool AShipActor::IsOurMontage(UAnimMontage* Montage) const
 {
-	if (Montage != OpenMontage && Montage != CloseMontage) return;
+	if (!Montage) return false;
+	if (Montage == OpenMontage || Montage == CloseMontage) return true;
+	const FString Name = Montage->GetName();
+	if (OpenMontage  && Name == OpenMontage->GetName())  return true;
+	if (CloseMontage && Name == CloseMontage->GetName()) return true;
+	return false;
+}
+
+void AShipActor::OnMontageReachedEnd()
+{
+	UE_LOG(LogTemp, Warning, TEXT("AShipActor [%s]: OnMontageReachedEnd — bShouldBeOpen=%d"),
+		*GetName(), bShouldBeOpen);
 
 	bCurrentlyOpen      = bShouldBeOpen;
 	bIsAnimationPlaying = false;
 
-	UE_LOG(LogTemp, Log,
-		TEXT("AShipActor [%s]: montage ended (interrupted=%d). Open=%d"),
-		*GetName(), bInterrupted, bCurrentlyOpen);
-
 	if (bCurrentlyOpen) BP_OnShipOpened(); else BP_OnShipClosed();
+
+	// If the desired state changed while animating, kick off the next animation
 	TryUpdateAnimation();
 }
 
@@ -171,34 +177,35 @@ void AShipActor::FindAndBindBaseCamp()
 
 	if (!CachedBaseCamp)
 	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("AShipActor [%s]: BaseCamp not found."), *GetName());
+		UE_LOG(LogTemp, Warning, TEXT("AShipActor [%s]: BaseCamp not found."), *GetName());
 		return;
 	}
 
-	CachedBaseCamp->OnPlayerEnteredCamp.AddDynamic(
-		this, &AShipActor::HandlePlayerEnteredCamp);
-	CachedBaseCamp->OnPlayerExitedCamp.AddDynamic(
-		this, &AShipActor::HandlePlayerExitedCamp);
+	CachedBaseCamp->OnPlayerEnteredCamp.AddDynamic(this, &AShipActor::HandlePlayerEnteredCamp);
+	CachedBaseCamp->OnPlayerExitedCamp.AddDynamic(this,  &AShipActor::HandlePlayerExitedCamp);
 
-	// Handle spawn-inside-bubble case.
-	if (CachedBaseCamp->OxygenSphere)
+	// Delay 0.1s so physics overlaps are populated before checking
+	GetWorld()->GetTimerManager().SetTimer(
+		SpawnCheckTimerHandle, this, &AShipActor::CheckInitialOverlap, 0.1f, false);
+
+	UE_LOG(LogTemp, Log, TEXT("AShipActor [%s]: bound to BaseCamp."), *GetName());
+}
+
+void AShipActor::CheckInitialOverlap()
+{
+	if (!CachedBaseCamp || !CachedBaseCamp->OxygenSphere) return;
+
+	TArray<AActor*> Overlapping;
+	CachedBaseCamp->OxygenSphere->GetOverlappingActors(Overlapping, AAlphaExilemetCharacter::StaticClass());
+
+	UE_LOG(LogTemp, Warning, TEXT("AShipActor [%s]: CheckInitialOverlap — %d inside bubble."),
+		*GetName(), Overlapping.Num());
+
+	if (Overlapping.Num() > 0)
 	{
-		TArray<AActor*> Overlapping;
-		CachedBaseCamp->OxygenSphere->GetOverlappingActors(
-			Overlapping, AAlphaExilemetCharacter::StaticClass());
-
-		if (Overlapping.Num() > 0)
-		{
-			UE_LOG(LogTemp, Log,
-				TEXT("AShipActor [%s]: player inside bubble at spawn — opening."), *GetName());
-			bShouldBeOpen = true;
-			TryUpdateAnimation();
-		}
+		bShouldBeOpen = true;
+		TryUpdateAnimation();
 	}
-
-	UE_LOG(LogTemp, Log,
-		TEXT("AShipActor [%s]: bound to BaseCamp."), *GetName());
 }
 
 void AShipActor::HandlePlayerEnteredCamp() { OnPlayerEnteredCamp(); }
@@ -217,8 +224,7 @@ void AShipActor::CollectAlarmLightsByTag()
 		if (LC && LC->ComponentTags.Contains(AlarmLightTag))
 			AlarmLights.Add(LC);
 
-	UE_LOG(LogTemp, Log,
-		TEXT("AShipActor [%s]: %d alarm light(s) with tag '%s'."),
+	UE_LOG(LogTemp, Log, TEXT("AShipActor [%s]: %d alarm light(s) with tag '%s'."),
 		*GetName(), AlarmLights.Num(), *AlarmLightTag.ToString());
 }
 
@@ -226,11 +232,9 @@ void AShipActor::CacheOriginalLightState()
 {
 	OriginalIntensities.Empty();
 	OriginalColors.Empty();
-
 	for (ULightComponent* LC : AlarmLights)
 	{
 		OriginalIntensities.Add(LC ? LC->Intensity : 0.f);
-		// GetLightColor returns FLinearColor
 		OriginalColors.Add(LC ? LC->GetLightColor() : FLinearColor::White);
 	}
 }
@@ -255,7 +259,6 @@ void AShipActor::SchedulePulseOff()
 void AShipActor::PulseOff()
 {
 	if (!bAlarmActive) return;
-	// OFF state: intensity 0, color doesn't matter
 	SetAllLightsState(0.f, AlarmColor);
 	GetWorld()->GetTimerManager().SetTimer(
 		PulseTimerHandle, this, &AShipActor::PulseOn, PulseOffTime, false);

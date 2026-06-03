@@ -8,11 +8,6 @@
 // ENUMS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Every level in the project as a typed enum.
- * This replaces all FName("Tutorial"), FName("Main") hardcoding everywhere.
- * Add new portal levels here as needed.
- */
 UENUM(BlueprintType)
 enum class EGameLevel : uint8
 {
@@ -31,50 +26,66 @@ enum class EGameLevel : uint8
 // DELEGATES
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Fired when the new level is fully loaded and the minimum loading screen
- * display time has elapsed. This is the ONLY place where game logic should
- * react to a level transition completing.
- *
- * Parameter: the level that just finished loading.
- */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLevelTransitionComplete, EGameLevel, NewLevel);
-
-/**
- * Fired at the START of a transition, before any I/O.
- * Use this to clean up the current level (destroy player, clear refs, etc.).
- *
- * Parameters: level we are leaving, level we are going to.
- */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnLevelTransitionStarted, EGameLevel, FromLevel, EGameLevel, ToLevel);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ULevelStreamingManager
 //
-// SINGLE AUTHORITY for all level streaming in the project.
+// SINGLE AUTHORITY for all level streaming.
 //
-// DESIGN PRINCIPLES:
-//   1. One function per transition type. No raw FName streaming anywhere else.
-//   2. The manager owns the loading screen lifecycle completely:
-//        - Show loading screen (fade in)
-//        - Stream out old level
-//        - Stream in new level
-//        - Enforce MinLoadingScreenTime (minimum display seconds)
-//        - Fade out loading screen
-//        - Fire OnLevelTransitionComplete
-//   3. CurrentLevel is always authoritative — set before any I/O fires.
-//   4. All game logic (GM, directors, etc.) binds to OnLevelTransitionComplete
-//      and reacts based on CurrentLevel. Nothing else drives game logic.
+// ══════════════════════════════════════════════════════════════════════════════
+// GM BLUEPRINT WIRING  (read this before touching any Blueprint)
+// ══════════════════════════════════════════════════════════════════════════════
 //
-// HOW TO USE:
-//   - GM BeginPlay: bind to OnLevelTransitionComplete and OnLevelTransitionStarted.
-//   - WB_LoadMenu Load button: call LoadSavedGame(SlotName).
-//   - WB_Pause Main Menu button: call ReturnToMainMenu().
-//   - PortalBase: call EnterPortal(PortalLevel, ReturnTransform).
-//   - AlphaStreamingSubsystem skull sequence: call CompleteTutorialAndLoadMain().
-//   - Challenge complete: call CompletePortalChallengeWithDelay(Seconds).
-//   - Nobody else calls LoadStreamLevel or UnloadStreamLevel directly.
-// ─────────────────────────────────────────────────────────────────────────────
+// ── InitializeInstance ────────────────────────────────────────────────────────
+//  1. GetGameInstance → Cast to AlphaExilemetGameInstance → SET Instance Ref
+//  2. InitProgressionManager (target = Instance Ref)
+//  3. LevelStreamingManager → Bind OnLevelTransitionStarted
+//                              → Create Event (OnLevelTransitionStarted_Handler)
+//  4. LevelStreamingManager → Bind OnLevelTransitionComplete
+//                              → Create Event (OnLevelTransitionComplete_Handler)
+//  5. GetCurrentLevelName → Branch (== "L_Persistent")
+//       TRUE  → LevelStreamingManager → InitializeAtMainMenu (pass LoadingScreen class)
+//               → AlphaStreamingSubsystem → CallOnTutorialPlayerReady
+//       FALSE → LevelStreamingManager → InitializeForDirectPlay
+//               (OnLevelTransitionComplete(Main) fires one frame later automatically)
+//
+// ── OnLevelTransitionStarted_Handler (FromLevel, ToLevel) ────────────────────
+//  Branch: IsPortalLevel(ToLevel)?
+//    TRUE  → do NOTHING.
+//            The player pawn stays alive and travels with us conceptually.
+//            C++ handles survival flag. DO NOT destroy the pawn here.
+//    FALSE → GetPlayerCharacter → Cast → CleanupForLevelTransition → DestroyActor
+//            SET TutorialDirectorRef = null
+//            SET WakeUpDirectorRef   = null
+//            SET PlayerRef           = null
+//            SET ShowMouseCursor     = true
+//            GetActorOfClass(DinoCamActor) → GetPlayerController
+//                                         → SetViewTargetWithBlend (Time=0)
+//
+// ── OnLevelTransitionComplete_Handler (NewLevel) ──────────────────────────────
+//  Switch on EGameLevel:
+//
+//    None        → (ignore)
+//    MainMenu    → camera already forced by C++; show MainMenu UI if needed
+//    Tutorial    → SpawnNewGamePlayer (custom event)
+//    Main        → Branch: LevelStreamingManager.bIsPortalExit?
+//                    TRUE  → [Portal Exit Path]
+//                             GET PlayerRef from GameInstance
+//                             SET PlayerRef on GM
+//                             SetupPlayerGame (player already placed by C++)
+//                             SET IsSurvivalActive = true
+//                    FALSE → SpawnNewGamePlayer (custom event)
+//    Portal_X    → [Portal Enter Path]
+//                  LevelStreamingManager → TeleportPlayerToPortalStart
+//                  SET IsSurvivalActive = false on PlayerRef
+//                  SetupPlayerGame
+//
+// ── SpawnNewGamePlayer (custom event) ─────────────────────────────────────────
+//  Delay(0.3) → InitializePlayer(self) → SetupPlayerGame → ...existing chain...
+//
+// ══════════════════════════════════════════════════════════════════════════════
 
 UCLASS()
 class ALPHAEXILEMET_API ULevelStreamingManager : public UGameInstanceSubsystem
@@ -82,259 +93,177 @@ class ALPHAEXILEMET_API ULevelStreamingManager : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
-	// ── CONFIGURATION (set in BP GameInstance Class Defaults) ─────────────────
+	// ── CONFIGURATION ─────────────────────────────────────────────────────────
 
-	/**
-	 * The loading screen widget class to create during transitions.
-	 * Set this in BP_GameInstance Class Defaults or assign from GM.
-	 * Must expose a StartFadeIn() and StartFadeOut() Blueprint event.
-	 */
+	/** Loading screen widget. Must implement StartFadeIn / StartFadeOut BP events. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "LevelStreaming|Config")
 	TSubclassOf<UUserWidget> LoadingScreenClass;
 
-	/**
-	 * Minimum seconds the loading screen stays visible.
-	 * Prevents the screen from flashing instantly on cached/fast loads.
-	 * The loading screen will NOT fade out until BOTH the level is loaded
-	 * AND this time has elapsed.
-	 */
+	/** Minimum seconds the loading screen stays visible. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "LevelStreaming|Config")
 	float MinLoadingScreenTime = 2.0f;
 
-	// ── STATE (read-only, authoritative) ─────────────────────────────────────
+	// ── STATE ─────────────────────────────────────────────────────────────────
 
-	/** The level that is currently loaded and active. */
+	/** Currently active / target level. Always authoritative. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "LevelStreaming|State")
 	EGameLevel CurrentLevel = EGameLevel::None;
 
-	/** True while a transition is in progress. Prevents double-transitions. */
+	/** True while any streaming transition is in progress. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "LevelStreaming|State")
 	bool bTransitionInProgress = false;
 
+	/**
+	 * True from the moment ExitPortal() begins until OnLevelTransitionComplete(Main) fires.
+	 *
+	 * READ THIS in the GM's OnLevelTransitionComplete_Handler on the Main pin:
+	 *
+	 *   Branch: LevelStreamingManager → bIsPortalExit ?
+	 *     TRUE  → C++ already placed the player at PortalReturnTransform.
+	 *             Just do: GET PlayerRef, SET on GM, SetupPlayerGame, SET IsSurvivalActive=true
+	 *     FALSE → normal path (SpawnNewGamePlayer etc.)
+	 *
+	 * Automatically reset to false after OnLevelTransitionComplete fires.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "LevelStreaming|State")
+	bool bIsPortalExit = false;
+
 	// ── DELEGATES ─────────────────────────────────────────────────────────────
 
-	/**
-	 * Bind in GM BeginPlay (or InitializeInstance).
-	 * Fires when the new level is loaded AND MinLoadingScreenTime has elapsed.
-	 * This is the ONLY event that drives GM logic (spawn player, setup game, etc.)
-	 */
+	/** Fires when the new level is loaded AND MinLoadingScreenTime has elapsed. */
 	UPROPERTY(BlueprintAssignable, Category = "LevelStreaming")
 	FOnLevelTransitionComplete OnLevelTransitionComplete;
 
-	/**
-	 * Bind in GM BeginPlay.
-	 * Fires at the START of a transition.
-	 * Use to: destroy player pawn, clear director refs, any pre-transition cleanup.
-	 */
+	/** Fires at the START of a transition (before any I/O). Use for pawn cleanup. */
 	UPROPERTY(BlueprintAssignable, Category = "LevelStreaming")
 	FOnLevelTransitionStarted OnLevelTransitionStarted;
 
 	// ── PUBLIC TRANSITION FUNCTIONS ───────────────────────────────────────────
 
-	/**
-	 * Called by BP_MenuPlanet (or any New Game button) when starting a fresh game.
-	 *
-	 * bSeamless = true  → NO loading screen. The level loads silently in the
-	 *                      background. Use this when the MainMenu animation ends
-	 *                      with the camera exactly where the Tutorial camera starts,
-	 *                      so the transition is invisible. OnLevelTransitionComplete
-	 *                      fires as soon as the level is loaded (no min time wait).
-	 *
-	 * bSeamless = false → Normal loading screen transition (same as LoadSavedGame).
-	 *
-	 * BP_MenuPlanet usage:
-	 *   [StartNewGameTransition custom event]
-	 *     → [animate planet / align camera]
-	 *     → [Get Game Instance → Cast → Get Subsystem (LevelStreamingManager)]
-	 *     → [StartNewGame (SlotName="SaveSlot1", bSeamless=true)]
-	 *     → [Remove from Parent on any overlay widget]
-	 */
+	/** Start a brand-new game. bSeamless=true skips the loading screen. */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
 	void StartNewGame(const FString& SlotName, bool bSeamless = false);
 
-	/**
-	 * Called by WB_LoadMenu when the player picks a save slot.
-	 * Reads the save file, determines the correct level, shows loading screen,
-	 * unloads MainMenu, loads the target level.
-	 *
-	 * WB_LoadMenu only needs to call this ONE function and then Remove from Parent.
-	 * Everything else (loading screen, phase, streaming) is handled internally.
-	 */
+	/** Load a saved game slot. Called by WB_LoadMenu. */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
 	void LoadSavedGame(const FString& SlotName);
 
-	/**
-	 * Called by WB_Pause "Main Menu" button.
-	 * Shows loading screen, destroys player, unloads current level, loads MainMenu.
-	 *
-	 * WB_Pause only needs to call this ONE function and then Remove from Parent.
-	 */
+	/** Return to MainMenu from any level. */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
 	void ReturnToMainMenu();
 
-	/**
-	 * Called by the skull sequence end (via AlphaStreamingSubsystem).
-	 * Clears player tools, shows loading screen, unloads Tutorial, loads Main.
-	 * Fires OnLevelTransitionComplete(Main) when done — GM calls InitializeWakeUp.
-	 */
+	/** Called at end of Tutorial skull sequence (via AlphaStreamingSubsystem). */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
 	void CompleteTutorialAndLoadMain();
 
-	/**
-	 * Called by PortalBase::EnterPortalLevel().
-	 * Shows loading screen, saves return transform, unloads Main, loads portal level.
-	 */
+	/** Enter a portal challenge level. Called by PortalBase::EnterPortalLevel. */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
 	void EnterPortal(EGameLevel PortalLevel, FTransform PlayerReturnTransform);
 
 	/**
-	 * Called when the portal challenge is complete (no delay).
-	 * Fires OnPortalExitStarted, then begins the transition back to Main immediately.
-	 * The player return transform is applied AFTER Main is loaded (inside OnBothConditionsMet).
+	 * Complete the portal challenge with NO delay.
+	 * Broadcasts OnPortalExitStarted then immediately begins the exit transition.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
 	void CompletePortalChallenge();
 
 	/**
-	 * PRIMARY CHALLENGE COMPLETION ENTRY POINT.
+	 * Complete the portal challenge after ExploreDelay seconds.
+	 * The loading screen appears only AFTER the delay — the player can still move.
+	 * ExploreDelay = 0 behaves identically to CompletePortalChallenge().
 	 *
-	 * Fires OnPortalExitStarted so directors/UI can react (show reward screen, etc.),
-	 * then waits ExploreDelay seconds before starting the transition back to Main.
-	 * This gives the player time to explore the challenge level before being sent back.
-	 *
-	 * The loading screen appears AFTER the delay, not immediately — the player can
-	 * still move around during the wait.
-	 *
-	 * ExploreDelay = 0 → behaves identically to CompletePortalChallenge().
-	 *
-	 * CALL THIS FROM BP_QuestManager instead of CompletePortalChallenge().
+	 * CALL THIS FROM BP_QuestManager (VerificaOrdine).
 	 */
-	UFUNCTION(BlueprintCallable, Category = "LevelStreaming", meta = (DefaultToSelf = "Target"))
+	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
 	void CompletePortalChallengeWithDelay(float ExploreDelay = 5.0f);
 
-	/**
-	 * Debug: force complete a portal challenge immediately (no delay).
-	 */
+	/** Debug: force-exit portal immediately, cancelling any pending delay. */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming|Debug")
 	void Debug_ForceExitPortal();
 
 	// ── SETUP ─────────────────────────────────────────────────────────────────
 
 	/**
-	 * Called from GM InitializeInstance when PIE starts on L_Persistent.
-	 * Tells the manager that the game started on MainMenu.
-	 * Also passes the loading screen class if not set in CDO.
+	 * Call from GM InitializeInstance on the L_Persistent path.
+	 * Sets CurrentLevel = MainMenu and stores the LoadingScreen class.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
 	void InitializeAtMainMenu(TSubclassOf<UUserWidget> InLoadingScreenClass);
 
 	/**
-	 * Called from GM InitializeInstance when PIE starts on ANY level
-	 * that is NOT L_Persistent (direct developer play).
+	 * Call from GM InitializeInstance on the direct-play path (any non-Persistent level).
 	 *
-	 * Does NOT show any loading screen. Does NOT stream anything.
-	 * Sets CurrentLevel = Main so the GM switch routes to the Main path,
-	 * then fires OnLevelTransitionComplete after one frame so all
-	 * GM bindings are registered first.
+	 * Sets CurrentLevel = Main and fires OnLevelTransitionComplete(Main) after one
+	 * frame so all event bindings registered in InitializeInstance are live first.
 	 *
-	 * The GM will spawn the player at PlayerStart and call SetupPlayerGame.
+	 * The GM's OnLevelTransitionComplete_Handler will then run the Main pin normally,
+	 * detect bIsPortalExit=false, and call SpawnNewGamePlayer.
 	 * Since CurrentPhase stays EGamePhase::None, survival is NOT activated.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming|Debug")
 	void InitializeForDirectPlay();
 
-	// ── PORTAL HELPERS (called by GM or subsystem) ────────────────────────────
+	// ── PORTAL HELPERS ────────────────────────────────────────────────────────
 
-	/** Teleports the player pawn to the PlayerStart in the active portal sublevel. */
+	/**
+	 * Teleports the player to the PlayerStart inside the active portal sublevel.
+	 * Call this from GM's OnLevelTransitionComplete_Handler on every Portal_X pin.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "LevelStreaming")
 	void TeleportPlayerToPortalStart();
 
 	// ── UTILITY ───────────────────────────────────────────────────────────────
 
-	/** Convert EGameLevel to the FName used by LoadStreamLevel. */
 	UFUNCTION(BlueprintPure, Category = "LevelStreaming")
 	static FName LevelToName(EGameLevel Level);
 
-	/** Convert FName from save file to EGameLevel. */
 	UFUNCTION(BlueprintPure, Category = "LevelStreaming")
 	static EGameLevel NameToLevel(FName Name);
 
-	/** True if this level is a portal. */
 	UFUNCTION(BlueprintPure, Category = "LevelStreaming")
 	static bool IsPortalLevel(EGameLevel Level);
 
-	// ── KEPT FOR LEGACY / PORTAL CHALLENGE CODE ───────────────────────────────
-
-	/**
-	 * Legacy delegates — kept so existing portal challenge Blueprint code
-	 * that binds to these doesn't need to change.
-	 */
-	UPROPERTY(BlueprintAssignable, Category = "LevelStreaming|Legacy")
-	FOnLevelTransitionStarted OnPortalEnterComplete;   // fires after portal loads
+	// ── LEGACY DELEGATES (kept for existing BP bindings) ──────────────────────
 
 	UPROPERTY(BlueprintAssignable, Category = "LevelStreaming|Legacy")
-	FOnLevelTransitionStarted OnPortalExitStarted;     // fires when challenge done
+	FOnLevelTransitionStarted OnPortalEnterComplete;
+
+	UPROPERTY(BlueprintAssignable, Category = "LevelStreaming|Legacy")
+	FOnLevelTransitionStarted OnPortalExitStarted;
 
 private:
 	// ── INTERNAL STATE ────────────────────────────────────────────────────────
 
-	EGameLevel PendingLevel      = EGameLevel::None;
+	EGameLevel PendingLevel       = EGameLevel::None;
 
 	/**
-	 * The level we were in when EnterPortal() was called.
-	 * Stored so OnBothConditionsMet knows whether to apply the return transform.
-	 * Reset to EGameLevel::None after the return teleport fires.
+	 * Set to the level we were in when EnterPortal() was called.
+	 * OnBothConditionsMet checks IsPortalLevel(PortalReturnFrom) to know whether
+	 * to apply the deferred return teleport.
+	 * Reset to None immediately after the teleport fires.
 	 */
-	EGameLevel PortalReturnFrom  = EGameLevel::None;
+	EGameLevel PortalReturnFrom   = EGameLevel::None;
 
-	/** Pre-portal player transform, applied after Main is fully loaded on exit. */
+	/** Pre-portal player transform. Applied in OnBothConditionsMet after Main loads. */
 	FTransform PortalReturnTransform;
 
-	bool  bLevelLoaded          = false;
-	bool  bMinTimeElapsed       = false;
-	float LoadingScreenElapsed  = 0.0f;
+	bool  bLevelLoaded        = false;
+	bool  bMinTimeElapsed     = false;
+	bool  bSeamlessTransition = false;
 
-	/**
-	 * When true the current transition skips the loading screen entirely.
-	 * Both bLevelLoaded and bMinTimeElapsed are considered immediately met.
-	 * Used for the MainMenu→Tutorial seamless camera handoff in BP_MenuPlanet.
-	 */
-	bool  bSeamlessTransition   = false;
+	int32 LoadLatentUUID      = 0;
+	int32 UnloadLatentUUID    = 1000;
 
-	int32 LoadLatentUUID        = 0;
-	int32 UnloadLatentUUID      = 1000;
-
-	/**
-	 * Weak pointer to the active loading screen widget.
-	 * TWeakObjectPtr is used instead of a raw UPROPERTY pointer so that
-	 * HideLoadingScreen() can null our reference while the widget itself
-	 * remains alive in UMG memory to complete its fade-out animation and
-	 * call Remove from Parent. A raw UPROPERTY pointer would keep the widget
-	 * alive even after Remove from Parent, preventing GC.
-	 */
 	TWeakObjectPtr<UUserWidget> ActiveLoadingScreen;
 
-	// ── INTERNAL TRANSITION PIPELINE ──────────────────────────────────────────
+	// ── TRANSITION PIPELINE ───────────────────────────────────────────────────
 
-	/**
-	 * The single internal function that drives every transition.
-	 *
-	 * Order:
-	 *   1. Guard (bTransitionInProgress)
-	 *   2. Fire OnLevelTransitionStarted(CurrentLevel, NewLevel)
-	 *   3. Broadcast pre-cleanup to GM
-	 *   4. Show loading screen (fade in)
-	 *   5. Start MinLoadingScreenTime timer
-	 *   6. Unload OldLevel (if not None)
-	 *   7. Load NewLevel → OnLevelLoaded callback
-	 *   8. When BOTH loaded AND min time elapsed → OnBothConditionsMet
-	 *   9. Fade out loading screen
-	 *  10. Fire OnLevelTransitionComplete(NewLevel)
-	 *  11. Clear bTransitionInProgress
-	 */
 	void BeginTransition(EGameLevel NewLevel, EGameLevel OldLevel, bool bSeamless = false);
 
-	/** Internal: begins the actual portal exit transition. Called by ExitPortalDelayCallback or directly. */
+	/**
+	 * Internal portal exit. Never call from Blueprint.
+	 * Use CompletePortalChallenge() or CompletePortalChallengeWithDelay() instead.
+	 */
 	void ExitPortal();
 
 	void ShowLoadingScreen();
@@ -343,40 +272,23 @@ private:
 	UFUNCTION() void OnLevelLoaded();
 	UFUNCTION() void OnLevelUnloaded();
 	void OnMinTimeElapsed();
-	void OnBothConditionsMet(); // called when loaded AND min time elapsed
+	void OnBothConditionsMet();
 
 	FTimerHandle MinTimeHandle;
 
 	/**
-	 * Timer handle for the one-frame delay in InitializeForDirectPlay.
-	 * Ensures OnLevelTransitionComplete fires AFTER InitializeInstance
-	 * finishes binding all event handlers.
+	 * One-frame delay timer for InitializeForDirectPlay.
+	 * Ensures OnLevelTransitionComplete fires AFTER InitializeInstance has
+	 * finished registering all event bindings.
 	 */
 	FTimerHandle DirectPlayTimerHandle;
+	UFUNCTION() void DirectPlayTimerCallback();
 
-	/** Callback fired by DirectPlayTimerHandle. Broadcasts OnLevelTransitionComplete. */
-	UFUNCTION()
-	void DirectPlayTimerCallback();
-
-	/**
-	 * Timer handle for CompletePortalChallengeWithDelay.
-	 * Fires ExitPortal() after the player's explore time has elapsed.
-	 */
+	/** Delay timer for CompletePortalChallengeWithDelay. */
 	FTimerHandle PortalExitDelayHandle;
+	UFUNCTION() void PortalExitDelayCallback();
 
-	/** Callback fired by PortalExitDelayHandle. Calls ExitPortal(). */
-	UFUNCTION()
-	void PortalExitDelayCallback();
-
-	// Player cleanup helpers
 	void DestroyPlayerPawn();
-
-	/**
-	 * Forces the PlayerController's view target to the CineCameraActor in the
-	 * MainMenu level and resets the PlayerCameraManager's stale FPS state.
-	 * Called from OnBothConditionsMet when CurrentLevel == MainMenu.
-	 * This is the fix for the black screen when returning from Tutorial→MainMenu.
-	 */
 	void ForceCameraToMainMenuCineCamera();
 	class AAlphaExilemetCharacter* GetLocalPlayer() const;
 };

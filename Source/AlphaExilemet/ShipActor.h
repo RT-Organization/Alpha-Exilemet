@@ -35,15 +35,10 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Alarm|Config")
 	float AlarmIntensity = 8000.f;
-	
+
 	UFUNCTION(BlueprintCallable, Category = "Alarm")
 	void RecacheOriginalLightState() { CacheOriginalLightState(); }
 
-	/**
-	 * Color the lights turn during the alarm.
-	 * Default: pure red (R=1, G=0, B=0).
-	 * Outside alarm the lights stay at their original designer-set color.
-	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Alarm|Config")
 	FLinearColor AlarmColor = FLinearColor(1.f, 0.f, 0.f, 1.f);
 
@@ -103,12 +98,14 @@ protected:
 
 private:
 	FTimerHandle             PulseTimerHandle;
+	FTimerHandle             SpawnCheckTimerHandle;
+	FTimerHandle             MontageEndTimerHandle;
 	TArray<ULightComponent*> AlarmLights;
 	TArray<float>            OriginalIntensities;
-	TArray<FLinearColor>     OriginalColors;       // ← new: cache original color
+	TArray<FLinearColor>     OriginalColors;
 
 	void CollectAlarmLightsByTag();
-	void CacheOriginalLightState();                // ← replaces CacheOriginalIntensities
+	void CacheOriginalLightState();
 	void SetAllLightsState(float Intensity, FLinearColor Color);
 	void SchedulePulseOff();
 	void PulseOn();
@@ -117,8 +114,13 @@ private:
 	void TryUpdateAnimation();
 	void PlayMontage(UAnimMontage* Montage);
 
-	UFUNCTION()
-	void OnMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	bool IsOurMontage(UAnimMontage* Montage) const;
+
+	// Fired by timer just as the montage reaches its last frame.
+	// Updates state and fires BP events. No OnMontageEnded needed.
+	void OnMontageReachedEnd();
+
+	void CheckInitialOverlap();
 
 	UPROPERTY()
 	ABaseCamp* CachedBaseCamp = nullptr;
