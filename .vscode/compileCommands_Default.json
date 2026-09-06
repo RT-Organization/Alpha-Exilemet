@@ -1,0 +1,586 @@
+[
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\AlphaExilemet.Build.cs",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\AlphaExilemet.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\AlphaExilemet.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\AlphaExilemetCharacter.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\AlphaExilemetCharacter.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\BaseCamp.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\BaseCamp.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\BaseTerminal.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\BaseTerminal.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Core\\AlphaExilemetGameInstance.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Core\\AlphaExilemetGameInstance.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Core\\AlphaExilemetSaveGame.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Core\\AlphaExilemetSaveGame.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Core\\AlphaStreamingSubsystem.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Core\\AlphaStreamingSubsystem.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Core\\LevelStreamingManager.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Core\\LevelStreamingManager.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Core\\UpgradeProgressionManager.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Core\\UpgradeProgressionManager.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Data\\AlphaExilemetTypes.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Data\\AlphaExilemetTypes.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\HazardVolume.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\HazardVolume.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Interfaces\\Interactable.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Interfaces\\Interactable.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Portals\\PortalBase.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Portals\\PortalBase.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Resources\\DroppedSolidResource.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Resources\\DroppedSolidResource.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Resources\\GasResource.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Resources\\GasResource.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Resources\\LiquidResource.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Resources\\LiquidResource.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Resources\\ResourceBase.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Resources\\ResourceBase.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Resources\\SolidResource.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Resources\\SolidResource.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\ShipActor.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\ShipActor.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tools\\GasRodTool.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tools\\GasRodTool.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tools\\GasSphere.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tools\\GasSphere.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tools\\PickaxeTool.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tools\\PickaxeTool.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tools\\SkeletalToolBase.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tools\\SkeletalToolBase.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tools\\ToolBase.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tools\\ToolBase.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tools\\VacuumTool.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tools\\VacuumTool.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tutorial\\CutsceneManagers\\TutorialDirector.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tutorial\\CutsceneManagers\\TutorialDirector.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tutorial\\CutsceneManagers\\WakeUpDirector.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tutorial\\CutsceneManagers\\WakeUpDirector.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tutorial\\SkullProp.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tutorial\\SkullProp.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tutorial\\TutorialRock.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\Tutorial\\TutorialRock.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\BaseTransactionWidget.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\BaseTransactionWidget.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\HUD\\HUDItemSlotWidget.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\HUD\\HUDItemSlotWidget.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\HUD\\HUDToolInventoryWidget.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\HUD\\HUDToolInventoryWidget.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\HUD\\HUDVacuumSegmentWidget.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\HUD\\HUDVacuumSegmentWidget.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\SellRowWidget.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\SellRowWidget.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\SellTerminalWidget.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\SellTerminalWidget.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\VacuumSellRowWidget.cpp",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	},
+	{
+		"file": "D:\\GitHub\\Unreal\\Alpha-Exilemet\\Source\\AlphaExilemet\\UI\\VacuumSellRowWidget.h",
+		"arguments": [
+			"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+			"@D:\\GitHub\\Unreal\\Alpha-Exilemet\\.vscode\\compileCommands_Default\\AlphaExilemet.1.rsp"
+		],
+		"directory": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Source"
+	}
+]
